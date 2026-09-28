@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import feed
 import summarize
 import tts
-from substack import Substack, has_audio
+from substack import AUDIO_FIELDS, Substack, has_audio
 
 SITE = Path(os.environ.get("SITE_DIR", "site"))  # checkout of the gh-pages branch
 STATE = SITE / "state.json"
@@ -54,9 +54,12 @@ def main():
             continue
         for p in posts:
             published = datetime.fromisoformat(p["post_date"].replace("Z", "+00:00"))
-            if published < since or str(p["id"]) in seen or has_audio(p):
-                continue
-            if (p.get("wordcount") or 0) < MIN_WORDS:
+            skip = ("old" if published < since else "done" if str(p["id"]) in seen
+                    else "has audio" if has_audio(p) else "short" if (p.get("wordcount") or 0) < MIN_WORDS else None)
+            audio = {k: p.get(k) for k in AUDIO_FIELDS if p.get(k)}
+            print(f"  {pub['name']} | {published:%m-%d} | {p.get('wordcount')}w | {p.get('audience')} | "
+                  f"type={p.get('type')} {audio or ''} | {skip or 'QUEUED'} | {p['title'][:60]}")
+            if skip:
                 continue
             candidates.append((pub, p))
     print(f"{len(candidates)} long posts without audio since {since:%Y-%m-%d %H:%M} UTC")
