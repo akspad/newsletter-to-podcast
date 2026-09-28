@@ -44,7 +44,7 @@ def make_episode(sub, pub, p, now, state):
 
 
 def main():
-    missing = [k for k in ("SUBSTACK_SID", "GEMINI_API_KEY", "SITE_URL") if not os.environ.get(k)]
+    missing = [k for k in ("GEMINI_API_KEY", "SITE_URL") if not os.environ.get(k)]
     if missing:
         sys.exit(f"Missing {', '.join(missing)}: add them under Settings > Secrets and variables > Actions > Repository secrets")
     state = json.loads(STATE.read_text()) if STATE.exists() else {"episodes": [], "seen": [], "last_run": None}
@@ -63,7 +63,7 @@ def main():
     if os.environ.get("LOOKBACK_HOURS"):  # manual override from a hand-started run
         since = now - FIRST_RUN_LOOKBACK
     seen = set(state["seen"])
-    sub = Substack(os.environ["SUBSTACK_SID"])
+    sub = Substack(os.environ.get("SUBSTACK_SID", ""))  # optional login cookie
 
     candidates = []
     for pub in sub.publications():

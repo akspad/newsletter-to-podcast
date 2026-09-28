@@ -18,12 +18,12 @@ class Substack:
         sid = sid.strip().strip('"')
         if sid.startswith("substack.sid="):  # tolerate pasting the whole cookie pair
             sid = sid[len("substack.sid="):]
-        self.cookie = f"substack.sid={sid}"
+        self.cookie = f"substack.sid={sid}" if sid else None
 
     def get(self, url, **params):
         # Follow redirects by hand so the cookie survives the hop to a custom domain.
         for _ in range(5):
-            r = requests.get(url, params=params, headers={**HEADERS, "Cookie": self.cookie},
+            r = requests.get(url, params=params, headers={**HEADERS, **({"Cookie": self.cookie} if self.cookie else {})},
                              allow_redirects=False, timeout=30, impersonate="chrome")
             if r.is_redirect:
                 url, params = urljoin(url, r.headers["Location"]), None

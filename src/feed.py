@@ -3,7 +3,7 @@ from email.utils import format_datetime
 from xml.sax.saxutils import escape
 
 
-def build(site_url: str, episodes: list, title="Substack Audio Summaries") -> str:
+def build(site_url: str, episodes: list, title="Newsletter Summaries") -> str:
     items = []
     for e in sorted(episodes, key=lambda e: e["published"], reverse=True):
         pub = format_datetime(datetime.fromisoformat(e["published"]).astimezone(timezone.utc))
@@ -22,7 +22,7 @@ def build(site_url: str, episodes: list, title="Substack Audio Summaries") -> st
   <channel>
     <title>{escape(title)}</title>
     <link>{escape(site_url)}</link>
-    <description>Daily spoken summaries of long Substack posts that have no audio.</description>
+    <description>Daily spoken summaries of long newsletter posts that have no audio.</description>
     <language>en-us</language>
     <itunes:block>Yes</itunes:block>
     <itunes:explicit>false</itunes:explicit>
