@@ -24,16 +24,23 @@ NY = ZoneInfo("America/New_York")
 def make_episode(sub, pub, p, now, state):
     post, text = sub.post_text(pub, p["slug"])
     author = ", ".join(b.get("name", "") for b in post.get("publishedBylines", [])) or pub["name"]
-    script = summarize.write_script(pub["name"], author, p["title"], text)
+    if pub.get("full"):
+        # Read the article as written; the 20-minute cap is for summaries only.
+        script = f"{pub['name']}. {p['title']}, by {author}.\n{text}"
+        max_seconds = None
+    else:
+        script = summarize.write_script(pub["name"], author, p["title"], text)
+        max_seconds = tts.MAX_SECONDS
     slug = re.sub(r"[^a-z0-9-]+", "-", p["slug"].lower())[:60]
     fname = f"{now:%Y%m%d}-{p['id']}-{slug}.mp3"
     path = SITE / "episodes" / fname
-    secs = tts.synthesize(script, path)
+    secs = tts.synthesize(script, path, max_seconds)
     paywalled = p.get("audience") not in (None, "everyone")
     state["episodes"].append({
         "guid": f"substack-{p['id']}",
         "title": f"{pub['name']}: {p['title']}",
-        "description": (p.get("subtitle") or "") + (" (summary of a paywalled post)" if paywalled else ""),
+        "description": (p.get("subtitle") or "") + ((" (paywalled post, free preview only)" if paywalled else "") if pub.get("full")
+                        else (" (summary of a paywalled post)" if paywalled else "")),
         "link": p.get("canonical_url") or f"{pub['base']}/p/{p['slug']}",
         "published": now.isoformat(),
         "file": fname,
@@ -74,8 +81,15 @@ def main():
             continue
         for p in posts:
             published = datetime.fromisoformat(p["post_date"].replace("Z", "+00:00"))
-            skip = ("old" if published < since else "done" if str(p["id"]) in seen
-                    else "has audio" if has_audio(p) else "short" if (p.get("wordcount") or 0) < MIN_WORDS else None)
+            only = pub.get("only")
+            if only:
+                # Explicitly chosen series (e.g. a weekly reading list): take every matching post,
+                # regardless of length or attached audio.
+                skip = ("old" if published < since else "done" if str(p["id"]) in seen
+                        else None if only.lower() in p["title"].lower() else "not selected")
+            else:
+                skip = ("old" if published < since else "done" if str(p["id"]) in seen
+                        else "has audio" if has_audio(p) else "short" if (p.get("wordcount") or 0) < MIN_WORDS else None)
             audio = {k: p.get(k) for k in AUDIO_FIELDS if p.get(k)}
             print(f"  {pub['name']} | {published:%m-%d} | {p.get('wordcount')}w | {p.get('audience')} | "
                   f"type={p.get('type')} {audio or ''} | {skip or 'QUEUED'} | {p['title'][:60]}")

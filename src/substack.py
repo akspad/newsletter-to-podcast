@@ -1,4 +1,5 @@
 """Reads the user's Substack subscriptions through Substack's (unofficial) web API."""
+import re
 import time
 from urllib.parse import urljoin
 
@@ -56,11 +57,15 @@ class Substack:
     def publications_from_file(path):
         pubs = []
         for line in open(path):
-            parts = line.split("#")[0].split(maxsplit=1)  # "<url> [display name]"
+            # "<url> [display name] [| only: <title text>] [| full]"
+            main, *opts = [part.strip() for part in line.split("#")[0].split("|")]
+            parts = main.split(maxsplit=1)
             if parts:
                 url = parts[0].rstrip("/")
                 host = url.split("//")[-1]
-                pubs.append({"id": host, "name": parts[1].strip() if len(parts) > 1 else host, "base": url})
+                only = next((o.removeprefix("only:").strip() for o in opts if o.startswith("only:")), None)
+                pubs.append({"id": host, "name": parts[1].strip() if len(parts) > 1 else host, "base": url,
+                             "only": only, "full": "full" in opts})
         return pubs
 
     def recent_posts(self, pub, limit=12):
@@ -69,7 +74,15 @@ class Substack:
     def post_text(self, pub, slug):
         post = self.get(f"{pub['base']}/api/v1/posts/{slug}")
         html = post.get("body_html") or ""
-        text = BeautifulSoup(html, "html.parser").get_text("\n", strip=True)
+        soup = BeautifulSoup(html, "html.parser")
+        # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
+        for el in soup.select(".subscription-widget-wrap, .button-wrapper, .captioned-button-wrap, .share-dialog"):
+            el.decompose()
+        # One line per block element, so link text stays inside its sentence.
+        blocks = soup.find_all(["p", "h1", "h2", "h3", "h4", "li", "blockquote", "figcaption"])
+        lines = [re.sub(r"\s+([,.;:!?)])", r"\1", b.get_text(" ", strip=True))
+                 for b in blocks if not b.find_parent(["li", "blockquote"])]
+        text = "\n".join(l for l in lines if l) or soup.get_text("\n", strip=True)
         return post, text
 
 

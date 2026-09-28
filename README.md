@@ -18,7 +18,11 @@ Add one line per publication to `publications.txt`: the site URL, then optionall
 
 ```
 https://newsletter.semianalysis.com SemiAnalysis
+https://www.construction-physics.com Construction Physics | only: Reading List | full
 ```
+
+`| only: <text>` limits a publication to posts whose title contains that text, and takes them whatever their
+length or attached audio. `| full` narrates the whole article instead of a summary, with no 20-minute cap.
 
 Posts are read from each site's public archive (the `/api/v1/archive` JSON that Substack-hosted sites serve).
 Publications on their own domain work. Addresses on `substack.com` or `*.substack.com` are blocked for GitHub's

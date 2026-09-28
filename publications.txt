@@ -1,5 +1,8 @@
 # Substack publications to check, one per line: URL, then optionally the name to use in episode titles.
+# Add "| only: <text>" to take only posts whose title contains that text (any length, even with audio),
+# and "| full" to narrate the whole article instead of a summary (no 20-minute cap).
 # Substack blocks GitHub's servers on substack.com and *.substack.com addresses, so the
 # subscription list can't be fetched automatically from here. Publications on their own
 # domain (like SemiAnalysis) work; *.substack.com-only ones are skipped with a warning.
 https://newsletter.semianalysis.com SemiAnalysis
+https://www.construction-physics.com Construction Physics | only: Reading List | full

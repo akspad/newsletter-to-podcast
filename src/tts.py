@@ -54,8 +54,8 @@ def speak(text: str, path: Path, attempts=4):
     raise RuntimeError("Edge TTS returned no audio")
 
 
-def synthesize(script: str, out_path: Path) -> float:
-    """Renders script to a mono MP3 no longer than 20 minutes; returns its duration in seconds."""
+def synthesize(script: str, out_path: Path, max_seconds: float | None = MAX_SECONDS) -> float:
+    """Renders script to a mono MP3, cut at max_seconds if given; returns its duration in seconds."""
     with tempfile.TemporaryDirectory() as tmp:
         parts = []
         for i, chunk in enumerate(chunks(script)):
@@ -64,7 +64,8 @@ def synthesize(script: str, out_path: Path) -> float:
             parts.append(p)
         listing = Path(tmp) / "list.txt"
         listing.write_text("".join(f"file '{p}'\n" for p in parts))
-        # -t enforces the 20-minute cap even if the script ran long.
+        # -t enforces the 20-minute summary cap even if the script ran long.
+        limit = ["-t", str(max_seconds)] if max_seconds else []
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
-                        "-t", str(MAX_SECONDS), "-ac", "1", "-b:a", "64k", str(out_path)], check=True)
+                        *limit, "-ac", "1", "-b:a", "64k", str(out_path)], check=True)
     return duration(out_path)
