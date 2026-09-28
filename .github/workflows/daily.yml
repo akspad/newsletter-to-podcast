@@ -30,7 +30,7 @@ jobs:
       - name: Build episodes
         env:
           SUBSTACK_SID: ${{ secrets.SUBSTACK_SID }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: python src/main.py
       - name: Publish to gh-pages

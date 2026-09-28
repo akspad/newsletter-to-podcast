@@ -1,8 +1,11 @@
 import os
+import time
 
-import anthropic
+from google import genai
+from google.genai import errors, types
 
-MODEL = os.environ.get("SUMMARY_MODEL", "claude-sonnet-5")
+# Free-tier Gemini; the "latest" alias tracks Google's current Flash model.
+MODEL = os.environ.get("SUMMARY_MODEL", "gemini-flash-latest")
 # ~150 spoken words per minute; leave headroom under the 20-minute cap.
 MAX_WORDS = int(os.environ.get("MAX_SCRIPT_WORDS", "2700"))
 
@@ -15,14 +18,21 @@ Hard limit: {MAX_WORDS} words. Shorter is fine when the article is shorter."""
 
 
 def write_script(pub_name, author, title, text):
-    client = anthropic.Anthropic()
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=8000,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": f"Publication: {pub_name}\nAuthor: {author}\nTitle: {title}\n\n<article>\n{text}\n</article>"}],
-    )
-    script = "".join(b.text for b in msg.content if b.type == "text").strip()
+    client = genai.Client()  # reads GEMINI_API_KEY
+    prompt = f"Publication: {pub_name}\nAuthor: {author}\nTitle: {title}\n\n<article>\n{text}\n</article>"
+    config = types.GenerateContentConfig(system_instruction=SYSTEM, max_output_tokens=16000)
+    for attempt in range(5):
+        try:
+            resp = client.models.generate_content(model=MODEL, contents=prompt, config=config)
+            break
+        except errors.APIError as e:
+            # Free tier is rate-limited per minute; back off and retry.
+            if e.code not in (429, 500, 503) or attempt == 4:
+                raise
+            time.sleep(30 * (attempt + 1))
+    script = (resp.text or "").strip()
+    if not script:
+        raise RuntimeError(f"Gemini returned no text for {title!r}")
     words = script.split()
     if len(words) > MAX_WORDS:
         script = " ".join(words[:MAX_WORDS])
