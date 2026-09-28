@@ -17,7 +17,7 @@ STATE = SITE / "state.json"
 MIN_WORDS = int(os.environ.get("MIN_WORDS", "1500"))
 MAX_EPISODES_PER_RUN = int(os.environ.get("MAX_EPISODES_PER_RUN", "8"))
 KEEP_EPISODES = int(os.environ.get("KEEP_EPISODES", "60"))
-FIRST_RUN_LOOKBACK = timedelta(hours=36)
+FIRST_RUN_LOOKBACK = timedelta(hours=float(os.environ.get("LOOKBACK_HOURS") or 36))
 NY = ZoneInfo("America/New_York")
 
 
@@ -38,6 +38,8 @@ def main():
             return
 
     since = datetime.fromisoformat(state["last_run"]) if state.get("last_run") else now - FIRST_RUN_LOOKBACK
+    if os.environ.get("LOOKBACK_HOURS"):  # manual override from a hand-started run
+        since = now - FIRST_RUN_LOOKBACK
     seen = set(state["seen"])
     sub = Substack(os.environ["SUBSTACK_SID"])
 
@@ -45,6 +47,8 @@ def main():
     for pub in sub.publications():
         try:
             posts = sub.recent_posts(pub)
+            if pub["name"] == pub["id"]:  # name unknown when read from publications.txt
+                pub["name"] = (posts[0].get("publication") or {}).get("name") or pub["name"] if posts else pub["name"]
         except Exception as e:  # one broken publication shouldn't sink the run
             print(f"! {pub['name']}: {e}", file=sys.stderr)
             continue

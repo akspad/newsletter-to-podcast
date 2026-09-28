@@ -39,12 +39,27 @@ class Substack:
             return r.json()
         raise RuntimeError(f"Too many redirects or retries for {url}")
 
-    def publications(self):
-        data = self.get("https://substack.com/api/v1/subscriptions")
+    def publications(self, fallback_file="publications.txt"):
+        try:
+            data = self.get("https://substack.com/api/v1/subscriptions")
+        except RuntimeError as e:
+            # substack.com is behind a Cloudflare challenge for datacenter IPs (GitHub runners).
+            print(f"Subscription list unavailable ({str(e)[:60]}...); using {fallback_file}")
+            return self.publications_from_file(fallback_file)
         pubs = []
         for p in data.get("publications", []):
             base = f"https://{p['custom_domain']}" if p.get("custom_domain") else f"https://{p['subdomain']}.substack.com"
             pubs.append({"id": p["id"], "name": p.get("name") or p["subdomain"], "base": base})
+        return pubs
+
+    @staticmethod
+    def publications_from_file(path):
+        pubs = []
+        for line in open(path):
+            url = line.split("#")[0].strip().rstrip("/")
+            if url:
+                host = url.split("//")[-1]
+                pubs.append({"id": host, "name": host, "base": url})
         return pubs
 
     def recent_posts(self, pub, limit=12):

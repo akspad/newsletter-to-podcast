@@ -6,6 +6,11 @@ on:
     - cron: "0 13 * * *"
     - cron: "0 14 * * *"
   workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: "Only on manual runs: summarize posts from this many past hours"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -31,6 +36,7 @@ jobs:
         env:
           SUBSTACK_SID: ${{ secrets.SUBSTACK_SID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: python src/main.py
       - name: Publish to gh-pages
