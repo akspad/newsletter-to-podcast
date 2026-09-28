@@ -69,8 +69,6 @@ def main():
     for pub in sub.publications():
         try:
             posts = sub.recent_posts(pub)
-            if pub["name"] == pub["id"]:  # name unknown when read from publications.txt
-                pub["name"] = (posts[0].get("publication") or {}).get("name") or pub["name"] if posts else pub["name"]
         except Exception as e:  # one broken publication shouldn't sink the run
             print(f"! {pub['name']}: {e}", file=sys.stderr)
             continue

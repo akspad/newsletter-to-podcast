@@ -56,10 +56,11 @@ class Substack:
     def publications_from_file(path):
         pubs = []
         for line in open(path):
-            url = line.split("#")[0].strip().rstrip("/")
-            if url:
+            parts = line.split("#")[0].split(maxsplit=1)  # "<url> [display name]"
+            if parts:
+                url = parts[0].rstrip("/")
                 host = url.split("//")[-1]
-                pubs.append({"id": host, "name": host, "base": url})
+                pubs.append({"id": host, "name": parts[1].strip() if len(parts) > 1 else host, "base": url})
         return pubs
 
     def recent_posts(self, pub, limit=12):
