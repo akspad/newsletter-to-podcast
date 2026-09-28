@@ -2,15 +2,12 @@
 import time
 from urllib.parse import urljoin
 
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 
-# A plain browser UA; Substack's bot protection rejects obvious script user agents.
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+# Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
+# curl_cffi impersonates Chrome (including its user agent).
+HEADERS = {"Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9"}
 
 # Fields that indicate a post already ships with audio (podcast upload or voiceover).
 AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceover_upload_id", "audio_items")
@@ -27,14 +24,14 @@ class Substack:
         # Follow redirects by hand so the cookie survives the hop to a custom domain.
         for _ in range(5):
             r = requests.get(url, params=params, headers={**HEADERS, "Cookie": self.cookie},
-                             allow_redirects=False, timeout=30)
+                             allow_redirects=False, timeout=30, impersonate="chrome")
             if r.is_redirect:
                 url, params = urljoin(url, r.headers["Location"]), None
                 continue
             if r.status_code == 429:
                 time.sleep(5)
                 continue
-            if not r.ok:
+            if r.status_code >= 400:
                 # Show enough of the response to tell a bad cookie from a bot-protection block.
                 snippet = " ".join(r.text[:300].split())
                 raise RuntimeError(f"{r.status_code} from {url} (server={r.headers.get('server')}, "
