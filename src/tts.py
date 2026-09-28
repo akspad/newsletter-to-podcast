@@ -39,19 +39,29 @@ def duration(path) -> float:
     return float(r.stdout.strip())
 
 
-def speak(text: str, path: Path, attempts=4):
-    # The Edge endpoint is unofficial and occasionally drops a connection, so retry with backoff.
+def speak(text: str, path: Path, attempts=3) -> bool:
+    # The Edge endpoint is unofficial and sometimes returns no audio for a request, so retry with backoff.
     for n in range(attempts):
         try:
             asyncio.run(edge_tts.Communicate(text, VOICE, rate=RATE).save(str(path)))
             if path.stat().st_size > 0:
-                return
+                return True
         except Exception as e:
-            if n == attempts - 1:
-                raise
             print(f"TTS retry {n + 1}: {e}")
         time.sleep(2 ** (n + 1))
-    raise RuntimeError("Edge TTS returned no audio")
+    return False
+
+
+def speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
+    """Voices text, splitting a chunk that keeps failing into halves rather than losing the episode."""
+    path = tmp / f"{name}.mp3"
+    if speak(text, path):
+        return [path]
+    if len(text) <= 200:
+        print(f"! TTS skipped a passage it couldn't voice: {text[:80]!r}")
+        return []
+    mid = text.rfind(". ", 0, len(text) // 2) + 1 or len(text) // 2
+    return speak_pieces(text[:mid].strip(), tmp, name + "a") + speak_pieces(text[mid:].strip(), tmp, name + "b")
 
 
 def synthesize(script: str, out_path: Path, max_seconds: float | None = MAX_SECONDS) -> float:
@@ -59,9 +69,9 @@ def synthesize(script: str, out_path: Path, max_seconds: float | None = MAX_SECO
     with tempfile.TemporaryDirectory() as tmp:
         parts = []
         for i, chunk in enumerate(chunks(script)):
-            p = Path(tmp) / f"{i:03d}.mp3"
-            speak(chunk, p)
-            parts.append(p)
+            parts += speak_pieces(chunk, Path(tmp), f"{i:03d}")
+        if not parts:
+            raise RuntimeError("Edge TTS returned no audio")
         listing = Path(tmp) / "list.txt"
         listing.write_text("".join(f"file '{p}'\n" for p in parts))
         # -t enforces the 20-minute summary cap even if the script ran long.
