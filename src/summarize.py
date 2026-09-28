@@ -4,8 +4,9 @@ import time
 from google import genai
 from google.genai import errors, types
 
-# Free-tier Gemini; the "latest" alias tracks Google's current Flash model.
-MODEL = os.environ.get("SUMMARY_MODEL", "gemini-flash-latest")
+# Free-tier Gemini; "latest" aliases track Google's current models. The free tier
+# sometimes returns 503 "high demand", so fall back to a lighter model before giving up.
+MODELS = [os.environ.get("SUMMARY_MODEL", "gemini-flash-latest"), "gemini-flash-lite-latest"]
 # ~150 spoken words per minute; leave headroom under the 20-minute cap.
 MAX_WORDS = int(os.environ.get("MAX_SCRIPT_WORDS", "2700"))
 
@@ -21,15 +22,21 @@ def write_script(pub_name, author, title, text):
     client = genai.Client()  # reads GEMINI_API_KEY
     prompt = f"Publication: {pub_name}\nAuthor: {author}\nTitle: {title}\n\n<article>\n{text}\n</article>"
     config = types.GenerateContentConfig(system_instruction=SYSTEM, max_output_tokens=16000)
-    for attempt in range(5):
-        try:
-            resp = client.models.generate_content(model=MODEL, contents=prompt, config=config)
+    resp = None
+    for model in MODELS:
+        for attempt in range(3):
+            try:
+                resp = client.models.generate_content(model=model, contents=prompt, config=config)
+                break
+            except errors.APIError as e:
+                if e.code not in (429, 500, 503):
+                    raise
+                print(f"  Gemini {model} {e.code}, attempt {attempt + 1}")
+                time.sleep(20 * (attempt + 1))
+        if resp is not None:
             break
-        except errors.APIError as e:
-            # Free tier is rate-limited per minute; back off and retry.
-            if e.code not in (429, 500, 503) or attempt == 4:
-                raise
-            time.sleep(30 * (attempt + 1))
+    if resp is None:
+        raise RuntimeError("Gemini unavailable on all models")
     script = (resp.text or "").strip()
     if not script:
         raise RuntimeError(f"Gemini returned no text for {title!r}")

@@ -21,6 +21,28 @@ FIRST_RUN_LOOKBACK = timedelta(hours=float(os.environ.get("LOOKBACK_HOURS") or 3
 NY = ZoneInfo("America/New_York")
 
 
+def make_episode(sub, pub, p, now, state):
+    post, text = sub.post_text(pub, p["slug"])
+    author = ", ".join(b.get("name", "") for b in post.get("publishedBylines", [])) or pub["name"]
+    script = summarize.write_script(pub["name"], author, p["title"], text)
+    slug = re.sub(r"[^a-z0-9-]+", "-", p["slug"].lower())[:60]
+    fname = f"{now:%Y%m%d}-{p['id']}-{slug}.mp3"
+    path = SITE / "episodes" / fname
+    secs = tts.synthesize(script, path)
+    paywalled = p.get("audience") not in (None, "everyone")
+    state["episodes"].append({
+        "guid": f"substack-{p['id']}",
+        "title": f"{pub['name']}: {p['title']}",
+        "description": (p.get("subtitle") or "") + (" (summary of a paywalled post)" if paywalled else ""),
+        "link": p.get("canonical_url") or f"{pub['base']}/p/{p['slug']}",
+        "published": now.isoformat(),
+        "file": fname,
+        "bytes": path.stat().st_size,
+        "duration": secs,
+    })
+    print(f"+ {pub['name']}: {p['title']} ({secs / 60:.1f} min)")
+
+
 def main():
     missing = [k for k in ("SUBSTACK_SID", "GEMINI_API_KEY", "SITE_URL") if not os.environ.get(k)]
     if missing:
@@ -64,28 +86,21 @@ def main():
             candidates.append((pub, p))
     print(f"{len(candidates)} long posts without audio since {since:%Y-%m-%d %H:%M} UTC")
 
+    # Posts that failed last time (e.g. Gemini overloaded) get another try first.
+    retry = [(r["pub"], r["post"]) for r in state.get("retry", []) if str(r["post"]["id"]) not in seen]
+    queued = {str(p["id"]) for _, p in candidates}
+    candidates = [c for c in retry if str(c[1]["id"]) not in queued] + candidates
+    state["retry"] = []
+
     (SITE / "episodes").mkdir(parents=True, exist_ok=True)
     for pub, p in candidates[:MAX_EPISODES_PER_RUN]:
-        post, text = sub.post_text(pub, p["slug"])
-        author = ", ".join(b.get("name", "") for b in post.get("publishedBylines", [])) or pub["name"]
-        script = summarize.write_script(pub["name"], author, p["title"], text)
-        slug = re.sub(r"[^a-z0-9-]+", "-", p["slug"].lower())[:60]
-        fname = f"{now:%Y%m%d}-{p['id']}-{slug}.mp3"
-        path = SITE / "episodes" / fname
-        secs = tts.synthesize(script, path)
-        paywalled = p.get("audience") not in (None, "everyone")
-        state["episodes"].append({
-            "guid": f"substack-{p['id']}",
-            "title": f"{pub['name']}: {p['title']}",
-            "description": (p.get("subtitle") or "") + (" (summary of a paywalled post)" if paywalled else ""),
-            "link": p.get("canonical_url") or f"{pub['base']}/p/{p['slug']}",
-            "published": now.isoformat(),
-            "file": fname,
-            "bytes": path.stat().st_size,
-            "duration": secs,
-        })
-        seen.add(str(p["id"]))
-        print(f"+ {pub['name']}: {p['title']} ({secs / 60:.1f} min)")
+        try:
+            make_episode(sub, pub, p, now, state)
+            seen.add(str(p["id"]))
+        except Exception as e:  # keep going; retry this post next run
+            print(f"! {pub['name']}: {p['title']}: {e}", file=sys.stderr)
+            state["retry"].append({"pub": pub, "post": p})
+    state["retry"] += [{"pub": pub, "post": p} for pub, p in candidates[MAX_EPISODES_PER_RUN:]]
 
     # Keep the site small: drop the oldest episodes and their audio.
     state["episodes"].sort(key=lambda e: e["published"])
