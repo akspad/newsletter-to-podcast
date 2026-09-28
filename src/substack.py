@@ -73,4 +73,11 @@ class Substack:
 
 
 def has_audio(post) -> bool:
-    return post.get("type") == "podcast" or any(post.get(f) for f in AUDIO_FIELDS)
+    """True only when there is audio the reader can actually play.
+
+    Substack attaches a TTS voiceover entry to most posts, but on paywalled posts it has
+    status "paywalled" and no audio_url, so for a non-paying reader there's no audio.
+    """
+    if post.get("type") == "podcast" or post.get("podcast_url") or post.get("podcast_upload_id"):
+        return True
+    return any(item.get("audio_url") for item in post.get("audio_items") or [])
