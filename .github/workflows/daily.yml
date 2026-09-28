@@ -1,0 +1,45 @@
+name: Daily audio summaries
+
+on:
+  schedule:
+    # 13:00 UTC is 9am EDT, 14:00 UTC is 9am EST; main.py runs only once per New York day.
+    - cron: "0 13 * * *"
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out published site (gh-pages)
+        run: |
+          git fetch origin gh-pages && git worktree add site origin/gh-pages || mkdir -p site
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: pip install -r requirements.txt
+      - name: Build episodes
+        env:
+          SUBSTACK_SID: ${{ secrets.SUBSTACK_SID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: python src/main.py
+      - name: Publish to gh-pages
+        # A single orphan commit each run, so old MP3s never pile up in git history.
+        run: |
+          cd site
+          rm -rf .git 2>/dev/null; git init -q -b gh-pages
+          touch .nojekyll
+          git add -A
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Publish $(date -u +%F)" || exit 0
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
