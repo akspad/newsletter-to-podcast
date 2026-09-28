@@ -22,6 +22,9 @@ NY = ZoneInfo("America/New_York")
 
 
 def main():
+    missing = [k for k in ("SUBSTACK_SID", "GEMINI_API_KEY", "SITE_URL") if not os.environ.get(k)]
+    if missing:
+        sys.exit(f"Missing {', '.join(missing)}: add them under Settings > Secrets and variables > Actions > Repository secrets")
     state = json.loads(STATE.read_text()) if STATE.exists() else {"episodes": [], "seen": [], "last_run": None}
     now = datetime.now(timezone.utc)
     local = now.astimezone(NY)
