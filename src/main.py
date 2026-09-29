@@ -22,10 +22,10 @@ NY = ZoneInfo("America/New_York")
 
 
 def make_episode(sub, pub, p, now, state):
-    post, text = sub.post_text(pub, p["slug"])
+    post, text = sub.post_text(pub, p)
     author = ", ".join(b.get("name", "") for b in post.get("publishedBylines", [])) or pub["name"]
     if pub.get("full"):
-        # Read the article as written; the 20-minute cap is for summaries only.
+        # Read the article as written; the length cap is for summaries only.
         script = f"{pub['name']}. {p['title']}, by {author}.\n{text}"
         max_seconds = None
     else:
@@ -82,11 +82,11 @@ def main():
         for p in posts:
             published = datetime.fromisoformat(p["post_date"].replace("Z", "+00:00"))
             only = pub.get("only")
-            if only:
-                # Explicitly chosen series (e.g. a weekly reading list): take every matching post,
+            if only or pub.get("full"):
+                # Explicitly chosen posts (a series, or a blog read in full): take every match,
                 # regardless of length or attached audio.
                 skip = ("old" if published < since else "done" if str(p["id"]) in seen
-                        else None if only.lower() in p["title"].lower() else "not selected")
+                        else "not selected" if only and only.lower() not in p["title"].lower() else None)
             else:
                 skip = ("old" if published < since else "done" if str(p["id"]) in seen
                         else "has audio" if has_audio(p) else "short" if (p.get("wordcount") or 0) < MIN_WORDS else None)

@@ -7,13 +7,13 @@ from google.genai import errors, types
 # Free-tier Gemini; "latest" aliases track Google's current models. The free tier
 # sometimes returns 503 "high demand", so fall back to a lighter model before giving up.
 MODELS = [os.environ.get("SUMMARY_MODEL", "gemini-flash-latest"), "gemini-flash-lite-latest"]
-# ~150 spoken words per minute; leave headroom under the 20-minute cap.
-MAX_WORDS = int(os.environ.get("MAX_SCRIPT_WORDS", "2700"))
+# ~150 spoken words per minute; leave headroom under the 5-minute cap.
+MAX_WORDS = int(os.environ.get("MAX_SCRIPT_WORDS", "700"))
 
 SYSTEM = f"""You turn long newsletter articles into a script for a solo spoken-audio summary.
 Write plain prose meant to be read aloud: no markdown, bullet points, headings, URLs, tables or emoji.
 Spell out symbols and abbreviations the way a narrator would say them.
-Open with one sentence naming the publication, author and title. Cover the key arguments, numbers and conclusions in the article's own order.
+Open with one sentence naming the publication, author and title. Cover the most important arguments, numbers and conclusions in the article's own order; be selective, since the whole summary must fit in about five minutes.
 If the text is a paywalled preview that stops early, summarize only what is there and say briefly at the end that the rest is behind the paywall.
 Hard limit: {MAX_WORDS} words. Shorter is fine when the article is shorter."""
 

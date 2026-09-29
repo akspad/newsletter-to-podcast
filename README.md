@@ -5,9 +5,9 @@ such as SemiAnalysis's paywalled previews.
 
 Every day at 9am New York time a GitHub Action:
 
-1. Checks each publication in `publications.txt` for posts from the past day that are 1,500+ words and have no playable audio.
-2. Has Google Gemini (free tier) write a spoken summary of at most 20 minutes.
-3. Voices it with Microsoft Edge's free neural text-to-speech.
+1. Checks each publication in `publications.txt` for new posts: by default ones that are 1,500+ words with no playable audio.
+2. Has Google Gemini (free tier) write a spoken summary of at most 5 minutes, or, for publications marked `full`, reads the whole post.
+3. Voices it with Microsoft Edge's free neural text-to-speech, normalized to podcast loudness (-16 LUFS).
 4. Publishes the MP3 and an RSS feed to GitHub Pages at `https://<owner>.github.io/<repo>/feed.xml`.
 
 It runs entirely on free services: GitHub Actions and Pages (public repo), Gemini's free API tier, and Edge TTS.
@@ -22,7 +22,12 @@ https://www.construction-physics.com Construction Physics | only: Reading List |
 ```
 
 `| only: <text>` limits a publication to posts whose title contains that text, and takes them whatever their
-length or attached audio. `| full` narrates the whole article instead of a summary, with no 20-minute cap.
+length or attached audio. `| full` narrates every post in full instead of summarizing it, with no length cap.
+A URL ending in `/feed`, `/rss` or `.xml` (or marked `| rss`) is read as a plain RSS feed, so non-Substack blogs work too:
+
+```
+https://seths.blog/feed Seth's Blog | full
+```
 
 Posts are read from each site's public archive (the `/api/v1/archive` JSON that Substack-hosted sites serve).
 Publications on their own domain work. Addresses on `substack.com` or `*.substack.com` are blocked for GitHub's

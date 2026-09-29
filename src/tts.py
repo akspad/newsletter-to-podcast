@@ -10,7 +10,7 @@ import edge_tts
 # Microsoft Edge's free neural voices; list others with `edge-tts --list-voices`.
 VOICE = os.environ.get("TTS_VOICE", "en-US-AndrewNeural")
 RATE = os.environ.get("TTS_RATE", "+0%")
-MAX_SECONDS = 20 * 60
+MAX_SECONDS = 5 * 60  # cap for summaries; full-article episodes are uncapped
 CHUNK_CHARS = 3000  # small requests are less likely to be dropped by the free endpoint
 
 
@@ -74,8 +74,10 @@ def synthesize(script: str, out_path: Path, max_seconds: float | None = MAX_SECO
             raise RuntimeError("Edge TTS returned no audio")
         listing = Path(tmp) / "list.txt"
         listing.write_text("".join(f"file '{p}'\n" for p in parts))
-        # -t enforces the 20-minute summary cap even if the script ran long.
+        # -t enforces the summary length cap even if the script ran long. loudnorm brings the
+        # quiet Edge voice up to the -16 LUFS loudness most podcast apps expect.
         limit = ["-t", str(max_seconds)] if max_seconds else []
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
-                        *limit, "-ac", "1", "-b:a", "64k", str(out_path)], check=True)
+                        *limit, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "44100", "-ac", "1", "-b:a", "64k",
+                        str(out_path)], check=True)
     return duration(out_path)
