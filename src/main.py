@@ -15,7 +15,7 @@ from substack import AUDIO_FIELDS, Substack, has_audio
 SITE = Path(os.environ.get("SITE_DIR", "site"))  # checkout of the gh-pages branch
 STATE = SITE / "state.json"
 MIN_WORDS = int(os.environ.get("MIN_WORDS", "1500"))
-MAX_EPISODES_PER_RUN = int(os.environ.get("MAX_EPISODES_PER_RUN", "8"))
+MAX_EPISODES_PER_RUN = int(os.environ.get("MAX_EPISODES_PER_RUN", "20"))
 KEEP_EPISODES = int(os.environ.get("KEEP_EPISODES", "60"))
 FIRST_RUN_LOOKBACK = timedelta(hours=float(os.environ.get("LOOKBACK_HOURS") or 36))
 NY = ZoneInfo("America/New_York")
