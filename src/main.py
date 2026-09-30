@@ -18,6 +18,7 @@ MIN_WORDS = int(os.environ.get("MIN_WORDS", "1500"))
 MAX_EPISODES_PER_RUN = int(os.environ.get("MAX_EPISODES_PER_RUN", "20"))
 KEEP_EPISODES = int(os.environ.get("KEEP_EPISODES", "60"))
 FIRST_RUN_LOOKBACK = timedelta(hours=float(os.environ.get("LOOKBACK_HOURS") or 36))
+OVERLAP = timedelta(hours=48)
 NY = ZoneInfo("America/New_York")
 
 
@@ -66,9 +67,11 @@ def main():
             print(f"Skipping: {local:%H:%M} New York, already ran today={bool(ran_today)}")
             return
 
-    since = datetime.fromisoformat(state["last_run"]) if state.get("last_run") else now - FIRST_RUN_LOOKBACK
-    if os.environ.get("LOOKBACK_HOURS"):  # manual override from a hand-started run
-        since = now - FIRST_RUN_LOOKBACK
+    # Look back at least OVERLAP past the last run: a late or hand-started run can't leave a gap,
+    # and "seen" keeps posts from being published twice.
+    since = now - FIRST_RUN_LOOKBACK
+    if state.get("last_run") and not os.environ.get("LOOKBACK_HOURS"):
+        since = min(datetime.fromisoformat(state["last_run"]), now - OVERLAP)
     seen = set(state["seen"])
     sub = Substack(os.environ.get("SUBSTACK_SID", ""))  # optional login cookie
 

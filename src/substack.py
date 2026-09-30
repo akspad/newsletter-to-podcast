@@ -74,7 +74,7 @@ class Substack:
 
     def recent_posts(self, pub, limit=12):
         if pub.get("rss"):
-            return self.rss_posts(pub, limit)
+            return self.rss_posts(pub, 50)  # busy blogs post many times a day; take all the feed has
         return self.get(f"{pub['base']}/api/v1/archive", sort="new", limit=limit)
 
     def rss_posts(self, pub, limit):

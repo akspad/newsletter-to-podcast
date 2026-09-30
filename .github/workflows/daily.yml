@@ -2,9 +2,13 @@ name: Daily audio summaries
 
 on:
   schedule:
-    # 13:00 UTC is 9am EDT, 14:00 UTC is 9am EST; main.py runs only once per New York day.
-    - cron: "0 13 * * *"
-    - cron: "0 14 * * *"
+    # 13:00 UTC is 9am EDT, 14:00 UTC is 9am EST; main.py runs only once per New York day, at 9am or later.
+    # GitHub often starts top-of-the-hour schedules hours late, so use odd minutes and several tries.
+    - cron: "7 13 * * *"
+    - cron: "37 13 * * *"
+    - cron: "7 14 * * *"
+    - cron: "37 14 * * *"
+    - cron: "7 15 * * *"
   workflow_dispatch:
     inputs:
       lookback_hours:
