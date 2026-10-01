@@ -22,6 +22,24 @@ OVERLAP = timedelta(hours=48)
 NY = ZoneInfo("America/New_York")
 
 
+def full_description(pub, p, text):
+    """Show notes for a full read: the article text itself, so it can be read along or searched."""
+    note = "(Paywalled post: free preview only.)\n" if p.get("audience") not in (None, "everyone") else ""
+    return note + text
+
+
+def add_missing_text(sub, pub, p, state):
+    """Give full-read episodes published before descriptions carried the article text their text."""
+    ep = next((e for e in state["episodes"] if e["guid"] == f"substack-{p['id']}"), None)
+    if not ep or ep.get("full_text"):
+        return
+    try:
+        ep["description"] = full_description(pub, p, sub.post_text(pub, p)[1])
+        ep["full_text"] = True
+    except Exception as e:  # cosmetic; try again next run
+        print(f"! {pub['name']}: {p['title']}: description: {e}", file=sys.stderr)
+
+
 def make_episode(sub, pub, p, now, state):
     post, text = sub.post_text(pub, p)
     author = ", ".join(b.get("name", "") for b in post.get("publishedBylines", [])) or pub["name"]
@@ -40,8 +58,9 @@ def make_episode(sub, pub, p, now, state):
     state["episodes"].append({
         "guid": f"substack-{p['id']}",
         "title": f"{pub['name']}: {p['title']}",
-        "description": (p.get("subtitle") or "") + ((" (paywalled post, free preview only)" if paywalled else "") if pub.get("full")
-                        else (" (summary of a paywalled post)" if paywalled else "")),
+        "description": full_description(pub, p, text) if pub.get("full")
+                       else (p.get("subtitle") or "") + (" (summary of a paywalled post)" if paywalled else ""),
+        "full_text": bool(pub.get("full")),
         "link": p.get("canonical_url") or f"{pub['base']}/p/{p['slug']}",
         "published": now.isoformat(),
         "file": fname,
@@ -96,6 +115,8 @@ def main():
             audio = {k: p.get(k) for k in AUDIO_FIELDS if p.get(k)}
             print(f"  {pub['name']} | {published:%m-%d} | {p.get('wordcount')}w | {p.get('audience')} | "
                   f"type={p.get('type')} {audio or ''} | {skip or 'QUEUED'} | {p['title'][:60]}")
+            if pub.get("full") and str(p["id"]) in seen:
+                add_missing_text(sub, pub, p, state)
             if skip:
                 continue
             candidates.append((pub, p))

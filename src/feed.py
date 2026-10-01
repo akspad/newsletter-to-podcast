@@ -3,6 +3,11 @@ from email.utils import format_datetime
 from xml.sax.saxutils import escape
 
 
+def html(text: str) -> str:
+    """Plain text with one paragraph per line, as HTML show notes."""
+    return "".join(f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip())
+
+
 def build(site_url: str, episodes: list, title="Newsletter Summaries") -> str:
     items = []
     # GUIDs include the feed's address so apps that cache episodes by GUID (Castbox) pick up
@@ -12,7 +17,7 @@ def build(site_url: str, episodes: list, title="Newsletter Summaries") -> str:
         secs = int(e["duration"])
         items.append(f"""    <item>
       <title>{escape(e['title'])}</title>
-      <description>{escape(e['description'])}</description>
+      <description>{escape(html(e['description']))}</description>
       <link>{escape(e['link'])}</link>
       <guid isPermaLink="false">{escape(site_url)}/{escape(e['guid'])}</guid>
       <pubDate>{pub}</pubDate>
