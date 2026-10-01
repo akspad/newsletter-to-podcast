@@ -61,7 +61,7 @@ def main():
 
     # Cron fires at 13:00 and 14:00 UTC so one of them is 9am New York time in both EST and EDT.
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
-        last = state.get("last_run")
+        last = state.get("last_scheduled_run")  # hand-started runs don't use up the day's run
         ran_today = last and datetime.fromisoformat(last).astimezone(NY).date() == local.date()
         if local.hour < 9 or ran_today:
             print(f"Skipping: {local:%H:%M} New York, already ran today={bool(ran_today)}")
@@ -124,6 +124,8 @@ def main():
     state["episodes"] = state["episodes"][-KEEP_EPISODES:]
     state["seen"] = sorted(seen)[-2000:]
     state["last_run"] = now.isoformat()
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+        state["last_scheduled_run"] = now.isoformat()
 
     (SITE / "feed.xml").write_text(feed.build(os.environ["SITE_URL"].rstrip("/"), state["episodes"]))
     STATE.write_text(json.dumps(state, indent=2))
