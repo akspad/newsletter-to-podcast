@@ -1,7 +1,8 @@
-"""Reads posts from Substack publications (their unofficial web API) and plain RSS feeds."""
+"""Reads posts from Substack publications (their unofficial web API), plain RSS feeds and plain web pages."""
 import hashlib
 import re
 import time
+from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlparse
@@ -60,21 +61,25 @@ class Substack:
     def publications_from_file(path):
         pubs = []
         for line in open(path):
-            # "<url> [display name] [| only: <title text>] [| full] [| rss]"
+            # "<url> [display name] [| only: <title text>] [| full] [| rss] [| page: <article path>] [| any length]"
             main, *opts = [part.strip() for part in line.split("#")[0].split("|")]
             parts = main.split(maxsplit=1)
             if parts:
                 url = parts[0].rstrip("/")
                 host = url.split("//")[-1]
                 only = next((o.removeprefix("only:").strip() for o in opts if o.startswith("only:")), None)
-                rss = "rss" in opts or url.endswith(("/feed", ".xml", "/rss"))
+                page = next((o.removeprefix("page:").strip() for o in opts if o.startswith("page:")), None)
+                rss = not page and ("rss" in opts or url.endswith(("/feed", ".xml", "/rss")))
                 pubs.append({"id": host, "name": parts[1].strip() if len(parts) > 1 else host, "base": url,
-                             "only": only, "full": "full" in opts, "rss": rss})
+                             "only": only, "full": "full" in opts, "rss": rss, "page": page,
+                             "any_length": "any length" in opts})
         return pubs
 
     def recent_posts(self, pub, limit=12):
         if pub.get("rss"):
             return self.rss_posts(pub, 50)  # busy blogs post many times a day; take all the feed has
+        if pub.get("page"):
+            return self.page_posts(pub, 30)
         return self.get(f"{pub['base']}/api/v1/archive", sort="new", limit=limit)
 
     def rss_posts(self, pub, limit):
@@ -99,8 +104,44 @@ class Substack:
             })
         return posts[:limit]
 
+    def page_posts(self, pub, limit):
+        """Reads a site with no feed: its listing page links to articles under pub["page"] (e.g. /stories/),
+        and each article page carries its title, a "Month D, YYYY" date and a rich-text body (Webflow)."""
+        listing = self.get(pub["base"], raw=True)
+        links = []
+        for path in re.findall(r'href="(%s[^"#?]+)"' % re.escape(pub["page"]), listing):
+            if path not in links:
+                links.append(path)
+        posts, titles = [], set()
+        for path in links[:limit]:
+            url = urljoin(pub["base"], path)
+            try:
+                soup = BeautifulSoup(self.get(url, raw=True), "html.parser")
+            except RuntimeError as e:
+                print(f"! {pub['name']}: {url}: {e}")
+                continue
+            og = soup.find("meta", property="og:title")
+            title = (og and og.get("content")) or (soup.title.string if soup.title else path)
+            date = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", soup.get_text(" "))
+            body = soup.select_one(".w-richtext, article, main")
+            if not date or not body or title in titles:  # undated pages and duplicate (draft copy) pages aren't articles
+                continue
+            titles.add(title)
+            html = str(body)
+            posts.append({
+                "id": int(hashlib.sha1(url.encode()).hexdigest()[:10], 16),
+                "slug": path.strip("/").split("/")[-1] or "post",
+                "title": title.strip(),
+                "post_date": datetime.strptime(date.group(1), "%B %d, %Y").replace(hour=12, tzinfo=timezone.utc).isoformat(),
+                "canonical_url": url,
+                "audience": "everyone",
+                "wordcount": len(html_to_text(html).split()),
+                "body_html": html,
+            })
+        return sorted(posts, key=lambda p: p["post_date"], reverse=True)
+
     def post_text(self, pub, post):
-        if pub.get("rss"):
+        if pub.get("rss") or pub.get("page"):
             return post, html_to_text(post["body_html"])
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
         return full, html_to_text(full.get("body_html") or "")

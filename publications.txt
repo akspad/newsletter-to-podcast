@@ -2,6 +2,8 @@
 # Add "| only: <text>" to take only posts whose title contains that text (any length, even with audio),
 # and "| full" to narrate every post in full instead of summarizing it (no length cap).
 # A URL ending in /feed, /rss or .xml (or "| rss") is read as a plain RSS feed, for non-Substack blogs.
+# For a site with no feed, "| page: /path/" reads the articles that page links to under that path.
+# "| any length" summarizes short posts too (normally only posts of 1,500+ words are summarized).
 # Substack blocks GitHub's servers on substack.com and *.substack.com addresses, so the
 # subscription list can't be fetched automatically from here. Publications on their own
 # domain (like SemiAnalysis) work; *.substack.com-only ones are skipped with a warning.
@@ -12,3 +14,4 @@ https://marginalrevolution.com/feed Marginal Revolution | full
 https://newsletter.doomberg.com Doomberg | full
 https://alearningaday.blog/feed A Learning a Day | full
 https://www.futilitycloset.com/feed Futility Closet | full
+https://www.generalcatalyst.com/stories General Catalyst | page: /stories/ | any length

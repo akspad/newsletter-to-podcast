@@ -111,7 +111,7 @@ def main():
                         else "not selected" if only and only.lower() not in p["title"].lower() else None)
             else:
                 skip = ("old" if published < since else "done" if str(p["id"]) in seen
-                        else "has audio" if has_audio(p) else "short" if (p.get("wordcount") or 0) < MIN_WORDS else None)
+                        else "has audio" if has_audio(p) else "short" if (p.get("wordcount") or 0) < MIN_WORDS and not pub.get("any_length") else None)
             audio = {k: p.get(k) for k in AUDIO_FIELDS if p.get(k)}
             print(f"  {pub['name']} | {published:%m-%d} | {p.get('wordcount')}w | {p.get('audience')} | "
                   f"type={p.get('type')} {audio or ''} | {skip or 'QUEUED'} | {p['title'][:60]}")
