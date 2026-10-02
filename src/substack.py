@@ -124,14 +124,16 @@ class Substack:
             title = (og and og.get("content")) or (soup.title.string if soup.title else path)
             date = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", soup.get_text(" "))
             body = soup.select_one(".w-richtext, article, main")
-            if not date or not body or title in titles:  # undated pages and duplicate (draft copy) pages aren't articles
+            title = title.strip()
+            # Undated pages aren't articles; Webflow's duplicated drafts ("... Copy") repeat one that is.
+            if not date or not body or title in titles or re.search(r"\bcopy$", title, re.I) or path.endswith("-copy"):
                 continue
             titles.add(title)
             html = str(body)
             posts.append({
                 "id": int(hashlib.sha1(url.encode()).hexdigest()[:10], 16),
                 "slug": path.strip("/").split("/")[-1] or "post",
-                "title": title.strip(),
+                "title": title,
                 "post_date": datetime.strptime(date.group(1), "%B %d, %Y").replace(hour=12, tzinfo=timezone.utc).isoformat(),
                 "canonical_url": url,
                 "audience": "everyone",
