@@ -130,7 +130,9 @@ class Substack:
                 continue
             titles.add(title)
             html = str(body)
+            desc = soup.find("meta", attrs={"name": "description"})
             posts.append({
+                "subtitle": (desc and desc.get("content")) or "",
                 "id": int(hashlib.sha1(url.encode()).hexdigest()[:10], 16),
                 "slug": path.strip("/").split("/")[-1] or "post",
                 "title": title,
