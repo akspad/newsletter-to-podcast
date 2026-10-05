@@ -1,0 +1,87 @@
+name: Listening page checks
+
+on:
+  push:
+    paths:
+      - src/demo.py
+      - src/website.py
+      - src/favicon.svg
+      - samples/demo.mp3
+      - samples/demo.json
+      - .github/workflows/browser.yml
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser verifier
+        run: |
+          npm install -g agent-browser@0.38.2
+          agent-browser install --with-deps
+      - name: Build the documented offline demo
+        run: |
+          python src/main.py --demo
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'src')
+          import feed, website
+          site = Path('site-demo')
+          episodes = feed.read(site / 'feed.xml')
+          episodes[0]['title'] = 'PRIVATE_EPISODE_SENTINEL'
+          (site / 'feed.xml').write_text(feed.build('http://localhost:8000', episodes, 'PRIVATE_FEED_SENTINEL'), encoding='utf-8')
+          website.write(site)
+          PY
+      - name: Verify desktop, mobile, personal-feed exclusion and demo audio
+        run: |
+          set -euo pipefail
+          mkdir -p browser-results
+          python -m http.server 8000 --bind 127.0.0.1 --directory site-demo > /tmp/podcast-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'agent-browser close; kill "$preview_pid" || true' EXIT
+          agent-browser open http://localhost:8000
+          agent-browser wait --load networkidle
+          agent-browser snapshot -i
+          agent-browser set viewport 1440 1100
+          agent-browser eval 'if (!document.querySelector(".sample audio")) throw new Error("Missing original sample player"); if (document.documentElement.outerHTML.includes("PRIVATE_")) throw new Error("Personal metadata appeared on landing page"); if (document.querySelector("a[href*=\"feed.xml\"], link[type=\"application/rss+xml\"], .episode")) throw new Error("Personal feed advertised"); if (document.querySelector("[data-nextjs-dialog], .vite-error-overlay")) throw new Error("Error overlay");'
+          agent-browser screenshot browser-results/desktop.png --full
+          agent-browser eval --stdin <<'JS'
+          (async () => {
+            const icon = document.querySelector('link[rel="icon"]');
+            const logo = document.querySelector('.brand img');
+            if (!icon || !logo || icon.href !== logo.src) throw new Error('Favicon does not match logo');
+            const iconResponse = await fetch(icon.href);
+            if (!iconResponse.ok || !(await iconResponse.text()).includes('<svg')) throw new Error('Favicon failed to load');
+            if (!logo.complete || !logo.naturalWidth) throw new Error('Logo failed to load');
+            const response = await fetch('/feed.xml');
+            const xml = new DOMParser().parseFromString(await response.text(), 'application/xml');
+            if (!response.ok || xml.querySelector('parsererror') || xml.querySelectorAll('item').length !== 1 || xml.querySelector('channel > title').textContent !== 'PRIVATE_FEED_SENTINEL') throw new Error('Invalid RSS feed');
+            const audio = document.querySelector('.sample audio');
+            await new Promise((resolve, reject) => {
+              audio.addEventListener('loadedmetadata', resolve, {once:true});
+              audio.addEventListener('error', () => reject(new Error('Sample audio failed')), {once:true});
+              setTimeout(() => reject(new Error('Audio metadata timeout')), 10000);
+              audio.load();
+            });
+            if (audio.duration < 50 || audio.duration > 60) throw new Error('Unexpected sample duration');
+            return 'RSS and sample audio verified';
+          })()
+          JS
+          agent-browser set viewport 390 844
+          agent-browser eval 'if (document.documentElement.scrollWidth > window.innerWidth) throw new Error("Mobile horizontal overflow");'
+          agent-browser screenshot browser-results/mobile.png --full
+          agent-browser errors
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: listening-page-screenshots
+          path: browser-results/
+          retention-days: 7

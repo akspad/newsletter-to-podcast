@@ -1,0 +1,6 @@
+# Copy to publications.txt (ignored by Git), then add your own sources.
+# These placeholder addresses are examples, not working feeds or subscriptions.
+https://newsletter.example.com Example Newsletter
+https://blog.example.com/feed Example Blog | rss | full
+https://another.example.com/feed Example Digest | rss | summary | only: Weekly | any length
+# Optional HTML listing: https://example.com Example Site | page: /stories/ | full

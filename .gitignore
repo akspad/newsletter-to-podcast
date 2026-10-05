@@ -1,0 +1,13 @@
+__pycache__/
+site/
+site-demo/
+.state/
+.venv/
+.env
+.env.*
+!.env.example
+publications.txt
+*.mp3
+!samples/demo.mp3
+*.pyc
+.DS_Store

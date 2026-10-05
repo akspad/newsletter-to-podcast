@@ -1,0 +1,32 @@
+name: Render original demo sample
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - samples/transcript.txt
+      - src/render_sample.py
+      - .github/workflows/sample.yml
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: python -m pip install 'edge-tts>=7.0,<8'
+      - run: python src/render_sample.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-demo
+          path: |
+            samples/demo.mp3
+            samples/demo.json
+          retention-days: 7

@@ -1,0 +1,139 @@
+name: Newsletter podcast
+
+on:
+  schedule:
+    # GitHub schedules are best effort; the script runs once per New York day after 9am.
+    - cron: "7 13 * * *"
+    - cron: "37 14 * * *"
+    - cron: "7 15 * * *"
+    # Later backups: GitHub sometimes delays or drops a scheduled run; extra runs exit once the day's run is done.
+    - cron: "37 16 * * *"
+    - cron: "7 19 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: "Optional: process articles from this many past hours"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: newsletter-podcast
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_AUTOMATION == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      PUBLISH_TO_PAGES: ${{ vars.PUBLISH_TO_PAGES }}
+      REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+      PUBLICATIONS: ${{ secrets.PUBLICATIONS || vars.PUBLICATIONS }}
+      SUBSTACK_SID: ${{ secrets.SUBSTACK_SID }}
+      SUBSTACK_AUTH_HOSTS: ${{ secrets.SUBSTACK_AUTH_HOSTS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      STATE_ENCRYPTION_KEY: ${{ secrets.STATE_ENCRYPTION_KEY }}
+      EPISODE_MODE: ${{ vars.EPISODE_MODE || 'summary' }}
+      MAX_EPISODE_MINUTES: ${{ vars.MAX_EPISODE_MINUTES || '5' }}
+      MAX_SCRIPT_WORDS: ${{ vars.MAX_SCRIPT_WORDS || '700' }}
+      MIN_WORDS: ${{ vars.MIN_WORDS || '1500' }}
+      MAX_EPISODES_PER_RUN: ${{ vars.MAX_EPISODES_PER_RUN || '20' }}
+      KEEP_EPISODES: ${{ vars.KEEP_EPISODES || '0' }}
+      TTS_VOICE: ${{ vars.TTS_VOICE || 'en-US-AndrewNeural' }}
+      TTS_RATE: ${{ vars.TTS_RATE || '+0%' }}
+      SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'gemini-flash-latest' }}
+      FEED_TITLE: ${{ vars.FEED_TITLE }}
+      LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
+      SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+      VERBOSE: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate privacy and publication choice
+        run: |
+          if [ -z "$PUBLICATIONS" ]; then
+            echo "::error::Set PUBLICATIONS first. This repository contains no subscription list."
+            exit 1
+          fi
+          if [ "$REPOSITORY_PRIVATE" != "true" ] && [ "$PUBLISH_TO_PAGES" != "true" ]; then
+            echo "::error::A public repository needs PUBLISH_TO_PAGES=true to explicitly publish its podcast."
+            exit 1
+          fi
+          if [ "$PUBLISH_TO_PAGES" = "true" ] && [ -z "$STATE_ENCRYPTION_KEY" ]; then
+            echo "::error::Add a STATE_ENCRYPTION_KEY secret to protect processing state between runs."
+            exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: python -m pip install -r requirements.txt
+      - name: Restore private output and processing state
+        if: github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .state
+            site
+          key: podcast-private-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            podcast-private-
+      - name: Restore public feed
+        if: vars.PUBLISH_TO_PAGES == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .state
+          # A failed fetch must abort rather than silently replace an existing feed.
+          git ls-remote --heads origin gh-pages > .state/published-ref
+          if [ -s .state/published-ref ]; then
+            git fetch origin gh-pages
+            mkdir -p site
+            git archive FETCH_HEAD | tar -x -C site
+            # Import legacy completed IDs/retries privately before removing plaintext output.
+            if [ -f site/state.json ]; then
+              mkdir -p .state
+              mv site/state.json .state/legacy-state.json
+            fi
+          fi
+      - name: Build episodes
+        run: python src/main.py
+      - name: Save private output and processing state
+        if: always() && github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .state
+            site
+          key: podcast-private-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Downloadable output (private repository only)
+        if: github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: newsletter-podcast
+          path: |
+            site/feed.xml
+            site/episodes/*.mp3
+          retention-days: 7
+      - name: Publish explicitly public feed to gh-pages
+        if: vars.PUBLISH_TO_PAGES == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p publish
+          cp site/feed.xml publish/
+          cp site/index.html publish/
+          cp -R site/demo publish/
+          cp -R site/episodes publish/
+          cp site/podcast-state.enc publish/
+          cd publish
+          git init -q -b gh-pages
+          touch .nojekyll
+          git add feed.xml index.html demo episodes podcast-state.enc .nojekyll
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Publish podcast"
+          published_head=$(cut -f1 ../.state/published-ref)
+          git push "--force-with-lease=refs/heads/gh-pages:${published_head}" "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" gh-pages

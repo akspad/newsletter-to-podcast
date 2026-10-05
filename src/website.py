@@ -1,0 +1,86 @@
+"""Project landing page containing only the original demo, never personal feed metadata."""
+from html import escape
+from pathlib import Path
+import shutil
+from urllib.parse import urlparse
+
+ROOT = Path(__file__).resolve().parents[1]
+REPO = "https://github.com/akspad/newsletter-to-podcast"
+
+
+def render(sample=False, demo_url=None):
+    # Only the isolated --demo page may advertise its synthetic RSS feed.
+    rss_metadata = ""
+    demo_link = ""
+    if demo_url is not None:
+        parsed = urlparse(demo_url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.query or parsed.fragment:
+            raise ValueError("Demo URL must be an HTTP(S) URL without credentials, query or fragment")
+        rss = escape(demo_url.rstrip("/") + "/feed.xml", quote=True)
+        rss_metadata = f'<link rel="alternate" type="application/rss+xml" title="Original demo only" href="{rss}">'
+        demo_link = f'<a class="button secondary" href="{rss}">Open original demo feed</a>'
+    sample_player = f'''<section class="sample"><div><p class="eyebrow">HEAR AN ORIGINAL SAMPLE</p><h2>A little room for curiosity</h2><p>An original article narrated with Edge TTS. <a href="{REPO}/blob/main/samples/transcript.txt">Read the transcript</a>. MIT licensed and free to share.</p></div><audio controls preload="none" aria-label="Listen to the original demo sample" src="demo/sample.mp3"></audio></section>''' if sample else ""
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" sizes="any" href="favicon.svg">
+<title>Newsletter to Podcast · Turn newsletters into podcasts for free</title>
+<meta name="description" content="Turn newsletters and blogs into podcasts for free with full article narration, plus optional spoken summaries with Gemini.">
+{rss_metadata}
+<style>
+:root {{ color-scheme: light; --ink: #172a25; --muted: #596962; --green: #18583c; --line: #dce3da; --paper: #f7f8f2; }}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; background: var(--paper); color: var(--ink); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }}
+a {{ color: var(--green); text-underline-offset: .22em; }}
+a:focus-visible, button:focus-visible, input:focus-visible {{ outline: 3px solid #477e58; outline-offset: 4px; }}
+.wrap {{ max-width: 1080px; margin: auto; padding: 0 28px; }}
+header {{ display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 28px 0; border-bottom: 1px solid var(--line); }}
+.brand {{ font-weight: 750; letter-spacing: -.03em; text-decoration: none; color: var(--ink); }}
+.brand img {{ width: 28px; height: 28px; vertical-align: middle; margin-right: 7px; }}
+.code {{ font-size: .86rem; }}
+.hero {{ padding: 70px 0 48px; max-width: 800px; }}
+.eyebrow {{ font-size: .72rem; letter-spacing: .16em; font-weight: 750; color: var(--green); margin: 0 0 12px; }}
+h1 {{ font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -.055em; margin: 0 0 22px; overflow-wrap: anywhere; }}
+.intro {{ font-size: 1.1rem; max-width: 620px; color: var(--muted); }}
+.actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }}
+.button {{ display: inline-block; padding: 11px 19px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: white; font: inherit; font-weight: 650; text-decoration: none; cursor: pointer; }}
+.secondary {{ background: transparent; color: var(--green); }}
+.sample {{ display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 28px; border: 1px solid var(--line); border-radius: 14px; padding: 28px; background: #eef2e7; margin-bottom: 48px; }}
+.sample h2 {{ margin: 0; font-size: 1.4rem; letter-spacing: -.03em; }}
+.sample p:last-child {{ color: var(--muted); font-size: .9rem; margin-bottom: 0; }}
+.grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }}
+audio {{ display: block; width: 100%; }}
+footer {{ margin-top: 54px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }}
+footer p {{ margin: 6px 0; }}
+[hidden] {{ display: none !important; }}
+@media(max-width: 640px) {{ .wrap {{ padding: 0 18px; }} header {{ padding: 20px 0; }} .hero {{ padding-top: 42px; }} .sample, .grid {{ grid-template-columns: 1fr; }} .sample {{ padding: 22px; gap: 20px; }} .section-head {{ align-items: stretch; }} input {{ width: 100%; }} }}
+</style>
+<style>.feature {{ background: white; border: 1px solid var(--line); border-radius: 12px; padding: 24px; }} .feature h2 {{ margin: 0 0 12px; font-size: 1.15rem; }} .feature p {{ color: var(--muted); margin: 0; font-size: .95rem; }} .quick-start {{ margin-top: 38px; }} code {{ display: inline-block; padding: 10px 14px; background: #eef2e7; border-radius: 8px; overflow-wrap: anywhere; }} @media(max-width:640px) {{ .grid {{ grid-template-columns:1fr; }} }}</style>
+</head>
+<body><div class="wrap">
+<header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
+<main>
+<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Turn newsletters into podcasts for free.</h1><p class="intro">Free full article narration with Edge TTS. No API key needed. Bring your newsletters and blogs, choose an episode length, and listen in your usual podcast app. Prefer a shorter version? Add spoken summaries with Gemini.</p><div class="actions"><a class="button" href="{REPO}#quick-start-hear-a-sample-in-under-a-minute">Try the quick start</a>{demo_link}</div></section>
+{sample_player}
+<section class="grid" aria-label="What the tool does">
+<article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
+<article class="feature"><h2>Your preferred length</h2><p>Set a maximum episode duration. Longer full readings split into parts.</p></article>
+<article class="feature"><h2>Your own installation</h2><p>Run locally or in your own GitHub repository. Choose your sources and where to host your audio.</p></article>
+</section>
+<section class="quick-start"><h2>Start with the sample</h2><p>After cloning the repository, create an offline demo with Python 3.12. No API keys or live feeds needed.</p><code>python3.12 src/main.py --demo</code><p><a href="{REPO}#quick-start-hear-a-sample-in-under-a-minute">See the setup instructions ↗</a></p></section>
+</main>
+<footer><p><a href="{REPO}">Newsletter to Podcast</a> is an open-source Python tool. The code and original demo are MIT licensed.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p><p>Use sources you are authorized to access and convert. Share generated audio only with permission.</p></footer>
+</div></body></html>
+'''
+
+
+def write(site, demo_url=None):
+    # Deliberately accept no episode list, feed title, source URLs or personal feed address.
+    shutil.copyfile(ROOT / "src" / "favicon.svg", site / "favicon.svg")
+    sample = ROOT / "samples" / "demo.mp3"
+    available = sample.exists()
+    if available:
+        (site / "demo").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(sample, site / "demo" / "sample.mp3")
+    (site / "index.html").write_text(render(available, demo_url), encoding="utf-8")
