@@ -127,13 +127,14 @@ jobs:
           mkdir -p publish
           cp site/feed.xml publish/
           cp site/index.html publish/
+          cp site/favicon.svg publish/
           cp -R site/demo publish/
           cp -R site/episodes publish/
           cp site/podcast-state.enc publish/
           cd publish
           git init -q -b gh-pages
           touch .nojekyll
-          git add feed.xml index.html demo episodes podcast-state.enc .nojekyll
+          git add feed.xml index.html favicon.svg demo episodes podcast-state.enc .nojekyll
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Publish podcast"
           published_head=$(cut -f1 ../.state/published-ref)
           git push "--force-with-lease=refs/heads/gh-pages:${published_head}" "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" gh-pages

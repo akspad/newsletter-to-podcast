@@ -43,6 +43,33 @@ cd newsletter-to-podcast
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+```
+
+### Generate your first episode
+
+Copy and paste this command to fetch an original, MIT-licensed article from the project's public RSS source and generate **new audio with Edge TTS**. No API key is needed. This exercises source fetching, text extraction, narration and podcast RSS generation; unlike `--demo`, it does not use prerecorded audio.
+
+```sh
+PUBLICATIONS="https://raw.githubusercontent.com/akspad/newsletter-to-podcast/main/samples/source.xml Original sample | rss | full" \
+EPISODE_MODE=full \
+LOOKBACK_HOURS=87600 \
+MAX_EPISODE_MINUTES=10 \
+SITE_DIR=site-first-episode \
+STATE_DIR=.state-first-episode \
+SITE_URL=http://localhost:8000 \
+PUBLISH_TO_PAGES=false \
+python src/main.py
+
+python -m http.server 8000 --bind 127.0.0.1 --directory site-first-episode
+```
+
+Generation needs internet access and may take a minute. Open **http://localhost:8000/feed.xml** for your newly generated episode's MP3 link, or open the MP3 in `site-first-episode/episodes/`. The root page still plays the bundled demo. Stop the server with Ctrl+C.
+
+The long lookback includes the sample's fixed publication date. Output and processing history use separate, ignored directories. Running the command again skips the completed sample; to regenerate it, remove only `site-first-episode/` and `.state-first-episode/`, then run it again.
+
+### Use your own sources
+
+```sh
 cp publications.example.txt publications.txt
 cp .env.example .env
 ```

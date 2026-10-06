@@ -10,7 +10,7 @@ The repository homepage should point to the listening page at https://akspad.git
 
 Suggested title:
 
-> Show HN: Turn newsletters into podcasts for free
+> Show HN: Turn newsletters and blogs into a personal podcast
 
 Suggested introductory comment:
 
