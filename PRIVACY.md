@@ -11,7 +11,7 @@ The project landing page shows only the original demo: it does not include perso
 | `publications.txt`, `.env` | Source choices and credentials | Ignored by Git; never publish. |
 | `.state/state.json` | Completed IDs, episodes, retry payloads and source configuration | Outside `site/`; never serve. Private Actions caches are accessible to people with repository access. |
 | `site/podcast-state.enc` | Encrypted processing state and retry payloads | Public ciphertext authenticated and encrypted with the secret `STATE_ENCRYPTION_KEY`. Do not commit or expose the key. |
-| `site/feed.xml`, `site/episodes/` | Source titles, URLs, audio and optional article text | Share only as intended; public hosting reveals your reading choices. |
+| `site/feed.xml`, `site/episodes/` | Source titles, URLs, audio and full-narration article text | Share only as intended; public hosting reveals your reading choices. |
 | Workflow logs | Progress and sanitized failure types | Source titles are disabled by default. Public workflow logs are visible. |
 | Gemini | Article text sent for summaries | Review provider data-use terms and account settings. Full narration does not send text to Gemini. |
 | Edge TTS | Narration text sent for audio generation | Applies to both modes. |
@@ -32,4 +32,5 @@ Before announcing a previously personal repository:
 6. Review old Actions logs, artifacts and caches. GitHub may retain commits referenced by PRs and cached pages; consult [GitHub's removal guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
 
 History rewriting and feed removal are separate destructive operations. No cleanup can erase copies that other people already downloaded. These code changes prevent new accidental disclosure; they do not claim to erase historical exposure.
+
 

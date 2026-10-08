@@ -16,9 +16,53 @@ import storage
 import tts
 import website
 from config import Settings, load_env
-from substack import Substack, has_audio
+from substack import Substack, has_audio, html_to_text
 
 NY = ZoneInfo("America/New_York")
+FULL_PLACEHOLDER = "Full narration of the text available from the source."
+RESTRICTED_NOTICE = "The source has restricted access; the returned text may be a preview."
+
+
+def episode_description(mode, text, preview):
+    if mode == "full":
+        return (RESTRICTED_NOTICE + "\n" if preview else "") + text
+    description = "Spoken summary of the text available from the source."
+    return description + (" " + RESTRICTED_NOTICE if preview else "")
+
+
+def refresh_descriptions(sub, pub, posts, state):
+    """Repair legacy full-narration notes using configured sources, without regenerating audio."""
+    pending = []
+    for episode in state["episodes"]:
+        description = (html_to_text(episode["description_html"]) if episode.get("description_html")
+                       else episode.get("description", ""))
+        if description in (FULL_PLACEHOLDER, FULL_PLACEHOLDER + " " + RESTRICTED_NOTICE,
+                           FULL_PLACEHOLDER + "\n" + RESTRICTED_NOTICE):
+            pending.append(episode)
+    updated = 0
+    for post in posts:
+        key = post_key(pub, post)
+        link = post.get("canonical_url")
+        matches = [e for e in pending if e.get("source_key", e["guid"].split("-part-")[0]) == key
+                   or (link and e.get("link") == link)]
+        if not matches:
+            continue
+        try:
+            full, text = sub.post_text(pub, post)
+            if not text.strip():
+                raise ValueError("Source returned no article text")
+            description = episode_description("full", text, full.get("audience") not in (None, "everyone"))
+        except Exception as error:
+            # Provider messages and URLs may reveal private source configuration.
+            print(f"Description refresh failed ({type(error).__name__}); will retry.", file=sys.stderr)
+            continue
+        for episode in matches:
+            episode["description"] = description
+            episode.pop("description_html", None)
+            pending.remove(episode)
+            updated += 1
+    if updated:
+        print(f"Updated {updated} full-narration description(s).")
 
 
 def post_key(pub, post):
@@ -70,11 +114,7 @@ def make_episode(sub, pub, post, now, state, settings):
         episodes = []
         for index, part in enumerate(paths, 1):
             suffix = f" (part {index} of {len(paths)})" if len(paths) > 1 else ""
-            description = f"{'Full narration' if mode == 'full' else 'Spoken summary'} of the text available from the source."
-            if preview:
-                description += " The source has restricted access; the returned text may be a preview."
-            if mode == "full" and os.environ.get("INCLUDE_FULL_TEXT", "false").lower() == "true":
-                description += "\n" + text
+            description = episode_description(mode, text, preview)
             episodes.append({
                 "guid": key + (f"-part-{index:03d}" if len(paths) > 1 else ""),
                 "source_key": key,
@@ -145,6 +185,7 @@ def run(settings, publications, sub):
     for index, pub in enumerate(publications, 1):
         try:
             posts = list(sub.recent_posts(pub))
+            refresh_descriptions(sub, pub, posts, state)
             for post in posts:
                 if eligible(pub, post, since, seen, settings) and post_key(pub, post) not in queued:
                     candidates.append((pub, post))
@@ -250,3 +291,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

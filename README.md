@@ -151,12 +151,13 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 | `FEED_TITLE` | `Newsletter Podcast` | Name shown in your podcast app. |
 | `SUMMARY_MODEL` | `gemini-flash-latest` | Gemini model, with a lighter fallback for transient failures. |
 | `TTS_VOICE` / `TTS_RATE` | `en-US-AndrewNeural` / `+0%` | Edge voice and speaking rate; list voices with `edge-tts --list-voices`. |
-| `INCLUDE_FULL_TEXT` | `false` | Include article text in full-narration show notes. |
 | `VERBOSE` | `false` | Log created episode titles. Avoid enabling it in public workflows. |
 | `STATE_ENCRYPTION_KEY` | unset | Random Fernet key used to encrypt processing state for public publishing. Store it as a secret. |
 | `PUBLISH_TO_PAGES` | `false` | Explicitly publish the feed and audio, with encrypted processing state, to Pages. |
 
 The example env file explicitly sets `LOOKBACK_HOURS=36`; remove that entry after the first run if you want automatic catch-up after longer gaps. Retaining `.state/` preserves completed-post history and the retry queue. Do not serve that directory.
+
+Full narrations include the available article text in their podcast descriptions, including every split part. Summary descriptions remain brief. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
 
 Splits occur at audio time boundaries, so a part can end mid-sentence. Failed TTS passages fail the article and queue a retry rather than silently omitting words.
 
@@ -227,3 +228,4 @@ To regenerate the bundled sample, install the dependencies and ffmpeg, then run 
 Tests use synthetic content and mocked provider calls; audio tests use real ffmpeg and ffprobe. CI installs the provider SDKs and runs the same suite. See [CONTRIBUTING.md](CONTRIBUTING.md). The code is [MIT licensed](LICENSE); that license does not grant rights to third-party articles or generated readings of them.
 
 Built by [@akspad](https://x.com/akspad)
+

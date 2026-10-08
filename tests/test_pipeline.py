@@ -243,7 +243,8 @@ class FeedAndPipelineTests(unittest.TestCase):
             self.assertEqual(len(state["episodes"]), 1)
             self.assertFalse((settings.site / "state.json").exists())
             self.assertNotIn("fictional article", output.getvalue())
-            self.assertNotIn("Fictional article body", (settings.site / "feed.xml").read_text())
+            self.assertIn("Fictional article body", (settings.site / "feed.xml").read_text())
+            self.assertNotIn("Fictional article body", output.getvalue())
 
     def test_retry_does_not_mark_failed_article_seen_or_leak_content(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -459,3 +460,4 @@ class AdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
