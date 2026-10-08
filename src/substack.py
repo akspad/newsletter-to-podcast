@@ -96,9 +96,9 @@ class Substack:
             raise ValueError("Publication list is empty")
         return pubs
 
-    def recent_posts(self, pub, limit=12):
+    def recent_posts(self, pub, limit=50):
         if pub.get("rss"):
-            return self.rss_posts(pub, 50)  # busy blogs post many times a day; take all the feed has
+            return self.rss_posts(pub, None)  # catch up on every entry the feed still exposes
         if pub.get("page"):
             return self.page_posts(pub, 30)
         return self.get(f"{pub['base']}/api/v1/archive", sort="new", limit=limit)
@@ -237,3 +237,4 @@ def has_audio(post) -> bool:
     if post.get("type") == "podcast" or post.get("podcast_url") or post.get("podcast_upload_id"):
         return True
     return any(item.get("audio_url") for item in post.get("audio_items") or [])
+

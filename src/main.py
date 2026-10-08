@@ -8,17 +8,16 @@ import shutil
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import feed
 import summarize
 import storage
 import tts
 import website
+from schedule import scheduled_run_due
 from config import Settings, load_env
 from substack import Substack, has_audio, html_to_text
 
-NY = ZoneInfo("America/New_York")
 FULL_PLACEHOLDER = "Full narration of the text available from the source."
 RESTRICTED_NOTICE = "The source has restricted access; the returned text may be a preview."
 
@@ -151,12 +150,9 @@ def save_state(settings, state):
 def run(settings, publications, sub):
     state = load_state(settings)
     now = datetime.now(timezone.utc)
-    local = now.astimezone(NY)
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
-        last = state.get("last_scheduled_run")
-        ran_today = last and datetime.fromisoformat(last).astimezone(NY).date() == local.date()
-        if local.hour < 9 or ran_today:
-            print("Scheduled run skipped: before 9am New York or already ran today.")
+        if not scheduled_run_due(state, now, settings.runs_per_day):
+            print("Scheduled run skipped: this scheduling window already completed.")
             # Persist migrated state even when generation is skipped on its first run.
             if settings.site.exists():
                 website.write(settings.site)
@@ -165,7 +161,7 @@ def run(settings, publications, sub):
 
     since = now - timedelta(hours=settings.lookback_hours)
     if state.get("last_run") and not settings.explicit_lookback:
-        since = min(datetime.fromisoformat(state["last_run"]), now - timedelta(hours=48))
+        since = min(datetime.fromisoformat(state["last_run"]) - timedelta(hours=48), since)
     seen = set(state.get("seen", []))
     configured = {pub["base"]: pub for pub in publications}
     # Drop queued posts from removed sources and use current mode/filter settings on retries.
@@ -228,7 +224,7 @@ def run(settings, publications, sub):
     state["seen"] = list(dict.fromkeys(state.get("seen", []) + completed))
     if not source_failed:
         state["last_run"] = now.isoformat()
-    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and not source_failed:
         state["last_scheduled_run"] = now.isoformat()
     title = os.environ.get("FEED_TITLE") or state.get("feed_title") or "Newsletter Podcast"
     (settings.site / "feed.xml").write_text(feed.build(settings.site_url, retained, title), encoding="utf-8")

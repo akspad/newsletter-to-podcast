@@ -1,14 +1,14 @@
 name: Newsletter podcast
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/daily.yml
   schedule:
-    # GitHub schedules are best effort; the script runs once per New York day after 9am.
-    - cron: "7 13 * * *"
-    - cron: "37 14 * * *"
-    - cron: "7 15 * * *"
-    # Later backups: GitHub sometimes delays or drops a scheduled run; extra runs exit once the day's run is done.
-    - cron: "37 16 * * *"
-    - cron: "7 19 * * *"
+    # Hourly checks; RUNS_PER_DAY controls podcast generation without editing cron.
+    # The encrypted state allows one completed run per window, with retries after source outages.
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       lookback_hours:
@@ -44,6 +44,7 @@ jobs:
       MIN_WORDS: ${{ vars.MIN_WORDS || '1500' }}
       MAX_EPISODES_PER_RUN: ${{ vars.MAX_EPISODES_PER_RUN || '20' }}
       KEEP_EPISODES: ${{ vars.KEEP_EPISODES || '0' }}
+      RUNS_PER_DAY: ${{ vars.RUNS_PER_DAY || '4' }}
       TTS_VOICE: ${{ vars.TTS_VOICE || 'en-US-AndrewNeural' }}
       TTS_RATE: ${{ vars.TTS_RATE || '+0%' }}
       SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'gemini-flash-latest' }}
@@ -70,8 +71,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-      - run: python -m pip install -r requirements.txt
+      - name: Install state decryption dependency
+        run: python -m pip install 'cryptography>=43'
       - name: Restore private output and processing state
         if: github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
         uses: actions/cache/restore@v4
@@ -99,10 +100,20 @@ jobs:
               mv site/state.json .state/legacy-state.json
             fi
           fi
+      - name: Check configurable scheduling window
+        id: cadence
+        run: python src/schedule.py
+      - name: Install audio tools when due
+        if: steps.cadence.outputs.due == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install generation dependencies when due
+        if: steps.cadence.outputs.due == 'true'
+        run: python -m pip install -r requirements.txt
       - name: Build episodes
+        if: steps.cadence.outputs.due == 'true'
         run: python src/main.py
       - name: Save private output and processing state
-        if: always() && github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
+        if: always() && steps.cadence.outputs.due == 'true' && github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -110,7 +121,7 @@ jobs:
             site
           key: podcast-private-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Downloadable output (private repository only)
-        if: github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
+        if: steps.cadence.outputs.due == 'true' && github.event.repository.private && vars.PUBLISH_TO_PAGES != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: newsletter-podcast
@@ -119,7 +130,7 @@ jobs:
             site/episodes/*.mp3
           retention-days: 7
       - name: Publish explicitly public feed to gh-pages
-        if: vars.PUBLISH_TO_PAGES == 'true'
+        if: steps.cadence.outputs.due == 'true' && vars.PUBLISH_TO_PAGES == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -138,3 +149,4 @@ jobs:
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Publish podcast"
           published_head=$(cut -f1 ../.state/published-ref)
           git push "--force-with-lease=refs/heads/gh-pages:${published_head}" "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" gh-pages
+

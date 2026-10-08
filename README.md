@@ -11,7 +11,7 @@ Choose **spoken summaries** or **full article narration**. Set a maximum episode
 - Reads Substack publications, RSS and Atom feeds, and simple article listing pages.
 - Generates summaries with Gemini and audio with Edge TTS.
 - Produces MP3s with podcast loudness normalization and an RSS feed.
-- Runs locally or on a schedule in your own GitHub repository.
+- Runs locally or on a configurable schedule in your own GitHub repository: four times a day by default.
 - Keeps your source list, credentials, and processing state out of the shared code.
 
 This is a Python command-line project, not a hosted service. It reads the text a source makes available to you; it does not bypass paywalls, and feed excerpts may be shorter than the original article.
@@ -143,7 +143,8 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 | `MAX_EPISODE_MINUTES` | `5` | Maximum duration per MP3, in minutes. Full articles split into parts. `0` disables the audio limit. |
 | `MAX_SCRIPT_WORDS` | `700` | Additional summary word limit, including its introduction. |
 | `MIN_WORDS` | `1500` | Minimum article length in default summary selection. |
-| `LOOKBACK_HOURS` | `36` on the first run | Initial/explicit lookback; later runs overlap the previous run by at least 48 hours. |
+| `LOOKBACK_HOURS` | automatic: at least `168` | Scan the past week and cover longer gaps with a 48-hour overlap before the last complete source scan. Set a value only to override this for a specific backfill. |
+| `RUNS_PER_DAY` | `4` | Target scheduled podcast runs per UTC day, from `1` to `24`. Set an Actions repository variable to change cadence without editing cron. |
 | `MAX_EPISODES_PER_RUN` | `20` | Maximum articles processed per run; a full article can produce several MP3s. |
 | `KEEP_EPISODES` | `0` | Retain all articles by default. A positive value limits retained articles; all parts stay together. |
 | `SITE_DIR` / `STATE_DIR` | `site` / `.state` | Feed/audio output and separate private processing state. |
@@ -155,9 +156,13 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 | `STATE_ENCRYPTION_KEY` | unset | Random Fernet key used to encrypt processing state for public publishing. Store it as a secret. |
 | `PUBLISH_TO_PAGES` | `false` | Explicitly publish the feed and audio, with encrypted processing state, to Pages. |
 
-The example env file explicitly sets `LOOKBACK_HOURS=36`; remove that entry after the first run if you want automatic catch-up after longer gaps. Retaining `.state/` preserves completed-post history and the retry queue. Do not serve that directory.
+Leave `LOOKBACK_HOURS` blank for automatic catch-up. If upgrading from an older example `.env` that sets it to `36`, remove or clear that value. Retaining `.state/` preserves completed-post history and the retry queue. Do not serve that directory.
+
+### Full-article podcast descriptions
 
 Full narrations include the available article text in their podcast descriptions, including every split part. Summary descriptions remain brief. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
+
+This replaces the old generic full-narration placeholder and no longer requires `INCLUDE_FULL_TEXT`. The landing page continues to show only the original demo. Article text is part of the podcast feed output; subscription lists, per-source settings, credentials and retry payloads stay in private configuration and encrypted processing state. Source titles and article text are omitted from default workflow logs.
 
 Splits occur at audio time boundaries, so a part can end mid-sentence. Failed TTS passages fail the article and queue a retry rather than silently omitting words.
 
@@ -174,9 +179,20 @@ The source repository can be public while your subscription configuration stays 
    ```
 
 4. Add repository variables for any non-sensitive configuration you want to override. Keep personal per-source modes and title filters in the `PUBLICATIONS` secret.
-5. Set `PUBLISH_TO_PAGES=true` for your public podcast, and `ENABLE_AUTOMATION=true` for daily runs. Keep `KEEP_EPISODES=0` to retain every existing and new episode.
+5. Set `PUBLISH_TO_PAGES=true` for your public podcast, and `ENABLE_AUTOMATION=true` for scheduled runs. Keep `KEEP_EPISODES=0` to retain every existing and new episode.
+6. Optionally set the **repository variable** `RUNS_PER_DAY`. Its default is `4`; use `2` for two runs a day, `6` for six, or another integer from `1` through `24`.
 
-**Existing installations also need `ENABLE_AUTOMATION=true` after upgrading.** Automation is disabled by default. Scheduled runs aim for once per New York day after 9am; GitHub may delay them. A manual run can supply `lookback_hours`.
+**Existing installations also need `ENABLE_AUTOMATION=true` after upgrading.** Automation is disabled by default.
+
+### Four runs a day and automatic catch-up
+
+The workflow checks hourly at minute 17. Python divides each UTC day into `RUNS_PER_DAY` equal windows and uses the encrypted processing state to allow one completed source scan per window. With the default `4`, the windows begin at 00:00, 06:00, 12:00 and 18:00 UTC. Checks in an already completed window skip audio-tool installation, generation and publishing. GitHub can delay or drop scheduled events, so these are target windows rather than guaranteed start times; a later hourly check can retry a missed attempt. Complete or partial source outages leave the window available for retry.
+
+Each due run adds eligible missing articles available from its configured sources, while completed IDs prevent duplicate episodes. Automatic catch-up scans at least the past seven days and reaches back further after longer gaps. Failed episodes and articles beyond `MAX_EPISODES_PER_RUN` remain queued for later runs, even after they leave the source's current feed. Existing episodes stay in place unless you deliberately set a retention limit.
+
+To request a longer backfill immediately, open **Actions → Newsletter podcast → Run workflow** and enter `lookback_hours`, for example `720` for 30 days. Manual runs bypass the scheduling window and still deduplicate completed articles. After the backfill, leave this input blank for automatic catch-up. Recovery is limited to articles still exposed by the source or already saved in the private retry queue; an older article absent from both cannot be recovered by increasing lookback alone.
+
+Changes to `.github/workflows/daily.yml` on `main` also start a catch-up run when automation is enabled, so updating this workflow applies the recovery behavior immediately. Manual and workflow-update runs bypass the cadence check; scheduled runs remain limited to one complete source scan per window.
 
 For an entirely private installation, use a private repository and leave `PUBLISH_TO_PAGES` unset. These runs save audio and state in a private Actions cache and provide a seven-day downloadable artifact. Host the output yourself. Caches can expire or be evicted; keep a backup for durable personal history.
 
@@ -186,7 +202,7 @@ Set `PUBLISH_TO_PAGES=true` only for content you deliberately want everyone to s
 
 A public repository can use a `PUBLICATIONS` **secret**, including personal per-source filters and modes. Generated RSS and audio are public. Processing state and the retry queue are encrypted into `podcast-state.enc` with your secret state key and restored on the next run. Plaintext runtime state is never published or cached by the public workflow. Keep that key stable and back it up privately: losing or changing it prevents the next run from decrypting the queue. Restrict repository write access to people you trust with your Actions secrets.
 
-**GitHub Pages output is public, even when the source repository is private.** It reveals publications through titles, audio, links and optional article text. Secrets protect stored configuration, not generated content. Read [PRIVACY.md](PRIVACY.md) before migrating an existing installation.
+**GitHub Pages output is public, even when the source repository is private.** It reveals publications through titles, audio, links and full-narration article text. Secrets protect stored configuration, not generated content. Read [PRIVACY.md](PRIVACY.md) before migrating an existing installation.
 
 Add your reachable RSS URL to a podcast app that supports custom RSS feeds, such as Apple Podcasts, Overcast or Pocket Casts.
 
@@ -212,7 +228,7 @@ Full narration can run locally without paid API calls. Optional summaries can us
 - Edge TTS uses an unofficial endpoint without a reliability guarantee. It may be throttled or change.
 - Substack's archive API is unofficial. Bot protection can block Substack and custom domains, especially from GitHub runners.
 - RSS/Atom narration reads the text included in the feed; it does not automatically fetch the linked article to fill in missing content.
-- Each Substack run currently reads the 12 latest archive entries per source; RSS reads up to 50 entries. Older posts absent from those responses cannot be recovered by increasing lookback.
+- Each Substack run requests up to 50 latest archive entries per source; RSS/Atom reads all entries provided by the feed, and HTML listing sources inspect up to 30 links. Older posts absent from those responses cannot be recovered by increasing lookback.
 - Splitting bounds file length, not total processing cost or runtime. Very long articles can exceed the workflow timeout.
 - GitHub Actions, hosting and API usage may have costs. This project does not promise a permanently free service.
 - Use articles you are authorized to access and convert. Share generated audio only when you have permission to redistribute the source content.

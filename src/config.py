@@ -46,6 +46,7 @@ class Settings:
     lookback_hours: float
     explicit_lookback: bool
     verbose: bool
+    runs_per_day: int
 
     @classmethod
     def from_env(cls):
@@ -63,8 +64,12 @@ class Settings:
         minutes = number("MAX_EPISODE_MINUTES", 5)
         if 0 < minutes < 1 / 60:
             raise ValueError("MAX_EPISODE_MINUTES must be 0 or at least one second")
+        runs_per_day = number("RUNS_PER_DAY", 4, 1, True)
+        if runs_per_day > 24:
+            raise ValueError("RUNS_PER_DAY must be an integer from 1 to 24")
         return cls(site, state_dir, site_url, mode, minutes * 60 if minutes else None,
                    number("MAX_SCRIPT_WORDS", 700, 1, True), number("MIN_WORDS", 1500, 0, True),
                    number("MAX_EPISODES_PER_RUN", 20, 1, True), number("KEEP_EPISODES", 0, 0, True),
-                   number("LOOKBACK_HOURS", 36, 0.01), bool(os.environ.get("LOOKBACK_HOURS")),
-                   os.environ.get("VERBOSE", "false").lower() == "true")
+                   number("LOOKBACK_HOURS", 168, 0.01), bool(os.environ.get("LOOKBACK_HOURS")),
+                   os.environ.get("VERBOSE", "false").lower() == "true", runs_per_day)
+
