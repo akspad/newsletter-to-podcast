@@ -1,4 +1,8 @@
 """Keep processing state private while serving an intentionally public podcast."""
+from contextlib import contextmanager
+import secrets
+import stat
+import security
 import base64
 import hashlib
 import json
@@ -8,6 +12,76 @@ import re
 import feed
 
 PUBLIC_STATE = "podcast-state.enc"
+
+
+@contextmanager
+def private_directory(path):
+    if os.name != "posix":
+        raise ValueError("Private state generation requires POSIX filesystem protections")
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        if os.fstat(fd).st_uid != os.getuid():
+            raise ValueError("Private state directory must belong to the current user")
+        os.fchmod(fd, 0o700)
+        yield fd
+    finally:
+        os.close(fd)
+
+
+def check_private_file(fd):
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+        raise ValueError("Private state must be an owned regular file")
+    os.fchmod(fd, 0o600)
+    if info.st_size > security.MAX_STATE_BYTES:
+        raise security.BudgetExceeded("Processing state exceeds the size limit")
+
+
+def read_private(directory, name):
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "r", encoding="utf-8") as source:
+        check_private_file(source.fileno())
+        data = source.read(security.MAX_STATE_BYTES + 1)
+    if len(data.encode("utf-8")) > security.MAX_STATE_BYTES:
+        raise security.BudgetExceeded("Processing state exceeds the size limit")
+    return json.loads(data)
+
+
+def save(settings, state):
+    data = json.dumps(state, indent=2).encode("utf-8")
+    if len(data) > security.MAX_STATE_BYTES:
+        raise security.BudgetExceeded("Processing state exceeds the size limit")
+    with private_directory(settings.state_dir) as directory:
+        # Reject a pre-existing link or unowned target instead of silently replacing it.
+        try:
+            existing = os.open("state.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+        else:
+            try:
+                check_private_file(existing)
+            finally:
+                os.close(existing)
+        temporary = ".state-" + secrets.token_hex(16)
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=directory)
+        os.fchmod(fd, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as output:
+                output.write(data)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, "state.json", src_dir_fd=directory, dst_dir_fd=directory)
+        finally:
+            try:
+                os.unlink(temporary, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+    publish(settings, state)
 
 
 def legacy_key(identifier):
@@ -60,21 +134,29 @@ def migrate(state, feed_path):
 
 
 def load(settings):
-    local = settings.state_dir / "state.json"
     public = settings.site / PUBLIC_STATE
-    legacy = settings.state_dir / "legacy-state.json"
-    if local.exists():
-        state = json.loads(local.read_text(encoding="utf-8"))
-    elif public.exists():
+    state = legacy = None
+    if settings.state_dir.exists() or settings.state_dir.is_symlink():
+        with private_directory(settings.state_dir) as directory:
+            state = read_private(directory, "state.json")
+            legacy = read_private(directory, "legacy-state.json") if state is None and not public.exists() else None
+    if state is None and public.exists():
         from cryptography.fernet import InvalidToken
 
+        with public.open("rb") as source:
+            encrypted = source.read(2 * security.MAX_STATE_BYTES + 1)
+        if len(encrypted) > 2 * security.MAX_STATE_BYTES:
+            raise security.BudgetExceeded("Encrypted processing state exceeds the size limit")
         try:
-            state = json.loads(cipher().decrypt(public.read_bytes()))
+            decoded = cipher().decrypt(encrypted)
+            if len(decoded) > security.MAX_STATE_BYTES:
+                raise security.BudgetExceeded("Processing state exceeds the size limit")
+            state = json.loads(decoded)
         except InvalidToken:
             raise ValueError("Cannot decrypt processing state; restore the original STATE_ENCRYPTION_KEY") from None
-    elif legacy.exists():
-        state = json.loads(legacy.read_text(encoding="utf-8"))
-    else:
+    elif state is None:
+        state = legacy
+    if state is None:
         path = settings.site / "feed.xml"
         episodes = feed.read(path) if path.exists() else []
         state = {"episodes": episodes, "seen": [], "retry": [], "last_run": None}
@@ -93,3 +175,4 @@ def publish(settings, state):
 
 def was_seen(pub, post, seen, current_key):
     return current_key in seen or legacy_key(post["id"]) in seen
+
