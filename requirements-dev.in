@@ -1,0 +1,2 @@
+# Workflow policy tests only; not installed in generation jobs.
+PyYAML>=6,<7

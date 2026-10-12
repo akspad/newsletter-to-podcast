@@ -42,7 +42,7 @@ git clone https://github.com/akspad/newsletter-to-podcast.git
 cd newsletter-to-podcast
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
 ```
 
 ### Generate your first episode
@@ -268,9 +268,30 @@ including existing files owned by the current user. State symlinks, hardlinks an
 files are rejected. Generation requires POSIX filesystem support for these protections;
 the static demo remains usable independently.
 
+### Dependency and workflow integrity
+
+`requirements.txt` locks direct and transitive package versions and artifact hashes.
+Install it with `--require-hashes --only-binary=:all:` so an install cannot silently
+select a different release or execute a source-package build. `requirements.in` is
+only the maintainer input used when deliberately reviewing dependency updates.
+GitHub Actions are pinned to full commits, and checkouts never persist Git credentials.
+
+Scheduled generation runs with repository read permission. Application secrets are
+available only to validation, scheduling, or generation steps that need them, and are
+absent during dependency installation. A separate job receives write permission only
+for public publication. It downloads this run's immutable public artifact by ID,
+checks its SHA-256 digest and file allowlist, and preserves the existing publication
+lease before updating `gh-pages`. The artifact contains public RSS, audio, landing-page
+assets and encrypted processing state; plaintext state and configuration are excluded.
+Private installations continue to use their private cache and downloadable output.
+
+When verbose local logging is enabled, publication names and titles are bounded,
+ASCII-escaped JSON fields so embedded newlines or terminal controls remain inert.
+
 ## Development
 
 ```sh
+python -m pip install --require-hashes --only-binary=:all: -r requirements.txt -r requirements-dev.txt
 python -m unittest discover -s tests -v
 ```
 

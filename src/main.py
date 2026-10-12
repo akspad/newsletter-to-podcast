@@ -137,7 +137,7 @@ def make_episode(sub, pub, post, now, state, settings):
                 "duration": tts.duration(part),
             })
         state["episodes"].extend(episodes)  # commit only after every part is ready
-        print(f"Created {len(episodes)} audio file(s)." + (f" {pub['name']}: {post['title']}" if settings.verbose else ""))
+        print(f"Created {len(episodes)} audio file(s)." + (f" {security.log_field(pub['name'])}: {security.log_field(post['title'])}" if settings.verbose else ""))
     except Exception:
         for incomplete in path.parent.glob(f"{key}*.mp3"):
             incomplete.unlink(missing_ok=True)
