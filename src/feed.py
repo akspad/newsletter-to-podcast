@@ -1,9 +1,21 @@
+import os
+import tempfile
+import security
 from datetime import datetime, timezone
 from email.utils import format_datetime
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape as xml_escape
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+
+
+def escape(text, entities=None):
+    if not isinstance(text, str):
+        raise ValueError("Feed text must be a string")
+    # XML 1.0 excludes controls, surrogates and U+FFFE/U+FFFF.
+    text = "".join(c for c in text if ord(c) in (9, 10, 13) or 0x20 <= ord(c) <= 0xD7FF
+                   or 0xE000 <= ord(c) <= 0xFFFD or 0x10000 <= ord(c) <= 0x10FFFF)
+    return xml_escape(text, entities or {})
 
 
 def title(path):
@@ -70,3 +82,22 @@ def build(site_url: str, episodes: list, title="Newsletter Podcast") -> str:
   </channel>
 </rss>
 """
+
+
+
+def write(path, document):
+    """Validate a bounded candidate before atomically replacing the last valid feed."""
+    data = document.encode("utf-8")
+    if len(data) > security.MAX_FEED_BYTES:
+        raise security.BudgetExceeded("Generated feed exceeds the size limit")
+    ET.fromstring(data)
+    fd, temporary = tempfile.mkstemp(prefix=".feed-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)

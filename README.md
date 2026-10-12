@@ -160,7 +160,7 @@ Leave `LOOKBACK_HOURS` blank for automatic catch-up. If upgrading from an older 
 
 ### Full-article podcast descriptions
 
-Full narrations include the available article text in their podcast descriptions, including every split part. Summary descriptions remain brief. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
+Full narrations include the available article text in their podcast descriptions, including every split part, within the per-article description budget. Summary descriptions remain brief. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
 
 This replaces the old generic full-narration placeholder and no longer requires `INCLUDE_FULL_TEXT`. The landing page continues to show only the original demo. Article text is part of the podcast feed output; subscription lists, per-source settings, credentials and retry payloads stay in private configuration and encrypted processing state. Source titles and article text are omitted from default workflow logs.
 
@@ -228,10 +228,45 @@ Full narration can run locally without paid API calls. Optional summaries can us
 - Edge TTS uses an unofficial endpoint without a reliability guarantee. It may be throttled or change.
 - Substack's archive API is unofficial. Bot protection can block Substack and custom domains, especially from GitHub runners.
 - RSS/Atom narration reads the text included in the feed; it does not automatically fetch the linked article to fill in missing content.
-- Each Substack run requests up to 50 latest archive entries per source; RSS/Atom reads all entries provided by the feed, and HTML listing sources inspect up to 30 links. Older posts absent from those responses cannot be recovered by increasing lookback.
+- Each Substack run requests up to 50 latest archive entries per source; RSS/Atom reads up to 500 entries provided by the feed, and HTML listing sources inspect up to 30 links. Older posts absent from those responses cannot be recovered by increasing lookback.
 - Splitting bounds file length, not total processing cost or runtime. Very long articles can exceed the workflow timeout.
 - GitHub Actions, hosting and API usage may have costs. This project does not promise a permanently free service.
 - Use articles you are authorized to access and convert. Share generated audio only when you have permission to redistribute the source content.
+
+## Security limits
+
+Source requests allow only public IPv4/IPv6 destinations on standard HTTP/HTTPS ports.
+Every redirect is rechecked and HTTPS cannot downgrade to HTTP. Connections use the
+checked IP address so DNS rebinding cannot redirect them into a private network;
+source fetching deliberately bypasses environment proxies. Localhost/private-network
+feeds are not supported. `SITE_URL=http://localhost:8000` still works for output previews.
+
+Hard ceilings apply independently of episode length and retention settings:
+
+| Boundary | Limit |
+| --- | --- |
+| Decoded source response / total downloads per run | 4 MiB / 64 MiB |
+| RSS/Atom entries per source / candidates per run | 500 / 1,000 |
+| Retry queue | 500 articles and 16 MiB; bounded bodies are kept for catch-up |
+| Article text | 100,000 UTF-8 bytes and 20,000 words |
+| Entire Gemini prompt | 64,000 UTF-8 bytes (a conservative token ceiling) |
+| Narration | 40 initial chunks, 240 TTS attempts, 64 MiB temporary audio, 3 hours, 200 parts |
+| Full-text descriptions across all parts of one article | 2 MiB |
+| Run provider work | 1 MiB article text, 200,000 conservative Gemini input/output tokens, 600 TTS attempts |
+| Generated feed / plaintext state | 32 MiB / 64 MiB |
+
+Gemini output allowances are derived from the requested summary word budget.
+Over-budget articles are skipped without saving their payload for repeated narration.
+Transient generation failures still retry within the bounded queue. Excess queue entries
+can be rediscovered while they remain at their sources; these limits may constrain large
+backfills. `MAX_EPISODE_MINUTES=0` disables only per-file splitting, not security ceilings.
+
+Source text is normalized to XML 1.0 before feed rendering. The completed candidate is
+parsed before atomic replacement, so invalid or oversized output cannot replace the
+last valid feed. On POSIX, private state directories/files are enforced as `0700`/`0600`,
+including existing files owned by the current user. State symlinks, hardlinks and unowned
+files are rejected. Generation requires POSIX filesystem support for these protections;
+the static demo remains usable independently.
 
 ## Development
 
@@ -244,4 +279,5 @@ To regenerate the bundled sample, install the dependencies and ffmpeg, then run 
 Tests use synthetic content and mocked provider calls; audio tests use real ffmpeg and ffprobe. CI installs the provider SDKs and runs the same suite. See [CONTRIBUTING.md](CONTRIBUTING.md). The code is [MIT licensed](LICENSE); that license does not grant rights to third-party articles or generated readings of them.
 
 Built by [@akspad](https://x.com/akspad)
+
 

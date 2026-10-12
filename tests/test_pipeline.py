@@ -112,20 +112,25 @@ class PrivacyAndSelectionTests(unittest.TestCase):
                           types.SimpleNamespace(is_redirect=False, status_code=200, text="ok")])
         def get(url, **kwargs):
             calls.append(kwargs["headers"])
-            return next(responses)
+            response = next(responses)
+            kwargs["content_callback"](getattr(response, "text", "").encode())
+            return response
         fake = types.ModuleType("curl_cffi")
         fake.requests = types.SimpleNamespace(get=get)
+        fake.CurlOpt = types.SimpleNamespace(RESOLVE=1, PROXY=2, MAXFILESIZE_LARGE=3)
         with patch.dict(os.environ, {"SUBSTACK_AUTH_HOSTS": "newsletter.example.com"}, clear=True), \
-                patch.dict(sys.modules, {"curl_cffi": fake}):
+                patch.dict(sys.modules, {"curl_cffi": fake}), \
+                patch("security.public_destination", side_effect=lambda url: (substack.urlparse(url).hostname, 443, "93.184.216.34")):
             self.assertEqual(substack.Substack("secret").get("https://newsletter.example.com", raw=True), "ok")
         self.assertIn("Cookie", calls[0])
         self.assertNotIn("Cookie", calls[1])
 
     def test_source_errors_do_not_include_response_or_url(self):
         fake = types.ModuleType("curl_cffi")
+        fake.CurlOpt = types.SimpleNamespace(RESOLVE=1, PROXY=2, MAXFILESIZE_LARGE=3)
         fake.requests = types.SimpleNamespace(get=lambda *a, **k: types.SimpleNamespace(
             is_redirect=False, status_code=403, text="PERSONAL-CONTENT", headers={}))
-        with patch.dict(sys.modules, {"curl_cffi": fake}), self.assertRaisesRegex(RuntimeError, "HTTP 403") as error:
+        with patch.dict(sys.modules, {"curl_cffi": fake}), patch("security.public_destination", return_value=("example.com", 443, "93.184.216.34")), self.assertRaisesRegex(RuntimeError, "HTTP 403") as error:
             substack.Substack("").get("https://example.com/private-token")
         self.assertNotIn("PERSONAL", str(error.exception))
         self.assertNotIn("private-token", str(error.exception))
@@ -172,8 +177,8 @@ class PrivacyAndSelectionTests(unittest.TestCase):
         class Communicate:
             def __init__(self, text, voice, rate):
                 calls.append((voice, rate))
-            async def save(self, path):
-                Path(path).write_bytes(b"audio")
+            async def stream(self):
+                yield {"type": "audio", "data": b"audio"}
         fake = types.ModuleType("edge_tts")
         fake.Communicate = Communicate
         with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, {"edge_tts": fake}), \
@@ -202,6 +207,7 @@ class PrivacyAndSelectionTests(unittest.TestCase):
         self.assertEqual(script, "One complete sentence.")
         self.assertIn("Hard limit: 5 words", calls[0]["config"].system_instruction)
         self.assertIn("untrusted data", calls[0]["config"].system_instruction)
+        self.assertLess(calls[0]["config"].max_output_tokens, 1000)
 
 
 class FeedAndPipelineTests(unittest.TestCase):
@@ -460,4 +466,5 @@ class AdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 

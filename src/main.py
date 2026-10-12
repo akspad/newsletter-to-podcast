@@ -1,4 +1,6 @@
 """Build a personal RSS podcast from explicitly configured newsletter sources."""
+import security
+from itertools import islice
 import argparse
 import hashlib
 import importlib.util
@@ -48,6 +50,7 @@ def refresh_descriptions(sub, pub, posts, state):
             continue
         try:
             full, text = sub.post_text(pub, post)
+            security.check_text(text)
             if not text.strip():
                 raise ValueError("Source returned no article text")
             description = episode_description("full", text, full.get("audience") not in (None, "everyone"))
@@ -91,6 +94,8 @@ def eligible(pub, post, since, seen, settings):
 
 def make_episode(sub, pub, post, now, state, settings):
     full, text = sub.post_text(pub, post)
+    security.check_text(text)
+    security.charge("article_bytes", len(text.encode("utf-8")))
     if not text.strip():
         raise ValueError("Source returned no article text")
     author = ", ".join(b.get("name", "") for b in full.get("publishedBylines", [])) or pub["name"]
@@ -105,11 +110,16 @@ def make_episode(sub, pub, post, now, state, settings):
     else:
         script = summarize.write_script(pub["name"], author, post["title"], text,
                                         settings.max_seconds, settings.max_script_words, preview)
+    security.check_text(script, security.MAX_ARTICLE_BYTES + 8192)
     key = post_key(pub, post)
     path = settings.site / "episodes" / f"{key}.mp3"
     try:
         tts.synthesize(script, path, None if mode == "full" else settings.max_seconds)
         paths = tts.split_episode(path, settings.max_seconds) if mode == "full" else [path]
+        if len(paths) > security.MAX_AUDIO_PARTS:
+            raise security.BudgetExceeded("Article produces too many audio parts")
+        if len(episode_description(mode, text, preview).encode("utf-8")) * len(paths) > 2 * 1024 * 1024:
+            raise security.BudgetExceeded("Article descriptions exceed the size limit")
         episodes = []
         for index, part in enumerate(paths, 1):
             suffix = f" (part {index} of {len(paths)})" if len(paths) > 1 else ""
@@ -139,15 +149,52 @@ def load_state(settings):
 
 
 def save_state(settings, state):
-    settings.state_dir.mkdir(parents=True, exist_ok=True)
-    path = settings.state_dir / "state.json"
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    temporary.replace(path)
-    storage.publish(settings, state)
+    storage.save(settings, state)
+
+
+def bounded_post(post):
+    if not isinstance(post, dict) or not isinstance(post.get("id"), (int, str)):
+        raise ValueError("Invalid article metadata")
+    # Keep the fields required for selection and recovery, excluding provider extras.
+    fields = {"id", "slug", "title", "post_date", "wordcount", "canonical_url", "audience", "type",
+              "podcast_url", "podcast_upload_id", "audio_items", "body_html", "publishedBylines", "subtitle"}
+    result = {k: v for k, v in post.items() if k in fields}
+    for key in ("slug", "title", "post_date", "canonical_url", "audience", "type", "subtitle"):
+        value = result.get(key)
+        if value is not None and (not isinstance(value, str) or len(value.encode("utf-8")) > 8192):
+            raise security.BudgetExceeded("Article metadata exceeds the field limit")
+    if len(json.dumps(result).encode("utf-8")) > 256_000:
+        raise security.BudgetExceeded("Article metadata exceeds the payload limit")
+    return result
+
+
+def bounded_retries(retries):
+    result, size = [], 2
+    rejected = 0
+    for retry in retries:
+        try:
+            candidate = {"pub": retry["pub"], "post": bounded_post(retry["post"])}
+            count = len(json.dumps(candidate).encode("utf-8")) + 2
+            if len(result) >= security.MAX_RETRY_COUNT or size + count > security.MAX_RETRY_BYTES:
+                rejected += 1
+                continue
+            result.append(candidate)
+            size += count
+        except (ValueError, KeyError, TypeError):
+            rejected += 1
+    if rejected:
+        print("Retry queue security limit reached; excess payloads omitted. "
+              "They can be rediscovered while available at their sources.", file=sys.stderr)
+    return result
 
 
 def run(settings, publications, sub):
+    with security.run_budget():
+        return _run(settings, publications, sub)
+
+
+def _run(settings, publications, sub):
+    sub.download_bytes = 0
     state = load_state(settings)
     now = datetime.now(timezone.utc)
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
@@ -167,7 +214,8 @@ def run(settings, publications, sub):
     # Drop queued posts from removed sources and use current mode/filter settings on retries.
     candidates = []
     queued = set()
-    for retry in state.get("retry", []):
+    overflow = False
+    for retry in bounded_retries(state.get("retry", [])):
         pub = configured.get(retry["pub"]["base"])
         post = retry["post"]
         if pub and not storage.was_seen(pub, post, seen, post_key(pub, post)) and post_key(pub, post) not in queued:
@@ -180,16 +228,20 @@ def run(settings, publications, sub):
     sources_available = 0
     for index, pub in enumerate(publications, 1):
         try:
-            posts = list(sub.recent_posts(pub))
+            posts = [bounded_post(post) for post in islice(sub.recent_posts(pub), security.MAX_SOURCE_ENTRIES)]
             refresh_descriptions(sub, pub, posts, state)
             for post in posts:
                 if eligible(pub, post, since, seen, settings) and post_key(pub, post) not in queued:
+                    if len(candidates) >= security.MAX_CANDIDATES:
+                        overflow = True
+                        break
                     candidates.append((pub, post))
                     queued.add(post_key(pub, post))
             sources_available += 1
         except Exception as error:
             source_failed = True
             print(f"Source {index} unavailable ({type(error).__name__}); will retry.", file=sys.stderr)
+    source_failed = source_failed or overflow
     if source_failed and not sources_available:
         print("All sources unavailable. Existing feed, audio and processing state were left unchanged; "
               "retry when source access is restored.", file=sys.stderr)
@@ -204,22 +256,26 @@ def run(settings, publications, sub):
             key = post_key(pub, post)
             seen.add(key)
             completed.append(key)
+        except security.BudgetExceeded:
+            print("Article exceeds a security limit; skipped without queuing its payload.", file=sys.stderr)
         except Exception as error:
             # Exception messages may contain source text, URLs or credentials: don't print them.
             print(f"Episode failed ({type(error).__name__}); queued for retry.", file=sys.stderr)
             state["retry"].append({"pub": pub, "post": post})
     state["retry"].extend({"pub": pub, "post": post} for pub, post in candidates[settings.max_episodes:])
+    state["retry"] = bounded_retries(state["retry"])
 
     # Retain whole articles together, including every part of a long narration.
     state["episodes"].sort(key=lambda e: e["published"])
     groups = list(dict.fromkeys(e.get("source_key", e["guid"]) for e in state["episodes"]))
     keep = set(groups[-settings.keep_episodes:] if settings.keep_episodes else groups)
     retained = []
+    expired = []
     for episode in state["episodes"]:
         if episode.get("source_key", episode["guid"]) in keep:
             retained.append(episode)
         else:
-            (settings.site / "episodes" / Path(episode["file"]).name).unlink(missing_ok=True)
+            expired.append(settings.site / "episodes" / Path(episode["file"]).name)
     state["episodes"] = retained
     state["seen"] = list(dict.fromkeys(state.get("seen", []) + completed))
     if not source_failed:
@@ -227,7 +283,9 @@ def run(settings, publications, sub):
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and not source_failed:
         state["last_scheduled_run"] = now.isoformat()
     title = os.environ.get("FEED_TITLE") or state.get("feed_title") or "Newsletter Podcast"
-    (settings.site / "feed.xml").write_text(feed.build(settings.site_url, retained, title), encoding="utf-8")
+    feed.write(settings.site / "feed.xml", feed.build(settings.site_url, retained, title))
+    for path in expired:
+        path.unlink(missing_ok=True)
     website.write(settings.site)
     # Public output contains audio and RSS only; runtime metadata stays outside SITE_DIR.
     save_state(settings, state)
@@ -287,4 +345,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

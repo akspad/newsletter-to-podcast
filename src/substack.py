@@ -1,4 +1,5 @@
 """Reads posts from Substack publications (their unofficial web API), plain RSS feeds and plain web pages."""
+import json
 import hashlib
 import os
 import re
@@ -9,6 +10,7 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlparse
 
 from pathlib import Path
+import security
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -23,6 +25,7 @@ class Substack:
         sid = sid.strip().strip('"')
         if sid.startswith("substack.sid="):  # tolerate pasting the whole cookie pair
             sid = sid[len("substack.sid="):]
+        self.download_bytes = 0
         self.cookie = f"substack.sid={sid}" if sid else None
         self.auth_hosts = {h.strip().lower() for h in os.environ.get("SUBSTACK_AUTH_HOSTS", "").split(",") if h.strip()}
 
@@ -34,24 +37,53 @@ class Substack:
         return {}
 
     def get(self, url, raw=False, **params):
-        from curl_cffi import requests
+        from curl_cffi import CurlOpt, requests
 
-        # Recheck the exact host at every redirect; never forward a login cookie to other feeds.
+        # Pin an authorized address: a second DNS lookup must not enable rebinding.
         for _ in range(5):
-            parsed = urlparse(url)
-            if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username:
-                raise ValueError("Source URL must be HTTP(S) without embedded credentials")
-            r = requests.get(url, params=params, headers={**HEADERS, **self.auth_headers(url)},
-                             allow_redirects=False, timeout=30, impersonate="chrome")
+            host, port, address = security.public_destination(url)
+            target = f"[{address}]" if ":" in address else address
+            body = bytearray()
+            exceeded = False
+
+            def receive(data):
+                nonlocal exceeded
+                self.download_bytes += len(data)
+                if (len(body) + len(data) > security.MAX_RESPONSE_BYTES
+                        or self.download_bytes > security.MAX_DOWNLOAD_BYTES):
+                    exceeded = True
+                    return 0xFFFFFFFF  # CURL_WRITEFUNC_ERROR; 0 is ignored by older curl_cffi callbacks
+                body.extend(data)
+                return len(data)
+
+            try:
+                r = requests.get(
+                    url, params=params,
+                    headers={**HEADERS, "Accept-Encoding": "identity", **self.auth_headers(url)},
+                    allow_redirects=False, timeout=30, impersonate="chrome",
+                    accept_encoding="identity", content_callback=receive,
+                    curl_options={CurlOpt.RESOLVE: [f"{host}:{port}:{target}".encode()],
+                                  CurlOpt.PROXY: b"", CurlOpt.MAXFILESIZE_LARGE: security.MAX_RESPONSE_BYTES})
+            except Exception as error:
+                if exceeded or getattr(error, "code", None) == 63:  # CURLE_FILESIZE_EXCEEDED
+                    raise security.BudgetExceeded("Source download budget exceeded") from None
+                raise
+            if exceeded:
+                raise security.BudgetExceeded("Source download budget exceeded")
             if r.is_redirect:
-                url, params = urljoin(url, r.headers["Location"]), None
+                destination = urljoin(url, r.headers["Location"])
+                if urlparse(url).scheme == "https" and urlparse(destination).scheme != "https":
+                    raise ValueError("Source redirect cannot downgrade HTTPS")
+                url, params = destination, None
                 continue
             if r.status_code == 429:
                 time.sleep(5)
                 continue
             if r.status_code >= 400:
                 raise RuntimeError(f"Source returned HTTP {r.status_code}")
-            return r.text if raw else r.json()
+            # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
+            text = body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace")
+            return text if raw else json.loads(text)
         raise RuntimeError("Source exceeded redirect/retry limit")
 
     def publications(self):
@@ -98,10 +130,10 @@ class Substack:
 
     def recent_posts(self, pub, limit=50):
         if pub.get("rss"):
-            return self.rss_posts(pub, None)  # catch up on every entry the feed still exposes
+            return self.rss_posts(pub, security.MAX_SOURCE_ENTRIES)
         if pub.get("page"):
             return self.page_posts(pub, 30)
-        return self.get(f"{pub['base']}/api/v1/archive", sort="new", limit=limit)
+        return self.get(f"{pub['base']}/api/v1/archive", sort="new", limit=limit)[:min(limit, security.MAX_SOURCE_ENTRIES)]
 
     def rss_posts(self, pub, limit):
         """Reads an RSS feed into the same shape as Substack's archive entries."""
@@ -110,7 +142,9 @@ class Substack:
         root = ET.fromstring(self.get(pub["base"], raw=True))
         if root.tag == "{http://www.w3.org/2005/Atom}feed":
             return self.atom_posts(pub, root, limit)
-        for item in root.iter("item"):
+        for index, item in enumerate(root.iter("item")):
+            if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
+                break
             link = item.findtext("link") or ""
             guid = item.findtext("guid") or link
             html = item.findtext("content:encoded", namespaces=ns) or item.findtext("description") or ""
@@ -142,7 +176,9 @@ class Substack:
     def atom_posts(pub, root, limit):
         ns = {"a": "http://www.w3.org/2005/Atom"}
         posts = []
-        for entry in root.findall("a:entry", ns):
+        for index, entry in enumerate(root.findall("a:entry", ns)):
+            if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
+                break
             date = entry.findtext("a:published", namespaces=ns) or entry.findtext("a:updated", namespaces=ns)
             if not date:
                 continue
@@ -237,4 +273,5 @@ def has_audio(post) -> bool:
     if post.get("type") == "podcast" or post.get("podcast_url") or post.get("podcast_upload_id"):
         return True
     return any(item.get("audio_url") for item in post.get("audio_items") or [])
+
 
