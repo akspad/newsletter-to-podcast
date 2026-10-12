@@ -92,6 +92,7 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(len(publisher["steps"]), 3)
         download = publisher["steps"][0]
         self.assertIn("public_artifact_id", download["with"]["artifact-ids"])
+        self.assertIs(download["with"]["merge-multiple"], True)
         self.assertIn("bundle_sha256", publisher["steps"][1]["env"]["EXPECTED_SHA256"])
         self.assertNotIn("GH_TOKEN", publisher["steps"][1].get("env", {}))
         self.assertIn("--force-with-lease", publisher["steps"][2]["run"])

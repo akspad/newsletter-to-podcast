@@ -171,6 +171,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.build.outputs.public_artifact_id }}
           path: incoming
+          merge-multiple: true
       - name: Verify digest and public asset allowlist
         env:
           EXPECTED_SHA256: ${{ needs.build.outputs.bundle_sha256 }}
