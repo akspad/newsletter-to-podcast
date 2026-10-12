@@ -151,6 +151,7 @@ def load_state(settings):
 def save_state(settings, state):
     storage.save(settings, state)
 
+
 def bounded_post(post):
     if not isinstance(post, dict) or not isinstance(post.get("id"), (int, str)):
         raise ValueError("Invalid article metadata")

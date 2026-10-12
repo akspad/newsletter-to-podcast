@@ -194,6 +194,15 @@ class RealTransportTests(unittest.TestCase):
                 self.assertEqual(source.get(f"http://fictional.test:{port}/small"), {"ok": True})
                 with patch("security.MAX_RESPONSE_BYTES", 1000), self.assertRaises(security.BudgetExceeded):
                     source.get(f"http://fictional.test:{port}/large", raw=True)
+                # Also verify the callback abort independently of libcurl's own size check.
+                from curl_cffi import CurlOpt, requests
+                original_get = requests.get
+                def callback_only(url, **kwargs):
+                    kwargs["curl_options"][CurlOpt.MAXFILESIZE_LARGE] = 0
+                    return original_get(url, **kwargs)
+                with patch("security.MAX_RESPONSE_BYTES", 1000), patch.object(requests, "get", side_effect=callback_only), \
+                        self.assertRaises(security.BudgetExceeded):
+                    source.get(f"http://fictional.test:{port}/large", raw=True)
         finally:
             server.shutdown()
             server.server_close()

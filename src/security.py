@@ -91,4 +91,4 @@ def public_destination(url):
         address = getattr(address, "ipv4_mapped", None) or address
         if not address.is_global or address.is_multicast or address.is_reserved:
             raise ValueError("Private or reserved source destinations are forbidden")
-    return parsed.hostname, port, sorted(addresses)[0]
+    return parsed.hostname, port, min(addresses, key=lambda value: (ipaddress.ip_address(value).version, value))

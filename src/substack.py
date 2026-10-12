@@ -64,8 +64,8 @@ class Substack:
                     accept_encoding="identity", content_callback=receive,
                     curl_options={CurlOpt.RESOLVE: [f"{host}:{port}:{target}".encode()],
                                   CurlOpt.PROXY: b"", CurlOpt.MAXFILESIZE_LARGE: security.MAX_RESPONSE_BYTES})
-            except Exception:
-                if exceeded:
+            except Exception as error:
+                if exceeded or getattr(error, "code", None) == 63:  # CURLE_FILESIZE_EXCEEDED
                     raise security.BudgetExceeded("Source download budget exceeded") from None
                 raise
             if exceeded:
