@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+import json
 import ipaddress
 import socket
 from urllib.parse import urlparse
@@ -92,3 +93,11 @@ def public_destination(url):
         if not address.is_global or address.is_multicast or address.is_reserved:
             raise ValueError("Private or reserved source destinations are forbidden")
     return parsed.hostname, port, min(addresses, key=lambda value: (ipaddress.ip_address(value).version, value))
+
+
+def log_field(value):
+    """Render one bounded, inert JSON field, including C0/C1 and terminal controls."""
+    text = str(value)
+    if len(text) > 512:
+        text = text[:512] + "…"
+    return json.dumps(text, ensure_ascii=True)
