@@ -18,6 +18,8 @@ This is a Python command-line project, not a hosted service. It reads the text a
 
 Built by [@akspad](https://x.com/akspad)
 
+> **Known live-generation issue (2026-10-12):** Edge TTS 7.2.8 returned HTTP 403 in our GitHub runner checks. Both full narration and summaries need this service for new audio; the bundled demo and existing episodes remain playable. See [Edge TTS 403](#edge-tts-403).
+
 ## Quick start: hear a sample in under a minute
 
 Try an original article and a working podcast feed before configuring any sources. This demo uses bundled audio, so it needs **Python 3.12+ only**: no API keys, provider SDKs, ffmpeg, or live feed access.
@@ -35,7 +37,7 @@ The sample, [A little room for curiosity](samples/transcript.txt), is original M
 
 ## Generate full articles from your own sources
 
-You need **Python 3.12+** and **ffmpeg** (including ffprobe). On macOS: `brew install python@3.12 ffmpeg`. On Ubuntu: install Python 3.12 and `sudo apt-get install ffmpeg python3-venv`.
+You need **Python 3.12+**, **ffmpeg** (including ffprobe), and a POSIX filesystem with owner-only permissions, such as on macOS or Linux. Native Windows generation is not supported; use Linux through WSL with the project and state on its Linux filesystem. The bundled `--demo` does not require these state protections. On macOS: `brew install python@3.12 ffmpeg`. On Ubuntu: install Python 3.12 and `sudo apt-get install ffmpeg python3-venv`.
 
 ```sh
 git clone https://github.com/akspad/newsletter-to-podcast.git
@@ -140,7 +142,7 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `EPISODE_MODE` | `summary` | `summary` or `full`; per-source options override it. |
-| `MAX_EPISODE_MINUTES` | `5` | Maximum duration per MP3, in minutes. Full articles split into parts. `0` disables the audio limit. |
+| `MAX_EPISODE_MINUTES` | `5` | Maximum duration per MP3, in minutes. Full articles split into parts. `0` disables the per-MP3 duration cap; overall narration and other security ceilings still apply. |
 | `MAX_SCRIPT_WORDS` | `700` | Additional summary word limit, including its introduction. |
 | `MIN_WORDS` | `1500` | Minimum article length in default summary selection. |
 | `LOOKBACK_HOURS` | automatic: at least `168` | Scan the past week and cover longer gaps with a 48-hour overlap before the last complete source scan. Set a value only to override this for a specific backfill. |
@@ -219,6 +221,14 @@ See [docs/deploy-existing-feed.md](docs/deploy-existing-feed.md) for the upgrade
 If every configured source fails, the command exits with status **1** and leaves the existing feed, audio, retry queue and run timestamps unchanged. GitHub Actions stops before publishing. A scheduled failure is not counted as the day's successful run, so the next scheduled attempt can retry.
 
 A source that responds successfully with no eligible recent posts is different: that run succeeds with **0** new episodes. Partial source failures are logged by source number and error type; available sources can still produce output, and the catch-up timestamp is not advanced. Episode-generation failures remain queued for retry. Private URLs and raw provider errors are omitted from logs.
+
+### Edge TTS 403
+
+As of 2026-10-12, the locked `edge-tts==7.2.8` client fails the synthesis WebSocket handshake with HTTP 403 on our GitHub runners, before audio arrives. The stock SDK and this project's bounded streaming implementation both reproduce the failure. New summary audio, full narration, first-episode generation and demo-sample regeneration depend on the live service; the prerecorded `--demo` remains available.
+
+[Upstream issue #490](https://github.com/rany2/edge-tts/issues/490) reports the same failure beginning October 10. Contributor network captures indicate that Edge moved synthesis from `speech.platform.bing.com` to `api.msedgeservices.com`. [Upstream PR #491](https://github.com/rany2/edge-tts/pull/491) proposes the endpoint change, which contributors report restores generation. At this documentation update, that PR is unmerged and this repository has not applied or validated the workaround. These reports point to a provider compatibility change; simply increasing retries or shortening article text does not resolve the observed handshake refusal.
+
+Episode-generation failures stay in the bounded retry queue, and a run can still succeed and publish its retained feed even when it creates no new audio. Check the final `Feed ready` message and waiting-for-retry count rather than treating a green workflow as proof of successful narration. Keep your processing state and, for public publishing, the original `STATE_ENCRYPTION_KEY` so queued work can resume when service access is restored.
 
 ## Limits and costs
 
