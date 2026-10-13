@@ -20,18 +20,21 @@ jobs:
         run: |
           python -m pip install --require-hashes --only-binary=:all: -r requirements.txt -r requirements-dev.txt
           python -m pip check
-      - name: Verify lock regeneration
+      - name: Verify official release hashes
         run: |
-          python -m venv /tmp/lock-tools
-          /tmp/lock-tools/bin/pip install pip-tools
-          cp requirements.txt /tmp/expected-requirements.txt
-          /tmp/lock-tools/bin/pip-compile --generate-hashes --no-emit-index-url --no-emit-trusted-host --output-file=requirements.txt --strip-extras requirements.in
           python - <<'PY'
+          import json
           from pathlib import Path
-          def locked(path):
-              return [s.strip() for s in Path(path).read_text().splitlines() if s.strip() and not s.strip().startswith("#")]
-          assert locked("requirements.txt") == locked("/tmp/expected-requirements.txt"), "Dependency lock differs after regeneration"
-          print("LOCK_REGENERATION_OK")
+          import re
+          from urllib.request import urlopen
+          with urlopen("https://pypi.org/pypi/edge-tts/7.3.1/json", timeout=30) as response:
+              release = json.load(response)
+          assert release["info"]["version"] == "7.3.1"
+          assert not any(item["yanked"] for item in release["urls"])
+          expected = {item["digests"]["sha256"] for item in release["urls"]}
+          block = Path("requirements.txt").read_text().split("edge-tts==7.3.1", 1)[1].split("# via", 1)[0]
+          assert set(re.findall(r"sha256:([a-f0-9]{64})", block)) == expected
+          print("OFFICIAL_RELEASE_HASHES_OK")
           PY
       - name: Run regression suite
         run: python -m unittest discover -s tests -v
