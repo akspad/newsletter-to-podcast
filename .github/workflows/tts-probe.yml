@@ -1,0 +1,93 @@
+name: Temporary live TTS validation
+
+on:
+  push:
+    branches: [fix/edge-tts-endpoint]
+    paths: [.github/workflows/tts-probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
+          python -m pip check
+      - name: Verify short synthetic speech through the production TTS path
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys, tempfile
+          sys.path.insert(0, 'src')
+          import tts
+          with tempfile.TemporaryDirectory() as temporary:
+              path = Path(temporary) / 'short.mp3'
+              seconds = tts.synthesize('This is a short test of the newsletter podcast speech service.', path, None)
+              assert 1 < seconds < 30 and path.stat().st_size > 1000
+              tts.subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-f', 'null', '-'], check=True)
+              print(f'SHORT_SAMPLE_OK duration={seconds:.3f}s bytes={path.stat().st_size}')
+          PY
+      - name: Generate a full original article and split it into bounded MP3s
+        env:
+          PUBLICATIONS: "https://raw.githubusercontent.com/akspad/newsletter-to-podcast/main/samples/source.xml Original sample | rss | full"
+          EPISODE_MODE: full
+          LOOKBACK_HOURS: "87600"
+          MAX_EPISODE_MINUTES: "0.3333333333333333"
+          SITE_DIR: site-live-probe
+          STATE_DIR: .state-live-probe
+          SITE_URL: http://localhost:8000
+          PUBLISH_TO_PAGES: "false"
+        run: python src/main.py
+      - name: Verify full text, RSS, audio duration, splitting and deduplication
+        env:
+          PUBLICATIONS: "https://raw.githubusercontent.com/akspad/newsletter-to-podcast/main/samples/source.xml Original sample | rss | full"
+          EPISODE_MODE: full
+          LOOKBACK_HOURS: "87600"
+          MAX_EPISODE_MINUTES: "0.3333333333333333"
+          SITE_DIR: site-live-probe
+          STATE_DIR: .state-live-probe
+          SITE_URL: http://localhost:8000
+          PUBLISH_TO_PAGES: "false"
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, subprocess, sys
+          import xml.etree.ElementTree as ET
+          sys.path.insert(0, 'src')
+          import main, substack, tts
+          site = Path('site-live-probe')
+          state_path = Path('.state-live-probe/state.json')
+          state = json.loads(state_path.read_text())
+          assert not state['retry'], 'Original article remained queued'
+          episodes = state['episodes']
+          assert len(episodes) >= 2, 'Full narration did not split'
+          assert len(state['seen']) == 1
+          body = ET.parse('samples/source.xml').findtext('channel/item/{http://purl.org/rss/1.0/modules/content/}encoded')
+          expected = substack.html_to_text(body)
+          assert all(episode['description'] == expected for episode in episodes)
+          assert len(ET.parse(site / 'feed.xml').findall('channel/item')) == len(episodes)
+          total = 0
+          files = list((site / 'episodes').glob('*.mp3'))
+          before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+          for path in files:
+              seconds = tts.duration(path)
+              assert 0 < seconds <= 20
+              total += seconds
+              subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-f', 'null', '-'], check=True)
+          assert total > 40
+          assert main.main() == 0
+          after = json.loads(state_path.read_text())
+          assert after['episodes'] == episodes and not after['retry']
+          assert before == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (site / 'episodes').glob('*.mp3')}
+          print(f'FULL_EPISODE_OK parts={len(episodes)} total_duration={total:.3f}s full_text=yes duplicate_audio=no')
+          PY
