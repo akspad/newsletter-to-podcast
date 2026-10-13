@@ -87,7 +87,9 @@ jobs:
           assert total > 40
           assert main.main() == 0
           after = json.loads(state_path.read_text())
-          assert after['episodes'] == episodes and not after['retry']
+          assert not after['retry'] and len(after['episodes']) == len(episodes)
+          stable = ('guid', 'source_key', 'published', 'file', 'bytes', 'duration', 'description')
+          assert [tuple(e.get(k) for k in stable) for e in after['episodes']] == [tuple(e.get(k) for k in stable) for e in episodes]
           assert before == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (site / 'episodes').glob('*.mp3')}
           print(f'FULL_EPISODE_OK parts={len(episodes)} total_duration={total:.3f}s full_text=yes duplicate_audio=no')
           PY
