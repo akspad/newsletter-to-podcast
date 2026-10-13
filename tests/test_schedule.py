@@ -99,11 +99,12 @@ class CatchUpTests(unittest.TestCase):
             settings.state_dir.mkdir()
             (settings.state_dir / "state.json").write_text(json.dumps(state))
             source = types.SimpleNamespace(recent_posts=lambda pub: posts, post_text=lambda pub, post: (post, "Fictional text"))
-            def audio(script, path, cap):
+            def audio(script, path, cap, title):
                 path.write_bytes(b"synthetic")
+                return [path]
             with patch.dict(os.environ, {}, clear=True), patch("main.datetime", wraps=datetime) as clock, \
-                    patch("tts.synthesize", side_effect=audio) as generated, patch("tts.duration", return_value=20), \
-                    patch("tts.split_episode", side_effect=lambda path, cap: [path]), contextlib.redirect_stdout(io.StringIO()):
+                    patch("tts.synthesize_full", side_effect=audio) as generated, patch("tts.duration", return_value=20), \
+                    contextlib.redirect_stdout(io.StringIO()):
                 clock.now.return_value = NOW
                 self.assertEqual(main.run(settings, [PUB], source), 0)
                 saved = json.loads((settings.state_dir / "state.json").read_text())

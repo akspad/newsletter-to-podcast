@@ -100,7 +100,7 @@ class ResourceTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             settings = config.Settings.from_env()
             source = types.SimpleNamespace(post_text=lambda *args: ({}, "x" * (security.MAX_ARTICLE_BYTES + 1)))
-            with patch("tts.synthesize") as audio, patch("summarize.write_script") as model, self.assertRaises(security.BudgetExceeded):
+            with patch("tts.synthesize_full") as audio, patch("summarize.write_script") as model, self.assertRaises(security.BudgetExceeded):
                 main.make_episode(source, {"base": "https://fictional.example", "mode": "full"}, {}, None,
                                   {"episodes": []}, settings)
             audio.assert_not_called()
@@ -141,13 +141,10 @@ class ResourceTests(unittest.TestCase):
             with self.assertRaises(security.BudgetExceeded):
                 tts.synthesize("x" * 6000, Path(tmp) / "out.mp3", None)
             speak.assert_not_called()
-        with tempfile.TemporaryDirectory() as tmp, patch("tts.duration", return_value=1000), patch("tts.subprocess.run") as run:
-            path = Path(tmp) / "out.mp3"
-            path.write_bytes(b"audio")
+        with patch("tts.subprocess.run") as run:
             with self.assertRaises(security.BudgetExceeded):
-                tts.split_episode(path, 1)
+                tts.pack_clips([("text", Path("unused.mp3"), 1)] * 201, 1)
             run.assert_not_called()
-            self.assertTrue(path.exists())
 
     def test_streaming_audio_byte_limit(self):
         class Voice:

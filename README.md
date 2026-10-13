@@ -166,7 +166,7 @@ Full narrations include the available article text in their podcast descriptions
 
 This replaces the old generic full-narration placeholder and no longer requires `INCLUDE_FULL_TEXT`. The landing page continues to show only the original demo. Article text is part of the podcast feed output; subscription lists, per-source settings, credentials and retry payloads stay in private configuration and encrypted processing state. Source titles and article text are omitted from default workflow logs.
 
-Splits occur at audio time boundaries, so a part can end mid-sentence. Failed TTS passages fail the article and queue a retry rather than silently omitting words.
+Each split full-narration part opens with the article title and “Part X of Y.” The renderer groups complete narrated passages at sentence or paragraph boundaries and measures their audio, including the spoken introduction, to stay within the per-file duration limit. If one sentence is too long, it falls back to a clause or word boundary; it does not cut the finished audio mid-word. An unusually short limit that cannot fit the title and part number fails generation for retry rather than clipping them. Failed TTS passages likewise fail the article and queue a retry rather than silently omitting words. This applies to newly generated articles; existing published audio is preserved.
 
 ## Scheduled runs with GitHub Actions
 

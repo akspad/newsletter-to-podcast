@@ -39,18 +39,16 @@ class DescriptionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=True):
             settings = self.settings(Path(tmp))
             (settings.site / "episodes").mkdir(parents=True)
-            def synthesize(script, path, maximum):
+            def narrate(script, path, maximum, title):
                 self.assertIn(ARTICLE, script)
-                path.write_bytes(b"synthetic audio")
-            def split(path, maximum):
+                self.assertEqual(title, POST["title"])
                 parts = [path.with_name(path.stem + f"-part-{i:03d}.mp3") for i in (1, 2)]
                 for part in parts:
                     part.write_bytes(b"synthetic part")
-                path.unlink()
                 return parts
             state = {"episodes": []}
             source = types.SimpleNamespace(post_text=lambda pub, post: (post, ARTICLE))
-            with patch("tts.synthesize", side_effect=synthesize), patch("tts.split_episode", side_effect=split), \
+            with patch("tts.synthesize_full", side_effect=narrate), \
                     patch("tts.duration", return_value=12), contextlib.redirect_stdout(io.StringIO()) as logs:
                 main.make_episode(source, PUB, POST, datetime.now(timezone.utc), state, settings)
             items = ET.fromstring(feed.build(settings.site_url, state["episodes"])).findall("channel/item")
@@ -82,7 +80,7 @@ class DescriptionTests(unittest.TestCase):
             old_post = {**POST, "post_date": (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()}
             text = Mock(return_value=(POST, ARTICLE))
             source = types.SimpleNamespace(recent_posts=lambda pub: [old_post], post_text=text)
-            with patch("tts.synthesize", side_effect=AssertionError("Existing audio must not regenerate")), \
+            with patch("tts.synthesize_full", side_effect=AssertionError("Existing audio must not regenerate")), \
                     contextlib.redirect_stdout(io.StringIO()) as logs:
                 self.assertEqual(main.run(settings, [PUB], source), 0)
                 self.assertEqual(main.run(settings, [PUB], source), 0)

@@ -53,10 +53,11 @@ class LogSafetyTests(unittest.TestCase):
                 "SITE_DIR": str(Path(tmp) / "site"), "STATE_DIR": str(Path(tmp) / "state"), "VERBOSE": "true"}, clear=True):
             settings = config.Settings.from_env()
             (settings.site / "episodes").mkdir(parents=True)
-            def synthesize(script, path, limit):
+            def synthesize(script, path, limit, title):
                 path.write_bytes(b"audio")
-            with patch("tts.synthesize", side_effect=synthesize), patch("tts.duration", return_value=1), \
-                    patch("tts.split_episode", side_effect=lambda path, cap: [path]), contextlib.redirect_stdout(io.StringIO()) as output:
+                return [path]
+            with patch("tts.synthesize_full", side_effect=synthesize), patch("tts.duration", return_value=1), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
                 main.make_episode(source, pub, post, datetime.now(timezone.utc), {"episodes": []}, settings)
             lines = output.getvalue().splitlines()
             self.assertEqual(len(lines), 1)
