@@ -1,0 +1,108 @@
+name: Edge upgrade validation
+on:
+  push:
+    branches: [codex/edge-tts-official-fix]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Verify hashed install
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements.txt -r requirements-dev.txt
+          python -m pip check
+      - name: Verify lock regeneration
+        run: |
+          python -m venv /tmp/lock-tools
+          /tmp/lock-tools/bin/pip install pip-tools
+          cp requirements.txt /tmp/expected-requirements.txt
+          /tmp/lock-tools/bin/pip-compile --generate-hashes --no-emit-index-url --no-emit-trusted-host --output-file=requirements.txt --strip-extras requirements.in
+          python - <<'PY'
+          from pathlib import Path
+          def locked(path):
+              return [s.strip() for s in Path(path).read_text().splitlines() if s.strip() and not s.strip().startswith("#")]
+          assert locked("requirements.txt") == locked("/tmp/expected-requirements.txt"), "Dependency lock differs after regeneration"
+          print("LOCK_REGENERATION_OK")
+          PY
+      - name: Run regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Verify live speech and full article pipeline
+        run: |
+          python - <<'PY'
+          import hashlib
+          import importlib.metadata
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+          import tempfile
+          from unittest.mock import patch
+          import xml.etree.ElementTree as ET
+          
+          sys.path.insert(0, "src")
+          import config
+          import feed
+          import main
+          import tts
+          from substack import Substack
+          from edge_tts import communicate
+          from edge_tts.constants import SEC_MS_GEC_VERSION
+          from edge_tts.drm import DRM
+          
+          assert importlib.metadata.version("edge-tts") == "7.3.1"
+          endpoint = communicate.WSS_URL
+          assert endpoint.startswith("wss://speech.platform.bing.com/")
+          assert SEC_MS_GEC_VERSION.startswith("2-")
+          assert re.fullmatch(r"[0-9A-F]{16}-[0-9A-F]{64}", DRM.generate_sec_ms_gec())
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp)
+              short = root / "short.mp3"
+              seconds = tts.synthesize("This is a short check of the official Edge speech fix.", short, 20)
+              assert 1 < seconds <= 20 and short.stat().st_size > 1000
+              print(f"SHORT_LIVE_OK seconds={seconds:.3f} bytes={short.stat().st_size}")
+          
+              # Original MIT-licensed RSS fixture through the normal parser and pipeline.
+              class Source(Substack):
+                  def get(self, url, **kwargs):
+                      return Path("samples/source.xml").read_text()
+              source = Source("")
+              pub = {"base": "https://example.com/sample.xml", "name": "Original sample", "mode": "full", "rss": True}
+              with patch.dict(os.environ, {
+                  "SITE_DIR": str(root / "site"), "STATE_DIR": str(root / "state"),
+                  "SITE_URL": "https://example.com/podcast", "EPISODE_MODE": "full",
+                  "MAX_EPISODE_MINUTES": str(20 / 60), "LOOKBACK_HOURS": "87600",
+                  "GITHUB_EVENT_NAME": "workflow_dispatch", "VERBOSE": "false",
+              }):
+                  settings = config.Settings.from_env()
+                  post = source.recent_posts(pub)[0]
+                  _, body = source.post_text(pub, post)
+                  assert main.run(settings, [pub], source) == 0
+                  state = json.loads((settings.state_dir / "state.json").read_text())
+                  episodes = state["episodes"]
+                  assert len(episodes) >= 2 and not state["retry"]
+                  assert all(e["description"] == body for e in episodes)
+                  assert all(0 < e["duration"] <= 20 for e in episodes)
+                  assert sum(e["duration"] for e in episodes) > 30
+                  def audio_hashes():
+                      return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                              for p in (settings.site / "episodes").glob("*.mp3")}
+                  before = audio_hashes()
+                  items = [ET.tostring(i) for i in ET.parse(settings.site / "feed.xml").findall("channel/item")]
+                  assert len(items) == len(episodes)
+                  assert main.run(settings, [pub], source) == 0
+                  assert audio_hashes() == before
+                  assert [ET.tostring(i) for i in ET.parse(settings.site / "feed.xml").findall("channel/item")] == items
+                  print(f"FULL_LIVE_OK parts={len(episodes)} seconds={sum(e['duration'] for e in episodes):.3f} complete_descriptions=true stable_rerun=true")
+          assert communicate.WSS_URL == endpoint
+          print("OFFICIAL_SDK_OK version=7.3.1 authentication=v2 endpoint_unmodified=true")
+          PY

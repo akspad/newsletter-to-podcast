@@ -18,7 +18,7 @@ This is a Python command-line project, not a hosted service. It reads the text a
 
 Built by [@akspad](https://x.com/akspad)
 
-> **Edge TTS compatibility (2026-10-12):** This project temporarily routes Edge TTS 7.2.8 synthesis to Microsoft's current speech-service endpoint to address HTTP 403 from the legacy host. See [Edge TTS 403](#edge-tts-403) for validation and upstream status.
+> **Edge TTS compatibility (2026-10-13):** The dependency lock now uses Edge TTS 7.3.1 with the official authentication fix for HTTP 403. The temporary endpoint override has been removed. See [Edge TTS 403](#edge-tts-403).
 
 ## Quick start: hear a sample in under a minute
 
@@ -232,11 +232,11 @@ Use [GitHub's notification settings](https://github.com/settings/notifications):
 
 ### Edge TTS 403
 
-The locked `edge-tts==7.2.8` client received HTTP 403 from Microsoft's legacy synthesis host in our GitHub runner checks on 2026-10-12. The refusal happened before audio arrived and affected both the stock SDK and the project's bounded streaming path.
+Edge TTS 7.2.8 received HTTP 403 before audio arrived in our GitHub runner checks on 2026-10-12. We temporarily changed the synthesis endpoint to restore generation.
 
-This repository now applies a small compatibility override in `src/tts.py`: a client still using `speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1` sends synthesis to `api.msedgeservices.com/tts/cognitiveservices/websocket/v1` instead, with the existing client token under `Ocp-Apim-Subscription-Key`. Voice discovery, audio budgets, timeouts and locked dependencies are unchanged. An SDK that already specifies a different synthesis endpoint is left untouched.
+The hashed dependency lock now uses [`edge-tts==7.3.1`](https://github.com/rany2/edge-tts/releases/tag/7.3.1), released on 2026-10-13. Version 7.3.0 resolved [upstream issue #490](https://github.com/rany2/edge-tts/issues/490) with [v2 authentication tokens in PR #492](https://github.com/rany2/edge-tts/pull/492); 7.3.1 also fixes locale-dependent server date parsing. The official fix keeps the original synthesis endpoint. The proposed endpoint change in PR #491 was not merged.
 
-[Upstream issue #490](https://github.com/rany2/edge-tts/issues/490) documents the failures and contributor network captures of the new endpoint. [Upstream PR #491](https://github.com/rany2/edge-tts/pull/491) proposes the same endpoint change and is unmerged at this update. The local override is temporary: after reviewing and upgrading the hashed dependency lock to an official release containing the fix, remove `edge_communication` and call the SDK directly again.
+`src/tts.py` now calls the official SDK directly without changing its endpoint or authentication. The dependency input requires at least 7.3.1; audio budgets, bounded streaming, timeouts and retries remain in place.
 
 Live validation on GitHub runners covers short synthetic speech and a full original RSS article, including complete descriptions, bounded audio splits, valid RSS and a rerun with stable episode identities and unchanged MP3 bytes. Both summary and full narration use the same TTS path. The service remains unofficial and may change again; the prerecorded `--demo` works independently of it.
 
@@ -322,5 +322,3 @@ To regenerate the bundled sample, install the dependencies and ffmpeg, then run 
 Tests use synthetic content and mocked provider calls; audio tests use real ffmpeg and ffprobe. CI installs the provider SDKs and runs the same suite. See [CONTRIBUTING.md](CONTRIBUTING.md). The code is [MIT licensed](LICENSE); that license does not grant rights to third-party articles or generated readings of them.
 
 Built by [@akspad](https://x.com/akspad)
-
-
