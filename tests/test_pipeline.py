@@ -181,10 +181,7 @@ class PrivacyAndSelectionTests(unittest.TestCase):
                 yield {"type": "audio", "data": b"audio"}
         fake = types.ModuleType("edge_tts")
         fake.Communicate = Communicate
-        fake.communicate = types.SimpleNamespace(WSS_URL="wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1")
-        constants = types.ModuleType("edge_tts.constants")
-        constants.TRUSTED_CLIENT_TOKEN = "fictional-client-token"
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, {"edge_tts": fake, "edge_tts.constants": constants}), \
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, {"edge_tts": fake}), \
                 patch.dict(os.environ, {"TTS_VOICE": "example-voice", "TTS_RATE": "+10%"}, clear=True):
             self.assertTrue(tts.speak("Fictional text.", Path(tmp) / "voice.mp3"))
         self.assertEqual(calls, [("example-voice", "+10%")])
@@ -469,5 +466,3 @@ class AdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-

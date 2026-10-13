@@ -1,6 +1,5 @@
-"""Endpoint compatibility regressions without live speech-service requests."""
+"""The upstream SDK owns synthesis routing and authentication."""
 from pathlib import Path
-import os
 import sys
 import tempfile
 import types
@@ -12,45 +11,32 @@ import tts
 
 
 class EndpointTests(unittest.TestCase):
-    def client(self, endpoint):
-        sdk = types.ModuleType("edge_tts")
-        sdk.communicate = types.SimpleNamespace(WSS_URL=endpoint)
-        constants = types.ModuleType("edge_tts.constants")
-        constants.TRUSTED_CLIENT_TOKEN = "fictional-client-token"
-        constants.VOICE_LIST = "https://speech.platform.bing.com/voices/list"
-        requests = []
+    def test_stream_preserves_sdk_endpoint_and_authentication(self):
+        # The fixed SDK still uses the old hostname; the removed override must
+        # not divert its v2 authentication to the temporary alternate endpoint.
+        for endpoint in (
+            "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=fictional",
+            "wss://future.example/speech?NewAuth=fictional",
+        ):
+            with self.subTest(endpoint=endpoint):
+                sdk = types.ModuleType("edge_tts")
+                sdk.communicate = types.SimpleNamespace(WSS_URL=endpoint)
+                requests = []
 
-        class Communicate:
-            def __init__(self, text, voice, rate):
-                self.text, self.voice, self.rate = text, voice, rate
+                class Communicate:
+                    def __init__(self, text, voice, rate):
+                        requests.append((sdk.communicate.WSS_URL, text))
 
-            async def stream(self):
-                requests.append((sdk.communicate.WSS_URL, self.text, self.voice, self.rate))
-                yield {"type": "audio", "data": b"fictional-audio"}
+                    async def stream(self):
+                        yield {"type": "audio", "data": b"fictional-audio"}
 
-        sdk.Communicate = Communicate
-        return sdk, constants, requests
-
-    def test_stream_routes_legacy_client_without_changing_voice_discovery(self):
-        sdk, constants, requests = self.client(
-            "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=old")
-        with patch.dict(sys.modules, {"edge_tts": sdk, "edge_tts.constants": constants}), \
-                patch.dict(os.environ, {"TTS_VOICE": "fictional-voice", "TTS_RATE": "+10%"}), \
-                tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "audio.mp3"
-            self.assertTrue(tts.speak("Fictional passage.", path))
-            self.assertEqual(path.read_bytes(), b"fictional-audio")
-        self.assertEqual(requests, [(
-            "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=fictional-client-token",
-            "Fictional passage.", "fictional-voice", "+10%")])
-        self.assertEqual(constants.VOICE_LIST, "https://speech.platform.bing.com/voices/list")
-
-    def test_future_sdk_endpoint_and_auth_are_not_overwritten(self):
-        endpoint = "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v2?NewAuth=fictional"
-        sdk, constants, requests = self.client(endpoint)
-        with patch.dict(sys.modules, {"edge_tts": sdk, "edge_tts.constants": constants}):
-            tts.edge_communication("Fictional passage.", "fictional-voice", "+0%")
-        self.assertEqual(sdk.communicate.WSS_URL, endpoint)
+                sdk.Communicate = Communicate
+                with patch.dict(sys.modules, {"edge_tts": sdk}), tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "audio.mp3"
+                    self.assertTrue(tts.speak("Fictional passage.", path))
+                    self.assertEqual(path.read_bytes(), b"fictional-audio")
+                self.assertEqual(requests, [(endpoint, "Fictional passage.")])
+                self.assertEqual(sdk.communicate.WSS_URL, endpoint)
 
 
 if __name__ == "__main__":
