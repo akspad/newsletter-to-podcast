@@ -18,7 +18,7 @@ This is a Python command-line project, not a hosted service. It reads the text a
 
 Built by [@akspad](https://x.com/akspad)
 
-> **Known live-generation issue (2026-10-12):** Edge TTS 7.2.8 returned HTTP 403 in our GitHub runner checks. Both full narration and summaries need this service for new audio; the bundled demo and existing episodes remain playable. See [Edge TTS 403](#edge-tts-403).
+> **Edge TTS compatibility (2026-10-12):** This project temporarily routes Edge TTS 7.2.8 synthesis to Microsoft's current speech-service endpoint to address HTTP 403 from the legacy host. See [Edge TTS 403](#edge-tts-403) for validation and upstream status.
 
 ## Quick start: hear a sample in under a minute
 
@@ -194,7 +194,7 @@ Each due run adds eligible missing articles available from its configured source
 
 To request a longer backfill immediately, open **Actions → Newsletter podcast → Run workflow** and enter `lookback_hours`, for example `720` for 30 days. Manual runs bypass the scheduling window and still deduplicate completed articles. After the backfill, leave this input blank for automatic catch-up. Recovery is limited to articles still exposed by the source or already saved in the private retry queue; an older article absent from both cannot be recovered by increasing lookback alone.
 
-Changes to `.github/workflows/daily.yml` on `main` also start a catch-up run when automation is enabled, so updating this workflow applies the recovery behavior immediately. Manual and workflow-update runs bypass the cadence check; scheduled runs remain limited to one complete source scan per window.
+Changes to `.github/workflows/daily.yml` or `src/tts.py` on `main` also start a catch-up run when automation is enabled, so scheduling and speech-provider fixes apply to queued articles immediately. Manual and workflow-update runs bypass the cadence check; scheduled runs remain limited to one complete source scan per window.
 
 For an entirely private installation, use a private repository and leave `PUBLISH_TO_PAGES` unset. These runs save audio and state in a private Actions cache and provide a seven-day downloadable artifact. Host the output yourself. Caches can expire or be evicted; keep a backup for durable personal history.
 
@@ -224,9 +224,13 @@ A source that responds successfully with no eligible recent posts is different: 
 
 ### Edge TTS 403
 
-As of 2026-10-12, the locked `edge-tts==7.2.8` client fails the synthesis WebSocket handshake with HTTP 403 on our GitHub runners, before audio arrives. The stock SDK and this project's bounded streaming implementation both reproduce the failure. New summary audio, full narration, first-episode generation and demo-sample regeneration depend on the live service; the prerecorded `--demo` remains available.
+The locked `edge-tts==7.2.8` client received HTTP 403 from Microsoft's legacy synthesis host in our GitHub runner checks on 2026-10-12. The refusal happened before audio arrived and affected both the stock SDK and the project's bounded streaming path.
 
-[Upstream issue #490](https://github.com/rany2/edge-tts/issues/490) reports the same failure beginning October 10. Contributor network captures indicate that Edge moved synthesis from `speech.platform.bing.com` to `api.msedgeservices.com`. [Upstream PR #491](https://github.com/rany2/edge-tts/pull/491) proposes the endpoint change, which contributors report restores generation. At this documentation update, that PR is unmerged and this repository has not applied or validated the workaround. These reports point to a provider compatibility change; simply increasing retries or shortening article text does not resolve the observed handshake refusal.
+This repository now applies a small compatibility override in `src/tts.py`: a client still using `speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1` sends synthesis to `api.msedgeservices.com/tts/cognitiveservices/websocket/v1` instead, with the existing client token under `Ocp-Apim-Subscription-Key`. Voice discovery, audio budgets, timeouts and locked dependencies are unchanged. An SDK that already specifies a different synthesis endpoint is left untouched.
+
+[Upstream issue #490](https://github.com/rany2/edge-tts/issues/490) documents the failures and contributor network captures of the new endpoint. [Upstream PR #491](https://github.com/rany2/edge-tts/pull/491) proposes the same endpoint change and is unmerged at this update. The local override is temporary: after reviewing and upgrading the hashed dependency lock to an official release containing the fix, remove `edge_communication` and call the SDK directly again.
+
+Live validation on GitHub runners covers short synthetic speech and a full original RSS article, including complete descriptions, bounded audio splits, valid RSS and a rerun with stable episode identities and unchanged MP3 bytes. Both summary and full narration use the same TTS path. The service remains unofficial and may change again; the prerecorded `--demo` works independently of it.
 
 Episode-generation failures stay in the bounded retry queue, and a run can still succeed and publish its retained feed even when it creates no new audio. Check the final `Feed ready` message and waiting-for-retry count rather than treating a green workflow as proof of successful narration. Keep your processing state and, for public publishing, the original `STATE_ENCRYPTION_KEY` so queued work can resume when service access is restored.
 

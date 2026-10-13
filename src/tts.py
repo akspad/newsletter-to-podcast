@@ -82,9 +82,24 @@ def duration(path) -> float:
     return float(r.stdout.strip())
 
 
-def speak(text: str, path: Path, attempts=3) -> bool:
+def edge_communication(text, voice, rate):
+    """Temporarily route the legacy SDK to Microsoft's current synthesis host."""
     import edge_tts
+    from edge_tts import communicate
+    from edge_tts.constants import TRUSTED_CLIENT_TOKEN
 
+    # Remove after upgrading to a release containing rany2/edge-tts#491.
+    # Leave a future SDK's endpoint untouched; voice discovery is also unchanged.
+    legacy = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?"
+    if communicate.WSS_URL.startswith(legacy):
+        communicate.WSS_URL = (
+            "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
+            f"?Ocp-Apim-Subscription-Key={TRUSTED_CLIENT_TOKEN}"
+        )
+    return edge_tts.Communicate(text, voice, rate=rate)
+
+
+def speak(text: str, path: Path, attempts=3) -> bool:
     # The Edge endpoint is unofficial and sometimes returns no audio for a request, so retry with backoff.
     for n in range(min(attempts, 3)):
         security.charge("tts_calls", 1)
@@ -97,7 +112,7 @@ def speak(text: str, path: Path, attempts=3) -> bool:
             # --env-file is loaded after imports, so read voice options at call time.
             voice = os.environ.get("TTS_VOICE") or VOICE
             rate = os.environ.get("TTS_RATE") or RATE
-            asyncio.run(asyncio.wait_for(save_audio(edge_tts.Communicate(text, voice, rate=rate), path), timeout=60))
+            asyncio.run(asyncio.wait_for(save_audio(edge_communication(text, voice, rate), path), timeout=60))
             if path.stat().st_size > 0:
                 return True
         except security.BudgetExceeded:
