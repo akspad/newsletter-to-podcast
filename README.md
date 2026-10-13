@@ -222,6 +222,14 @@ If every configured source fails, the command exits with status **1** and leaves
 
 A source that responds successfully with no eligible recent posts is different: that run succeeds with **0** new episodes. Partial source failures are logged by source number and error type; available sources can still produce output, and the catch-up timestamp is not advanced. Episode-generation failures remain queued for retry. Private URLs and raw provider errors are omitted from logs.
 
+### Pipeline failure alerts
+
+Each due generation step writes numeric results to GitHub Actions outputs and a run summary: attempted/created articles, new audio files, unrecovered failures, expected deferrals, security skips and queued articles. These reports contain no source names, titles, URLs, article text or provider errors.
+
+The final **health** job waits for generation and publication. Successful episodes and retry state are saved/published first; then an unrecovered episode-generation error marks the workflow failed, even when other articles succeeded. Build failures, missing reports and failed public publication also fail the health check. Empty runs, recovered provider retries, security-limit rejections and work deferred by article/run budgets do not trigger generation-failure alerts. A skipped scheduling window skips the health job.
+
+Use [GitHub's notification settings](https://github.com/settings/notifications): under **System → Actions**, enable **Email** or **On GitHub** and **Only notify for failed workflows**. GitHub handles delivery when a run completes, without a polling service or additional notification secret. Scheduled-run recipients follow [GitHub's scheduled workflow notification rules](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs). Each failing run can generate a notification; recovery runs stay green. This checks runs that start; it does not independently detect a workflow that never starts or has been disabled.
+
 ### Edge TTS 403
 
 The locked `edge-tts==7.2.8` client received HTTP 403 from Microsoft's legacy synthesis host in our GitHub runner checks on 2026-10-12. The refusal happened before audio arrived and affected both the stock SDK and the project's bounded streaming path.
@@ -232,7 +240,7 @@ This repository now applies a small compatibility override in `src/tts.py`: a cl
 
 Live validation on GitHub runners covers short synthetic speech and a full original RSS article, including complete descriptions, bounded audio splits, valid RSS and a rerun with stable episode identities and unchanged MP3 bytes. Both summary and full narration use the same TTS path. The service remains unofficial and may change again; the prerecorded `--demo` works independently of it.
 
-Episode-generation failures stay in the bounded retry queue, and a run can still succeed and publish its retained feed even when it creates no new audio. Check the final `Feed ready` message and waiting-for-retry count rather than treating a green workflow as proof of successful narration. Keep your processing state and, for public publishing, the original `STATE_ENCRYPTION_KEY` so queued work can resume when service access is restored.
+Episode-generation failures stay in the bounded retry queue, and the build can still save/publish its retained feed even when it creates no new audio. The final health job marks unrecovered generation failures red. Check the run summary and final `Feed ready` message for counts; a healthy run with no eligible articles can create no audio. Keep your processing state and, for public publishing, the original `STATE_ENCRYPTION_KEY` so queued work can resume when service access is restored.
 
 ## Limits and costs
 

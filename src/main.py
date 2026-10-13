@@ -18,6 +18,7 @@ import tts
 import website
 from schedule import scheduled_run_due
 from config import Settings, load_env
+from monitoring import GenerationReport
 from substack import Substack, has_audio, html_to_text
 
 FULL_PLACEHOLDER = "Full narration of the text available from the source."
@@ -250,19 +251,31 @@ def _run(settings, publications, sub):
     state["retry"] = []
     (settings.site / "episodes").mkdir(parents=True, exist_ok=True)
     completed = []
+    report = GenerationReport()
     for pub, post in candidates[:settings.max_episodes]:
+        report.attempted_articles += 1
+        before = len(state["episodes"])
         try:
             make_episode(sub, pub, post, now, state, settings)
+            report.created_articles += 1
+            report.created_audio_files += len(state["episodes"]) - before
             key = post_key(pub, post)
             seen.add(key)
             completed.append(key)
         except security.BudgetExceeded:
+            report.skipped_articles += 1
             print("Article exceeds a security limit; skipped without queuing its payload.", file=sys.stderr)
+        except security.RunBudgetExceeded:
+            report.deferred_articles += 1
+            print("Run work budget exhausted; article deferred for a later run.", file=sys.stderr)
+            state["retry"].append({"pub": pub, "post": post})
         except Exception as error:
+            report.failed_articles += 1
             # Exception messages may contain source text, URLs or credentials: don't print them.
             print(f"Episode failed ({type(error).__name__}); queued for retry.", file=sys.stderr)
             state["retry"].append({"pub": pub, "post": post})
     state["retry"].extend({"pub": pub, "post": post} for pub, post in candidates[settings.max_episodes:])
+    report.deferred_articles += len(candidates[settings.max_episodes:])
     state["retry"] = bounded_retries(state["retry"])
 
     # Retain whole articles together, including every part of a long narration.
@@ -290,6 +303,8 @@ def _run(settings, publications, sub):
     # Public output contains audio and RSS only; runtime metadata stays outside SITE_DIR.
     save_state(settings, state)
     print(f"Feed ready: {len(retained)} audio file(s), {len(state['retry'])} article(s) waiting for retry.")
+    report.queued_articles = len(state["retry"])
+    report.emit()
     return 0
 
 

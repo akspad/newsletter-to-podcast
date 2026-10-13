@@ -35,6 +35,13 @@ jobs:
       due: ${{ steps.cadence.outputs.due }}
       public_artifact_id: ${{ steps.public_upload.outputs.artifact-id }}
       bundle_sha256: ${{ steps.bundle.outputs.bundle_sha256 }}
+      attempted_articles: ${{ steps.generation.outputs.attempted_articles }}
+      created_articles: ${{ steps.generation.outputs.created_articles }}
+      created_audio_files: ${{ steps.generation.outputs.created_audio_files }}
+      failed_articles: ${{ steps.generation.outputs.failed_articles }}
+      deferred_articles: ${{ steps.generation.outputs.deferred_articles }}
+      skipped_articles: ${{ steps.generation.outputs.skipped_articles }}
+      queued_articles: ${{ steps.generation.outputs.queued_articles }}
     env:
       PUBLISH_TO_PAGES: ${{ vars.PUBLISH_TO_PAGES }}
       REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
@@ -120,6 +127,7 @@ jobs:
         if: steps.cadence.outputs.due == 'true'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Build episodes
+        id: generation
         if: steps.cadence.outputs.due == 'true'
         env:
           PUBLICATIONS: ${{ secrets.PUBLICATIONS || vars.PUBLICATIONS }}
@@ -219,3 +227,59 @@ jobs:
           git add --all .
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Publish podcast"
           git push "--force-with-lease=refs/heads/gh-pages:${published_head}" "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" gh-pages
+
+  health:
+    needs: [build, publish]
+    if: always() && needs.build.result != 'skipped' && (needs.build.result != 'success' || needs.build.outputs.due == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check generation health after output is saved or published
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          PUBLISH_TO_PAGES: ${{ vars.PUBLISH_TO_PAGES }}
+          ATTEMPTED_ARTICLES: ${{ needs.build.outputs.attempted_articles }}
+          CREATED_ARTICLES: ${{ needs.build.outputs.created_articles }}
+          CREATED_AUDIO_FILES: ${{ needs.build.outputs.created_audio_files }}
+          FAILED_ARTICLES: ${{ needs.build.outputs.failed_articles }}
+          DEFERRED_ARTICLES: ${{ needs.build.outputs.deferred_articles }}
+          SKIPPED_ARTICLES: ${{ needs.build.outputs.skipped_articles }}
+          QUEUED_ARTICLES: ${{ needs.build.outputs.queued_articles }}
+        run: |
+          python3 -I - <<'PYHEALTH'
+          import os, re, sys
+          from pathlib import Path
+          def fail(message):
+              print('::error::' + message)
+              summary = os.environ.get('GITHUB_STEP_SUMMARY')
+              if summary:
+                  with Path(summary).open('a', encoding='utf-8') as target:
+                      target.write('## Podcast health\n\n' + message + '\n')
+              sys.exit(1)
+          if os.environ['BUILD_RESULT'] != 'success':
+              fail('Podcast build did not complete successfully; review the failed build step.')
+          names = ('ATTEMPTED_ARTICLES', 'CREATED_ARTICLES', 'CREATED_AUDIO_FILES', 'FAILED_ARTICLES',
+                   'DEFERRED_ARTICLES', 'SKIPPED_ARTICLES', 'QUEUED_ARTICLES')
+          counts = {}
+          for name in names:
+              value = os.environ.get(name, '')
+              if not re.fullmatch(r'[0-9]{1,6}', value):
+                  fail('Generation health report is missing or invalid; review the build job.')
+              counts[name] = int(value)
+          summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary:
+              with Path(summary).open('a', encoding='utf-8') as target:
+                  target.write('## Generation health\n\n| Result | Count |\n| --- | --- |\n')
+                  for name, count in counts.items():
+                      target.write(f"| {name.replace('_', ' ').capitalize()} | {count} |\n")
+          if os.environ['PUBLISH_TO_PAGES'] == 'true' and os.environ['PUBLISH_RESULT'] != 'success':
+              fail('Public podcast publication did not complete successfully; review the publisher job.')
+          if counts['FAILED_ARTICLES']:
+              fail(f"Episode generation failed for {counts['FAILED_ARTICLES']} article(s); "
+                   f"{counts['CREATED_AUDIO_FILES']} new audio file(s) saved/published and "
+                   f"{counts['QUEUED_ARTICLES']} article(s) waiting for retry.")
+          print('Generation healthy: no unrecovered episode failures.')
+          PYHEALTH
