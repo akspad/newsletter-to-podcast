@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/daily.yml
+      - src/tts.py
   schedule:
     # Hourly checks; RUNS_PER_DAY controls podcast generation without editing cron.
     # The encrypted state allows one completed run per window, with retries after source outages.
