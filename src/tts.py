@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 import math
+import re
 import security
 import asyncio
 import os
@@ -149,11 +150,15 @@ def _synthesize(script: str, out_path: Path, max_seconds: float | None) -> float
             parts += speak_pieces(chunk, Path(tmp), f"{i:03d}")
         if not parts:
             raise RuntimeError("Edge TTS returned no audio")
+        return join_audio(parts, out_path, max_seconds)
+
+
+def join_audio(parts, out_path, max_seconds=None):
+    """Join complete clips; only summary callers request a hard duration cap."""
+    with tempfile.TemporaryDirectory() as tmp:
         listing = Path(tmp) / "list.txt"
-        listing.write_text("".join(f"file '{p}'\n" for p in parts))
-        # -t enforces the summary length cap even if the script ran long. loudnorm brings the
-        # quiet Edge voice up to the -16 LUFS loudness most podcast apps expect.
-        # Reserve room for MP3 encoder padding so the measured file stays under the cap.
+        # All clip paths are generated internally, not from article metadata.
+        listing.write_text("".join(f"file '{p.resolve()}'\n" for p in parts))
         limit = ["-t", str(max(0.01, max_seconds - 0.08))] if max_seconds else []
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
                         *limit, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "44100", "-ac", "1", "-b:a", "64k",
@@ -165,33 +170,140 @@ def _synthesize(script: str, out_path: Path, max_seconds: float | None) -> float
     return seconds
 
 
-def split_episode(path: Path, max_seconds: float | None) -> list[Path]:
-    """Split a complete narration into bounded parts, preserving all its audio."""
-    total = duration(path)
-    if not math.isfinite(total) or total > security.MAX_AUDIO_SECONDS or path.stat().st_size > security.MAX_AUDIO_BYTES:
-        raise security.BudgetExceeded("Narration exceeds its output budget")
-    if max_seconds and (not math.isfinite(max_seconds) or max_seconds < 1):
+def text_breaks(text):
+    """Sentence/paragraph boundaries, with conservative abbreviation handling."""
+    result = []
+    for match in re.finditer(r"""[.!?][”’"'\)\]]*(?:\s+|$)|[。！？][”’"'\)\]]*\s*|\n+""", text):
+        prefix = text[:match.start() + 1]
+        if prefix.endswith(".") and re.search(
+                r"\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc|e\.g|i\.e|[A-Z])\.$", prefix, re.I):
+            continue
+        if 0 < match.end() < len(text):
+            result.append(match.end())
+    return result
+
+
+def divide_text(text):
+    """Prefer a sentence, then a clause, then whitespace; never discard words."""
+    choices = text_breaks(text)
+    if not choices:
+        choices = [m.end() for m in re.finditer(r"[,;:—–]\s+", text)]
+    if not choices:
+        choices = [m.end() for m in re.finditer(r"\s+", text)]
+    choices = [n for n in choices if text[:n].strip() and text[n:].strip()]
+    if not choices:
+        raise RuntimeError("A spoken passage cannot fit the episode duration limit")
+    cut = min(choices, key=lambda n: abs(n - len(text) / 2))
+    return text[:cut].strip(), text[cut:].strip()
+
+
+def article_chunks(text):
+    """Bound initial requests without cutting a sentence that fits a request."""
+    pending, result = [text.strip()], []
+    while pending:
+        piece = pending.pop()
+        if len(piece) <= CHUNK_CHARS:
+            result.append(piece)
+        else:
+            left, right = divide_text(piece)
+            pending.extend((right, left))
+        if len(pending) + len(result) > security.MAX_TTS_CHUNKS:
+            raise security.BudgetExceeded("Narration exceeds the chunk limit")
+    return result
+
+
+def pack_clips(clips, capacity):
+    groups, current, seconds = [], [], 0.0
+    for clip in clips:
+        if clip[2] > capacity:
+            raise RuntimeError("A spoken passage exceeds the available part duration")
+        if current and seconds + clip[2] > capacity:
+            groups.append(current)
+            current, seconds = [], 0.0
+        current.append(clip)
+        seconds += clip[2]
+    if current:
+        groups.append(current)
+    if len(groups) > security.MAX_AUDIO_PARTS:
+        raise security.BudgetExceeded("Article produces too many audio parts")
+    return groups
+
+
+def synthesize_full(script: str, out_path: Path, max_seconds: float | None, title: str) -> list[Path]:
+    """Assemble measured text passages with a spoken title and accurate part count."""
+    security.check_text(f"{title}\n{script}", security.MAX_ARTICLE_BYTES + 8192)
+    if not script.strip() or not title.strip():
+        raise ValueError("Full narration needs a title and nonempty text")
+    if max_seconds is not None and (not math.isfinite(max_seconds) or max_seconds < 1):
         raise ValueError("Audio part duration must be at least one second")
-    if not max_seconds or total <= max_seconds:
-        return [path]
-    span = max_seconds - 0.08  # reserve encoder padding without dropping source audio
-    if math.ceil(total / span) > security.MAX_AUDIO_PARTS:
-        raise security.BudgetExceeded("Narration exceeds the part-count limit")
-    parts = []
-    offset = 0.0
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    outputs = [out_path]
     try:
-        while offset < total:
-            part = path.with_name(f"{path.stem}-part-{len(parts) + 1:03d}.mp3")
-            parts.append(part)
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
-                            "-ss", str(offset), "-t", str(min(span, total - offset)),
-                            "-ar", "44100", "-ac", "1", "-b:a", "64k", str(part)], check=True, timeout=180)
-            if duration(part) > max_seconds:
-                raise RuntimeError("Encoded audio exceeds MAX_EPISODE_MINUTES")
-            offset += span
+        with narration_budget(), tempfile.TemporaryDirectory() as directory:
+            tmp = Path(directory)
+            serial = 0
+
+            def render(text):
+                nonlocal serial
+                serial += 1
+                path = tmp / f"clip-{serial:04d}.mp3"
+                seconds = synthesize(text, path, None)
+                return text, path, seconds
+
+            clips = [render(piece) for piece in article_chunks(script)]
+            heading = render(f"{title}.")
+            total = join_audio([heading[1], *(c[1] for c in clips)], out_path)
+            if max_seconds is None or total <= max_seconds:
+                return [out_path]
+
+            # Reserve measured space for numbering, then verify the actual
+            # headings once the number of parts is known. Cache all speech.
+            probe = render(f"{title}. Part 1 of 2.")
+            reserve = probe[2] + 0.15  # MP3 encoder padding margin
+            headings = {}
+            for _ in range(8):
+                capacity = max_seconds - reserve
+                if capacity <= 0:
+                    raise RuntimeError("Episode duration limit cannot fit the spoken title and part number")
+                pending, fitted = list(reversed(clips)), []
+                while pending:
+                    clip = pending.pop()
+                    if clip[2] <= capacity:
+                        fitted.append(clip)
+                    else:
+                        left, right = divide_text(clip[0])
+                        pending.extend(reversed([render(left), render(right)]))
+                    if len(fitted) + len(pending) > security.MAX_AUDIO_PARTS:
+                        raise security.BudgetExceeded("Article produces too many audio passages")
+                clips = fitted
+                groups = pack_clips(clips, capacity)
+                count = len(groups)
+                for index in range(1, count + 1):
+                    key = index, count
+                    if key not in headings:
+                        headings[key] = render(f"{title}. Part {index} of {count}.")
+                actual_reserve = max(headings[i, count][2] for i in range(1, count + 1)) + 0.15
+                if actual_reserve > reserve:
+                    reserve = actual_reserve
+                    continue
+                break
+            else:
+                raise RuntimeError("Could not fit numbered narration within the episode duration limit")
+
+            total_seconds = total_bytes = 0
+            for index, group in enumerate(groups, 1):
+                part = out_path.with_name(f"{out_path.stem}-part-{index:03d}.mp3")
+                outputs.append(part)
+                seconds = join_audio([headings[index, count][1], *(c[1] for c in group)], part)
+                if seconds > max_seconds:
+                    raise RuntimeError("Encoded audio exceeds MAX_EPISODE_MINUTES")
+                total_seconds += seconds
+                total_bytes += part.stat().st_size
+                if total_seconds > security.MAX_AUDIO_SECONDS or total_bytes > security.MAX_AUDIO_BYTES:
+                    raise security.BudgetExceeded("Narration exceeds its output budget")
+            out_path.unlink()
+            return outputs[1:]
     except Exception:
-        for part in parts:
-            part.unlink(missing_ok=True)
+        for path in outputs:
+            path.unlink(missing_ok=True)
         raise
-    path.unlink()
-    return parts

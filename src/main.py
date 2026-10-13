@@ -104,7 +104,7 @@ def make_episode(sub, pub, post, now, state, settings):
     # We cannot reliably infer entitlement from an unofficial endpoint's response.
     preview = full.get("audience") not in (None, "everyone")
     if mode == "full":
-        intro = f"{pub['name']}. {post['title']}, by {author}."
+        intro = f"{pub['name']}. By {author}."
         if preview:
             intro += " This source has restricted access; reading the text available from the source."
         script = f"{intro}\n{text}"
@@ -115,8 +115,11 @@ def make_episode(sub, pub, post, now, state, settings):
     key = post_key(pub, post)
     path = settings.site / "episodes" / f"{key}.mp3"
     try:
-        tts.synthesize(script, path, None if mode == "full" else settings.max_seconds)
-        paths = tts.split_episode(path, settings.max_seconds) if mode == "full" else [path]
+        if mode == "full":
+            paths = tts.synthesize_full(script, path, settings.max_seconds, post["title"])
+        else:
+            tts.synthesize(script, path, settings.max_seconds)
+            paths = [path]
         if len(paths) > security.MAX_AUDIO_PARTS:
             raise security.BudgetExceeded("Article produces too many audio parts")
         if len(episode_description(mode, text, preview).encode("utf-8")) * len(paths) > 2 * 1024 * 1024:
@@ -360,5 +363,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

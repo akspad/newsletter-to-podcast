@@ -223,6 +223,10 @@ class FeedAndPipelineTests(unittest.TestCase):
         path.write_bytes(b"synthetic-audio")
         return 20
 
+    def render_full(self, script, path, maximum, title):
+        self.render(script, path, maximum)
+        return [path]
+
     def test_feed_escapes_xml_and_preserves_notes_on_reload(self):
         episode = {"guid": "post-id", "source_key": "post-id", "title": "A & B <test>", "description": "Plain <text> & notes",
                    "link": "https://example.com/?a=1&b=2", "published": NOW.isoformat(), "file": "audio.mp3", "bytes": 12, "duration": 61}
@@ -239,8 +243,8 @@ class FeedAndPipelineTests(unittest.TestCase):
     def test_run_keeps_state_outside_site_and_deduplicates(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = self.settings(tmp)
-            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize", side_effect=self.render), \
-                    patch("tts.duration", return_value=20), patch("tts.split_episode", side_effect=lambda path, cap: [path]), \
+            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize_full", side_effect=self.render_full), \
+                    patch("tts.duration", return_value=20), \
                     patch("summarize.write_script", side_effect=AssertionError("Full mode called summary")), \
                     contextlib.redirect_stdout(io.StringIO()) as output:
                 main.run(settings, [PUB], self.source())
@@ -255,10 +259,10 @@ class FeedAndPipelineTests(unittest.TestCase):
     def test_retry_does_not_mark_failed_article_seen_or_leak_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = self.settings(tmp)
-            def fail(script, path, cap):
+            def fail(script, path, cap, title):
                 path.write_bytes(b"partial")
                 raise RuntimeError("SECRET article body https://personal.example.com")
-            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize", side_effect=fail), \
+            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize_full", side_effect=fail), \
                     contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as output:
                 main.run(settings, [PUB], self.source())
             state = json.loads((settings.state_dir / "state.json").read_text())
@@ -272,7 +276,7 @@ class FeedAndPipelineTests(unittest.TestCase):
             settings = self.settings(tmp)
             state = {"episodes": [], "seen": [], "retry": [{"pub": {**PUB, "base": "https://removed.example.com"}, "post": POST}]}
             main.save_state(settings, state)
-            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize", side_effect=AssertionError("Unexpected retry")), \
+            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize_full", side_effect=AssertionError("Unexpected retry")), \
                     contextlib.redirect_stdout(io.StringIO()):
                 main.run(settings, [PUB], types.SimpleNamespace(recent_posts=lambda p: []))
             self.assertEqual(json.loads((settings.state_dir / "state.json").read_text())["retry"], [])
@@ -296,14 +300,12 @@ class FeedAndPipelineTests(unittest.TestCase):
             old = {"guid": "old", "source_key": "old", "published": (NOW - timedelta(days=1)).isoformat(), "file": "old.mp3"}
             (settings.site / "episodes" / "old.mp3").write_bytes(b"old")
             main.save_state(settings, {"episodes": [old], "seen": [], "retry": []})
-            def split(path, cap):
+            def split(script, path, cap, title):
                 parts = [path.with_name(path.stem + f"-part-{i:03d}.mp3") for i in (1, 2, 3)]
                 for part in parts:
                     part.write_bytes(b"part")
-                path.unlink()
                 return parts
-            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize", side_effect=self.render), \
-                    patch("tts.split_episode", side_effect=split), patch("tts.duration", return_value=20), \
+            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize_full", side_effect=split), patch("tts.duration", return_value=20), \
                     contextlib.redirect_stdout(io.StringIO()):
                 main.run(settings, [PUB], self.source())
             state = json.loads((settings.state_dir / "state.json").read_text())
@@ -349,8 +351,8 @@ class MigrationTests(unittest.TestCase):
             (settings.site / "feed.xml").write_text(feed.build("https://original.example.com", [old]))
             settings.state_dir.mkdir()
             (settings.state_dir / "legacy-state.json").write_text(json.dumps({"episodes": [old], "seen": ["456"], "retry": []}))
-            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize", side_effect=helper.render), \
-                    patch("tts.duration", return_value=20), patch("tts.split_episode", side_effect=lambda p, cap: [p]), \
+            with patch.dict(os.environ, {}, clear=True), patch("tts.synthesize_full", side_effect=helper.render_full), \
+                    patch("tts.duration", return_value=20), \
                     contextlib.redirect_stdout(io.StringIO()):
                 main.run(settings, [PUB], helper.source())
             state = json.loads((settings.state_dir / "state.json").read_text())
@@ -414,18 +416,6 @@ class RealAudioTests(unittest.TestCase):
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
                         "-ar", "44100", "-ac", "1", "-b:a", "64k", str(path)], check=True)
 
-    def test_full_audio_split_preserves_duration_and_caps_every_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "article.mp3"
-            self.tone(path)
-            original = tts.duration(path)
-            parts = tts.split_episode(path, 2)
-            lengths = [tts.duration(part) for part in parts]
-            self.assertEqual(len(parts), 3)
-            self.assertTrue(all(length <= 2 for length in lengths), lengths)
-            self.assertGreaterEqual(sum(lengths), original - 0.1)
-            self.assertFalse(path.exists())
-
     def test_summary_audio_has_real_configured_cap(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "summary.mp3"
@@ -437,15 +427,6 @@ class RealAudioTests(unittest.TestCase):
                 seconds = tts.synthesize("Fictional summary.", path, 2)
             self.assertLessEqual(seconds, 2)
             self.assertGreater(seconds, 1.8)
-
-    def test_unlimited_full_audio_is_not_cut(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "article.mp3"
-            self.tone(path)
-            before = tts.duration(path)
-            self.assertEqual(tts.split_episode(path, None), [path])
-            self.assertEqual(tts.duration(path), before)
-
 
 @unittest.skipUnless(importlib.util.find_spec("bs4"), "beautifulsoup4 required (installed in CI)")
 class AdapterTests(unittest.TestCase):
