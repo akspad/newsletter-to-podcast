@@ -79,6 +79,7 @@ jobs:
           total = 0
           files = list((site / 'episodes').glob('*.mp3'))
           before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+          public_items = [ET.tostring(item) for item in ET.parse(site / 'feed.xml').findall('channel/item')]
           for path in files:
               seconds = tts.duration(path)
               assert 0 < seconds <= 20
@@ -88,8 +89,9 @@ jobs:
           assert main.main() == 0
           after = json.loads(state_path.read_text())
           assert not after['retry'] and len(after['episodes']) == len(episodes)
-          stable = ('guid', 'source_key', 'published', 'file', 'bytes', 'duration', 'description')
+          stable = ('guid', 'source_key', 'file', 'bytes', 'duration', 'description')
           assert [tuple(e.get(k) for k in stable) for e in after['episodes']] == [tuple(e.get(k) for k in stable) for e in episodes]
           assert before == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in (site / 'episodes').glob('*.mp3')}
+          assert public_items == [ET.tostring(item) for item in ET.parse(site / 'feed.xml').findall('channel/item')]
           print(f'FULL_EPISODE_OK parts={len(episodes)} total_duration={total:.3f}s full_text=yes duplicate_audio=no')
           PY
