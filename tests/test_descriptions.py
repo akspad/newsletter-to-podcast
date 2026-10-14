@@ -41,7 +41,8 @@ class DescriptionTests(unittest.TestCase):
             (settings.site / "episodes").mkdir(parents=True)
             def narrate(script, path, maximum, title):
                 self.assertIn(ARTICLE, script)
-                self.assertEqual(title, POST["title"])
+                self.assertEqual(title, "Fictional Source. Fictional title. By Fictional Source.")
+                self.assertEqual(script, ARTICLE)
                 parts = [path.with_name(path.stem + f"-part-{i:03d}.mp3") for i in (1, 2)]
                 for part in parts:
                     part.write_bytes(b"synthetic part")

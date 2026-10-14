@@ -229,11 +229,11 @@ def pack_clips(clips, capacity):
     return groups
 
 
-def synthesize_full(script: str, out_path: Path, max_seconds: float | None, title: str) -> list[Path]:
-    """Assemble measured text passages with a spoken title and accurate part count."""
-    security.check_text(f"{title}\n{script}", security.MAX_ARTICLE_BYTES + 8192)
-    if not script.strip() or not title.strip():
-        raise ValueError("Full narration needs a title and nonempty text")
+def synthesize_full(script: str, out_path: Path, max_seconds: float | None, intro: str) -> list[Path]:
+    """Assemble measured text passages with a spoken introduction and accurate part count."""
+    security.check_text(f"{intro}\n{script}", security.MAX_ARTICLE_BYTES + 8192)
+    if not script.strip() or not intro.strip():
+        raise ValueError("Full narration needs an introduction and nonempty text")
     if max_seconds is not None and (not math.isfinite(max_seconds) or max_seconds < 1):
         raise ValueError("Audio part duration must be at least one second")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,20 +251,20 @@ def synthesize_full(script: str, out_path: Path, max_seconds: float | None, titl
                 return text, path, seconds
 
             clips = [render(piece) for piece in article_chunks(script)]
-            heading = render(f"{title}.")
+            heading = render(intro)
             total = join_audio([heading[1], *(c[1] for c in clips)], out_path)
             if max_seconds is None or total <= max_seconds:
                 return [out_path]
 
             # Reserve measured space for numbering, then verify the actual
             # headings once the number of parts is known. Cache all speech.
-            probe = render(f"{title}. Part 1 of 2.")
+            probe = render(f"{intro} Part 1 of 2.")
             reserve = probe[2] + 0.15  # MP3 encoder padding margin
             headings = {}
             for _ in range(8):
                 capacity = max_seconds - reserve
                 if capacity <= 0:
-                    raise RuntimeError("Episode duration limit cannot fit the spoken title and part number")
+                    raise RuntimeError("Episode duration limit cannot fit the spoken introduction and part number")
                 pending, fitted = list(reversed(clips)), []
                 while pending:
                     clip = pending.pop()
@@ -281,7 +281,7 @@ def synthesize_full(script: str, out_path: Path, max_seconds: float | None, titl
                 for index in range(1, count + 1):
                     key = index, count
                     if key not in headings:
-                        headings[key] = render(f"{title}. Part {index} of {count}.")
+                        headings[key] = render(f"{intro} Part {index} of {count}.")
                 actual_reserve = max(headings[i, count][2] for i in range(1, count + 1)) + 0.15
                 if actual_reserve > reserve:
                     reserve = actual_reserve

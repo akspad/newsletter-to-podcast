@@ -104,10 +104,10 @@ def make_episode(sub, pub, post, now, state, settings):
     # We cannot reliably infer entitlement from an unofficial endpoint's response.
     preview = full.get("audience") not in (None, "everyone")
     if mode == "full":
-        intro = f"{pub['name']}. By {author}."
+        intro = f"{pub['name']}. {post['title']}. By {author}."
+        script = text
         if preview:
-            intro += " This source has restricted access; reading the text available from the source."
-        script = f"{intro}\n{text}"
+            script = f"This source has restricted access; reading the text available from the source.\n{text}"
     else:
         script = summarize.write_script(pub["name"], author, post["title"], text,
                                         settings.max_seconds, settings.max_script_words, preview)
@@ -116,7 +116,7 @@ def make_episode(sub, pub, post, now, state, settings):
     path = settings.site / "episodes" / f"{key}.mp3"
     try:
         if mode == "full":
-            paths = tts.synthesize_full(script, path, settings.max_seconds, post["title"])
+            paths = tts.synthesize_full(script, path, settings.max_seconds, intro)
         else:
             tts.synthesize(script, path, settings.max_seconds)
             paths = [path]

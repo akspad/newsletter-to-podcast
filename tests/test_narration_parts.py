@@ -22,7 +22,7 @@ class NarrationPartsTests(unittest.TestCase):
         return self.seconds(text)
 
     def seconds(self, text):
-        if text.startswith("Article title."):
+        if text.startswith("Newsletter name. Article title. By Author."):
             return 1.0 if "Part" not in text else 2.0
         return len(text.split()) * 0.5
 
@@ -34,7 +34,7 @@ class NarrationPartsTests(unittest.TestCase):
 
     def narrate(self, root, body, cap):
         with patch("tts.synthesize", side_effect=self.fake_audio), patch("tts.join_audio", side_effect=self.join):
-            return tts.synthesize_full(body, root / "article.mp3", cap, "Article title")
+            return tts.synthesize_full(body, root / "article.mp3", cap, "Newsletter name. Article title. By Author.")
 
     def test_every_part_has_correct_spoken_title_and_count_and_preserves_sentences(self):
         body = "First sentence is complete. Second sentence is complete. Third sentence is complete. Fourth sentence is complete."
@@ -45,7 +45,7 @@ class NarrationPartsTests(unittest.TestCase):
             passages = []
             for index, path in enumerate(paths, 1):
                 texts = json.loads(path.read_text())
-                self.assertEqual(texts[0], f"Article title. Part {index} of {len(paths)}.")
+                self.assertEqual(texts[0], f"Newsletter name. Article title. By Author. Part {index} of {len(paths)}.")
                 self.assertLessEqual(sum(self.seconds(text) for text in texts), 6.5)
                 self.assertTrue(texts[-1].endswith("."))
                 passages.extend(texts[1:])
@@ -64,7 +64,7 @@ class NarrationPartsTests(unittest.TestCase):
             with self.subTest(cap=cap), tempfile.TemporaryDirectory() as tmp:
                 paths = self.narrate(Path(tmp), "Complete short article.", cap)
                 self.assertEqual(len(paths), 1)
-                self.assertEqual(json.loads(paths[0].read_text()), ["Article title.", "Complete short article."])
+                self.assertEqual(json.loads(paths[0].read_text()), ["Newsletter name. Article title. By Author.", "Complete short article."])
 
     def test_actual_longer_numbered_headings_replan_with_final_count(self):
         original = self.seconds
@@ -79,14 +79,14 @@ class NarrationPartsTests(unittest.TestCase):
             self.assertGreaterEqual(len(paths), 10)
             for i, path in enumerate(paths, 1):
                 texts = json.loads(path.read_text())
-                self.assertEqual(texts[0], f"Article title. Part {i} of {len(paths)}.")
+                self.assertEqual(texts[0], f"Newsletter name. Article title. By Author. Part {i} of {len(paths)}.")
                 self.assertLessEqual(sum(seconds(t) for t in texts), 7)
             self.assertEqual(" ".join(t for p in paths for t in json.loads(p.read_text())[1:]).split(), body.split())
 
     def test_impossible_heading_and_failed_assembly_leave_no_publishable_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with self.assertRaisesRegex(RuntimeError, "spoken title"):
+            with self.assertRaisesRegex(RuntimeError, "spoken introduction"):
                 self.narrate(root, "A sufficiently long article to split.", 1.5)
             self.assertEqual(list(root.glob("*.mp3")), [])
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,14 +99,14 @@ class NarrationPartsTests(unittest.TestCase):
             with patch("tts.synthesize", side_effect=self.fake_audio), patch("tts.join_audio", side_effect=fail):
                 with self.assertRaisesRegex(RuntimeError, "encoder failure"):
                     tts.synthesize_full("One complete sentence. Another complete sentence. A final complete sentence.",
-                                        root / "article.mp3", 4, "Article title")
+                                        root / "article.mp3", 4, "Newsletter name. Article title. By Author.")
             self.assertEqual(list(root.glob("*.mp3")), [])
 
     def test_limits_apply_before_work_and_across_numbered_outputs(self):
         with tempfile.TemporaryDirectory() as tmp, patch("tts.synthesize") as render:
             for cap in (0, -1, math.inf, math.nan):
                 with self.assertRaises(ValueError):
-                    tts.synthesize_full("Article.", Path(tmp) / "a.mp3", cap, "Title")
+                    tts.synthesize_full("Article.", Path(tmp) / "a.mp3", cap, "Newsletter. Title. By Author.")
             render.assert_not_called()
         with tempfile.TemporaryDirectory() as tmp, patch("security.MAX_AUDIO_PARTS", 2):
             with self.assertRaises(security.BudgetExceeded):
@@ -144,11 +144,11 @@ class NarrationPartsTests(unittest.TestCase):
             return result
         body = " ".join(f"This is complete sentence number {i}." for i in range(8))
         with tempfile.TemporaryDirectory() as tmp, patch("tts.synthesize", side_effect=speech), patch("tts.join_audio", side_effect=join):
-            paths = tts.synthesize_full(body, Path(tmp) / "article.mp3", 3.5, "Article title")
+            paths = tts.synthesize_full(body, Path(tmp) / "article.mp3", 3.5, "Newsletter name. Article title. By Author.")
             self.assertGreater(len(paths), 1)
             self.assertTrue(all(0 < tts.duration(p) <= 3.5 for p in paths))
             for i, group in enumerate(joined, 1):
-                self.assertEqual(group[0], f"Article title. Part {i} of {len(paths)}.")
+                self.assertEqual(group[0], f"Newsletter name. Article title. By Author. Part {i} of {len(paths)}.")
             self.assertEqual(" ".join(t for group in joined for t in group[1:]).split(), body.split())
 
 
