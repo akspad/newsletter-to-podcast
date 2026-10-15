@@ -100,11 +100,21 @@ def speak(text: str, path: Path, attempts=3) -> bool:
             rate = os.environ.get("TTS_RATE") or RATE
             asyncio.run(asyncio.wait_for(save_audio(edge_tts.Communicate(text, voice, rate=rate), path), timeout=60))
             if path.stat().st_size > 0:
-                return True
+                seconds = duration(path)
+                # A successful stream can still contain only a tiny prefix.
+                # Use a deliberately generous 600 words/minute ceiling, adjusted
+                # for the requested rate, to catch gross truncation without
+                # rejecting naturally short passages or fast voices.
+                speed = max(0.1, 1 + int(rate.rstrip("%")) / 100)
+                minimum = len(text.split()) / (10 * speed)
+                if math.isfinite(seconds) and seconds > 0 and seconds >= minimum:
+                    return True
+                raise RuntimeError("TTS returned implausibly short audio")
         except security.BudgetExceeded:
             raise
         except Exception:
             print(f"TTS retry {n + 1}")
+        path.unlink(missing_ok=True)
         time.sleep(2 ** (n + 1))
     return False
 

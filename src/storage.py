@@ -124,7 +124,10 @@ def migrate(state, feed_path):
         public = existing.get(episode["guid"])
         if public:
             # The feed is authoritative for values podcast clients already cached.
-            episode.update({k: public[k] for k in ("rss_guid", "enclosure_url", "published", "description_html")})
+            # Include repaired audio metadata so stale encrypted state cannot
+            # restore an old duration or enclosure size on the next run.
+            episode.update({k: public[k] for k in ("rss_guid", "enclosure_url", "published", "description_html",
+                                                  "bytes", "duration")})
     state["seen"] = list(dict.fromkeys(seen))
     state.setdefault("retry", [])
     state.setdefault("last_run", None)
