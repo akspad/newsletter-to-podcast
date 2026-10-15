@@ -182,6 +182,7 @@ class PrivacyAndSelectionTests(unittest.TestCase):
         fake = types.ModuleType("edge_tts")
         fake.Communicate = Communicate
         with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, {"edge_tts": fake}), \
+                patch("tts.duration", return_value=2), \
                 patch.dict(os.environ, {"TTS_VOICE": "example-voice", "TTS_RATE": "+10%"}, clear=True):
             self.assertTrue(tts.speak("Fictional text.", Path(tmp) / "voice.mp3"))
         self.assertEqual(calls, [("example-voice", "+10%")])

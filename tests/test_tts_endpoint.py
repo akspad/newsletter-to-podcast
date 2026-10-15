@@ -31,7 +31,8 @@ class EndpointTests(unittest.TestCase):
                         yield {"type": "audio", "data": b"fictional-audio"}
 
                 sdk.Communicate = Communicate
-                with patch.dict(sys.modules, {"edge_tts": sdk}), tempfile.TemporaryDirectory() as tmp:
+                with patch.dict(sys.modules, {"edge_tts": sdk}), tempfile.TemporaryDirectory() as tmp, \
+                        patch("tts.duration", return_value=2):
                     path = Path(tmp) / "audio.mp3"
                     self.assertTrue(tts.speak("Fictional passage.", path))
                     self.assertEqual(path.read_bytes(), b"fictional-audio")
