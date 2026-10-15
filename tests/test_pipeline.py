@@ -340,6 +340,22 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(before.find("channel/item/enclosure").attrib, after.find("channel/item/enclosure").attrib)
         self.assertEqual(before.findtext("channel/title"), after.findtext("channel/title"))
 
+    def test_published_audio_repair_survives_stale_processing_state(self):
+        old = {"guid": "post-fictional", "title": "Fictional episode", "description": "Original notes.",
+               "link": POST["canonical_url"], "published": NOW.isoformat(),
+               "file": "fictional.mp3", "bytes": 43720, "duration": 5}
+        repaired = dict(old, bytes=1151311, duration=143)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "feed.xml"
+            path.write_text(feed.build("https://example.com", [repaired]))
+            state = storage.migrate({"episodes": [old], "seen": [], "retry": []}, path)
+            episode = state["episodes"][0]
+            self.assertEqual((episode["bytes"], episode["duration"]), (1151311, 143))
+            self.assertEqual(episode["file"], "fictional.mp3")
+            rebuilt = ET.fromstring(feed.build("https://example.com", state["episodes"]))
+            self.assertEqual(rebuilt.find("channel/item/enclosure").get("length"), "1151311")
+            self.assertEqual(rebuilt.findtext("channel/item/{http://www.itunes.com/dtds/podcast-1.0.dtd}duration"), "2:23")
+
     def test_unlimited_retention_keeps_existing_audio_when_a_new_article_arrives(self):
         with tempfile.TemporaryDirectory() as tmp:
             helper = FeedAndPipelineTests()
