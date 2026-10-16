@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import math
 import re
 import security
+import checkpoints
 import asyncio
 import os
 import subprocess
@@ -127,15 +128,40 @@ def speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
 def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
     """Voices text, splitting a chunk that keeps failing into halves rather than losing the episode."""
     path = tmp / f"{name}.mp3"
-    if speak(text, path):
+    cache = checkpoints.current()
+    key = cache.key(text, os.environ.get("TTS_VOICE") or VOICE,
+                    os.environ.get("TTS_RATE") or RATE) if cache else None
+    saved = cache.get(key) if cache else None
+    split = saved == b"split"
+    reused = False
+    if saved and saved.startswith(b"audio:"):
+        path.write_bytes(saved[6:])
+        try:
+            seconds = duration(path)
+            rate = os.environ.get("TTS_RATE") or RATE
+            minimum = len(text.split()) / (10 * max(0.1, 1 + int(rate.rstrip("%")) / 100))
+            reused = math.isfinite(seconds) and seconds > 0 and seconds >= minimum
+        except (ValueError, subprocess.SubprocessError):
+            pass
+        if not reused:
+            path.unlink(missing_ok=True)
+    if reused or (not split and speak(text, path)):
         budget = _audio_budget.get()
         if budget is not None:
+            if reused:
+                budget.bytes += path.stat().st_size
             budget.seconds += duration(path)
+            if budget.bytes > security.MAX_AUDIO_BYTES:
+                raise security.BudgetExceeded("Narration exceeds the temporary audio byte limit")
             if not math.isfinite(budget.seconds) or budget.seconds > security.MAX_AUDIO_SECONDS:
                 raise security.BudgetExceeded("Narration exceeds the total duration limit")
+        if cache and not reused:
+            cache.put(key, b"audio:" + path.read_bytes())
         return [path]
     if len(text) <= 200:
         raise RuntimeError("TTS could not voice a passage; episode will be retried")
+    if cache:
+        cache.put(key, b"split")
     mid = text.rfind(". ", 0, len(text) // 2) + 1 or len(text) // 2
     return speak_pieces(text[:mid].strip(), tmp, name + "a") + speak_pieces(text[mid:].strip(), tmp, name + "b")
 
