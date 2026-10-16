@@ -114,6 +114,21 @@ class WorkflowPolicyTests(unittest.TestCase):
                     if "uses" in step:
                         self.assertNotIn("secrets.", json.dumps(step.get("env", {})))
 
+    def test_public_speech_cache_is_encrypted_separate_and_saved_on_failure(self):
+        steps = workflow(ROOT / ".github/workflows/daily.yml")["jobs"]["build"]["steps"]
+        caches = [s for s in steps if s.get("with", {}).get("path") == ".state/speech-encrypted"]
+        self.assertEqual(len(caches), 2)
+        restore, save = caches
+        self.assertIn("actions/cache/restore@", restore["uses"])
+        self.assertIn("actions/cache/save@", save["uses"])
+        self.assertEqual(restore["with"]["key"], save["with"]["key"])
+        self.assertIn("always()", save["if"])
+        for step in caches:
+            self.assertIn("PUBLISH_TO_PAGES == 'true'", step["if"])
+        generation = next(i for i, step in enumerate(steps) if step.get("id") == "generation")
+        self.assertLess(steps.index(restore), generation)
+        self.assertGreater(steps.index(save), generation)
+
     def test_runtime_and_test_locks_have_exact_versions_and_hashes(self):
         for name in ("requirements.txt", "requirements-dev.txt"):
             lock = (ROOT / name).read_text().replace("\\\n", " ")
