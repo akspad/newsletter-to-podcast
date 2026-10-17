@@ -74,6 +74,22 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(render.call_count, 1)
             self.assertEqual(" ".join(p.read_text() for p in paths), text.strip())
 
+    def test_retry_splits_preserve_whole_words_in_order(self):
+        text = " ".join(f"word{i}" for i in range(100))
+        with tempfile.TemporaryDirectory() as tmp, patch("tts.duration", return_value=60):
+            def speech(value, path):
+                return len(value) <= 200 and self.speech(value, path)
+            with patch("tts.speak", side_effect=speech):
+                paths = tts.speak_pieces(text, Path(tmp), "retry")
+            self.assertGreater(len(paths), 2)
+            self.assertEqual(" ".join(p.read_text() for p in paths).split(), text.split())
+
+    def test_retry_does_not_split_an_unbreakable_word(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("tts.speak", return_value=False) as render:
+            with self.assertRaisesRegex(RuntimeError, "TTS could not voice a passage; episode will be retried"):
+                tts.speak_pieces("x" * 201, Path(tmp), "retry")
+            render.assert_called_once()
+
     def test_identity_corruption_encryption_and_bounds(self):
         from cryptography.fernet import Fernet
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {

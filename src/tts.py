@@ -160,10 +160,13 @@ def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
         return [path]
     if len(text) <= 200:
         raise RuntimeError("TTS could not voice a passage; episode will be retried")
+    try:
+        left, right = divide_text(text)
+    except RuntimeError:
+        raise RuntimeError("TTS could not voice a passage; episode will be retried") from None
     if cache:
         cache.put(key, b"split")
-    mid = text.rfind(". ", 0, len(text) // 2) + 1 or len(text) // 2
-    return speak_pieces(text[:mid].strip(), tmp, name + "a") + speak_pieces(text[mid:].strip(), tmp, name + "b")
+    return speak_pieces(left, tmp, name + "a") + speak_pieces(right, tmp, name + "b")
 
 
 def synthesize(script: str, out_path: Path, max_seconds: float | None = MAX_SECONDS) -> float:
