@@ -16,6 +16,8 @@ Choose **spoken summaries** or **full article narration**. Set a maximum episode
 
 This is a Python command-line project, not a hosted service. It reads the text a source makes available to you; it does not bypass paywalls, and feed excerpts may be shorter than the original article.
 
+> **Before publishing:** A public feed of full narrations republishes the source writing as audio **and includes article text in the RSS descriptions**. Doing this with Seth's Blog or another author's newsletter without redistribution rights can lead to copyright complaints and takedown notices. Access to an article, a subscription, or attribution alone does not grant those rights. Keep personal listening feeds on [private hosting](#keep-your-personal-feed-private). For public feeds, prefer [spoken summaries](#spoken-summaries) in original wording with source links; summaries are not a guarantee of permission to publish.
+
 Built by [@akspad](https://x.com/akspad)
 
 > **Edge TTS compatibility (2026-10-13):** The dependency lock now uses Edge TTS 7.3.1 with the official authentication fix for HTTP 403. The temporary endpoint override has been removed. See [Edge TTS 403](#edge-tts-403).
@@ -174,7 +176,7 @@ For public publishing, checkpoints are encrypted with `STATE_ENCRYPTION_KEY` and
 
 ## Scheduled runs with GitHub Actions
 
-The source repository can be public while your subscription configuration stays in secrets. The podcast itself can deliberately be public. In Settings → Secrets and variables → Actions:
+Actions generates the feed; your hosting choice determines who can access it. For personal listening, use a private repository and [private hosting](#keep-your-personal-feed-private). A public source repository can keep configuration in secrets, but the supplied workflow requires public Pages publishing in that case. In Settings → Secrets and variables → Actions:
 
 1. Add a `PUBLICATIONS` secret containing your source list.
 2. Add `GEMINI_API_KEY` if any source uses summaries; optionally add `SUBSTACK_SID` and `SUBSTACK_AUTH_HOSTS`.
@@ -184,8 +186,8 @@ The source repository can be public while your subscription configuration stays 
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
    ```
 
-4. Add repository variables for any non-sensitive configuration you want to override. Keep personal per-source modes and title filters in the `PUBLICATIONS` secret.
-5. Set `PUBLISH_TO_PAGES=true` for your public podcast, and `ENABLE_AUTOMATION=true` for scheduled runs. Keep `KEEP_EPISODES=0` to retain every existing and new episode.
+4. Add repository variables for any non-sensitive configuration you want to override. Keep personal per-source modes and title filters in the `PUBLICATIONS` secret. `EPISODE_MODE` defaults to `summary`; this is the recommended mode for public feeds and requires `GEMINI_API_KEY`. A per-source `full` option overrides it, so review your source list too.
+5. Set `ENABLE_AUTOMATION=true` for scheduled runs. Leave `PUBLISH_TO_PAGES` unset or `false` in a private repository for personal listening. Set it to `true` only after reviewing the [public publishing warning](#optional-public-github-pages-feed). Keep `KEEP_EPISODES=0` to retain every existing and new episode.
 6. Optionally set the **repository variable** `RUNS_PER_DAY`. Its default is `4`; use `2` for two runs a day, `6` for six, or another integer from `1` through `24`.
 
 **Existing installations also need `ENABLE_AUTOMATION=true` after upgrading.** Automation is disabled by default.
@@ -200,9 +202,23 @@ To request a longer backfill immediately, open **Actions → Newsletter podcast 
 
 Changes to `.github/workflows/daily.yml` or `src/tts.py` on `main` also start a catch-up run when automation is enabled, so scheduling and speech-provider fixes apply to queued articles immediately. Manual and workflow-update runs bypass the cadence check; scheduled runs remain limited to one complete source scan per window.
 
-For an entirely private installation, use a private repository and leave `PUBLISH_TO_PAGES` unset. These runs save audio and state in a private Actions cache and provide a seven-day downloadable artifact. Host the output yourself. Caches can expire or be evicted; keep a backup for durable personal history.
+### Keep your personal feed private
+
+You can keep scheduled Actions generation without publishing to GitHub Pages:
+
+1. Use a **private repository**, leave `PUBLISH_TO_PAGES` unset or `false`, and set `ENABLE_AUTOMATION=true`. These runs save audio and state in a private Actions cache and provide a seven-day `newsletter-podcast` artifact containing `feed.xml` and the MP3s. Caches can expire or be evicted; keep a backup for durable personal history.
+2. Set the Actions repository variable `SITE_URL` to your private host's HTTPS base URL before generation, for example `https://podcast.example.com/listening`. RSS enclosure links use this address. Upload the artifact's feed and audio there, preserving the `feed.xml` and `episodes/` layout. The supplied workflow does not upload to a private host automatically. Never upload `.state/` or credentials.
+3. Protect **both the RSS feed and MP3 URLs** with authentication your podcast app supports, or use a private network your listening device can reach. Test feed refresh and audio playback in the app; a browser login alone may not work. `SITE_URL` does not accept embedded credentials, so configure authentication in the host and app.
+
+An unguessable path is an **unlisted URL, not access control**: anyone who obtains it can download and share the feed and audio. If you use one, apply it to both the feed and enclosure URLs and treat those URLs as secrets. On GitHub Pages, paths and files may also be discoverable through the published branch. A hidden landing-page link does not make the podcast private.
+
+Private hosting limits distribution; it does not grant rights to access or convert someone else's writing. Use content you are authorized to access and convert.
 
 ### Optional public GitHub Pages feed
+
+> **Public redistribution warning:** Full narrations of someone else's writing can prompt copyright complaints and takedown notices. Publish them only with permission or a license that permits redistribution as audio and article text. A secret source list, encrypted processing state, or a private source repository does not protect the published feed or MP3s. For personal listening, use [private hosting](#keep-your-personal-feed-private).
+
+Keep the default `EPISODE_MODE=summary` for public feeds and remove per-source `full` overrides unless you have redistribution rights. Summaries should use original wording, avoid extensive quotations, and retain source links; review them before sharing. Summary mode reduces copying but does not guarantee that publication is permitted. Changing modes affects new episodes only: existing full audio and article-text descriptions remain published until you remove them from the host and feed. Copies already downloaded may persist.
 
 Set `PUBLISH_TO_PAGES=true` only for content you deliberately want everyone to see. Then run the workflow and configure Settings → Pages to deploy the `gh-pages` branch, folder `/`. The default feed address is `https://<owner>.github.io/<repo>/feed.xml`. The root address opens a project landing page featuring only the original demo. It does not list your episodes, display your feed title or link to your personal RSS feed. Your existing RSS and MP3 URLs remain available directly through Pages.
 

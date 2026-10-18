@@ -4,6 +4,10 @@ The shareable repository should contain code and synthetic examples. Keep person
 
 The project landing page shows only the original demo: it does not include personal episode metadata, a personal feed title or a personal RSS link. The generated RSS feed and audio remain reachable directly through GitHub Pages and identify sources. A secret publication list does not make the output private. Neither `itunes:block` nor an unguessable URL is an access control. GitHub Pages publishing is an explicit public-content choice. It is supported for a personal podcast whose owner wants private configuration and public audio. Use a private installation with authenticated hosting when the audio itself should be private.
 
+Public full narrations redistribute the source writing as audio and include article text in RSS descriptions. Access, a paid subscription, and attribution alone do not grant redistribution rights; publishing without those rights can lead to copyright complaints and takedown notices. Prefer the default summary mode for public feeds, review summaries for original wording and limited quotations, and retain source links. Per-source `full` options override that default. Summaries do not guarantee permission to publish, and changing modes does not remove existing full episodes or descriptions.
+
+For scheduled personal listening, use a private repository with `PUBLISH_TO_PAGES` unset or `false`, then host the generated feed and MP3s behind authentication supported by your podcast app or on a reachable private network. Protect audio URLs as well as the feed. An unguessable path only limits discovery; anyone with the URL can access and share it. See [Keep your personal feed private](README.md#keep-your-personal-feed-private) for the Actions and hosting steps. Private hosting does not grant rights to access or convert source content.
+
 ## Data locations
 
 | Location | Contents | Handling |
