@@ -19,6 +19,15 @@ MAX_SECONDS = 5 * 60  # default only; callers pass the configured limit
 CHUNK_CHARS = 3000  # small requests are less likely to be dropped by the free endpoint
 
 
+def speech_text(text: str) -> str:
+    """Remove invisible source artifacts that make the voice split ordinary words."""
+    # Delete rather than replace with spaces: these can appear inside a word.
+    text = text.translate(dict.fromkeys(map(ord, "\u00ad\u200b\u2060\ufeff")))
+    # Joiners next to ASCII are obfuscation in English sources. Keep joiners
+    # inside other scripts (e.g. Persian and Indic), where they are meaningful.
+    return re.sub(r"(?<=[\x00-\x7f])[\u200c\u200d]+|[\u200c\u200d]+(?=[\x00-\x7f])", "", text)
+
+
 @dataclass
 class AudioBudget:
     calls: int = 0
@@ -87,6 +96,9 @@ def duration(path) -> float:
 def speak(text: str, path: Path, attempts=3) -> bool:
     import edge_tts
 
+    text = speech_text(text)
+    if not text.strip():
+        raise ValueError("Cannot narrate empty text")
     # The Edge endpoint is unofficial and sometimes returns no audio for a request, so retry with backoff.
     for n in range(min(attempts, 3)):
         security.charge("tts_calls", 1)
@@ -127,6 +139,10 @@ def speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
 
 def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
     """Voices text, splitting a chunk that keeps failing into halves rather than losing the episode."""
+    # Normalize before cache lookup so old speech for corrupted text is not reused.
+    text = speech_text(text)
+    if not text.strip():
+        raise ValueError("Cannot narrate empty text")
     path = tmp / f"{name}.mp3"
     cache = checkpoints.current()
     key = cache.key(text, os.environ.get("TTS_VOICE") or VOICE,
@@ -177,6 +193,7 @@ def synthesize(script: str, out_path: Path, max_seconds: float | None = MAX_SECO
 def _synthesize(script: str, out_path: Path, max_seconds: float | None) -> float:
     """Renders script to a mono MP3, cut at max_seconds if given; returns its duration in seconds."""
     security.check_text(script, security.MAX_ARTICLE_BYTES + 8192)
+    script = speech_text(script)
     pieces = chunks(script)
     if len(pieces) > security.MAX_TTS_CHUNKS:
         raise security.BudgetExceeded("Narration exceeds the chunk limit")
@@ -271,6 +288,7 @@ def pack_clips(clips, capacity):
 def synthesize_full(script: str, out_path: Path, max_seconds: float | None, intro: str) -> list[Path]:
     """Assemble measured text passages with a spoken introduction and accurate part count."""
     security.check_text(f"{intro}\n{script}", security.MAX_ARTICLE_BYTES + 8192)
+    script, intro = speech_text(script), speech_text(intro)
     if not script.strip() or not intro.strip():
         raise ValueError("Full narration needs an introduction and nonempty text")
     if max_seconds is not None and (not math.isfinite(max_seconds) or max_seconds < 1):
