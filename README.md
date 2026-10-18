@@ -20,8 +20,6 @@ This is a Python command-line project, not a hosted service. It reads the text a
 
 Built by [@akspad](https://x.com/akspad)
 
-> **Edge TTS compatibility (2026-10-13):** The dependency lock now uses Edge TTS 7.3.1 with the official authentication fix for HTTP 403. The temporary endpoint override has been removed. See [Edge TTS 403](#edge-tts-403).
-
 ## Quick start: hear a sample in under a minute
 
 Try an original article and a working podcast feed before configuring any sources. This demo uses bundled audio, so it needs **Python 3.12+ only**: no API keys, provider SDKs, ffmpeg, or live feed access.
