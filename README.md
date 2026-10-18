@@ -16,8 +16,6 @@ Choose **spoken summaries** or **full article narration**. Set a maximum episode
 
 This is a Python command-line project, not a hosted service. It reads the text a source makes available to you; it does not bypass paywalls, and feed excerpts may be shorter than the original article.
 
-> **Before publishing:** A public feed of full narrations republishes the source writing as audio **and includes article text in the RSS descriptions**. Doing this with a newsletter without redistribution rights can lead to copyright complaints and takedown notices. Keep personal listening feeds on private hosting. For public feeds, prefer spoken summaries in original wording with source links; summaries are not a guarantee of permission to publish.
-
 Built by [@akspad](https://x.com/akspad)
 
 ## Quick start: hear a sample in under a minute
