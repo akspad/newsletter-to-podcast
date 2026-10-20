@@ -61,7 +61,7 @@ class Settings:
         state_dir = Path(os.environ.get("STATE_DIR") or ".state")
         if state_dir.resolve().is_relative_to(site.resolve()):
             raise ValueError("STATE_DIR must be outside SITE_DIR; processing state is private")
-        minutes = number("MAX_EPISODE_MINUTES", 5)
+        minutes = number("MAX_EPISODE_MINUTES", 10)
         if 0 < minutes < 1 / 60:
             raise ValueError("MAX_EPISODE_MINUTES must be 0 or at least one second")
         runs_per_day = number("RUNS_PER_DAY", 4, 1, True)

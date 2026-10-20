@@ -40,6 +40,7 @@ class DescriptionTests(unittest.TestCase):
             settings = self.settings(Path(tmp))
             (settings.site / "episodes").mkdir(parents=True)
             def narrate(script, path, maximum, title):
+                self.assertEqual(maximum, 600)
                 self.assertIn(ARTICLE, script)
                 self.assertEqual(title, "Fictional Source. Fictional title. By Fictional Source.")
                 self.assertEqual(script, ARTICLE)
@@ -60,11 +61,35 @@ class DescriptionTests(unittest.TestCase):
             for value in (ARTICLE, PUB["name"], PUB["base"], POST["title"]):
                 self.assertNotIn(value, logs.getvalue())
 
-    def test_summaries_stay_brief_and_restricted_full_text_keeps_notice(self):
-        self.assertEqual(main.episode_description("summary", ARTICLE, False),
-                         "Spoken summary of the text available from the source.")
-        self.assertEqual(main.episode_description("full", ARTICLE, True), main.RESTRICTED_NOTICE + "\n" + ARTICLE)
-        self.assertNotIn(ARTICLE, main.episode_description("summary", ARTICLE, True))
+    def test_new_summary_description_uses_spoken_script_and_escapes_html(self):
+        script = "Fictional Source. A concise summary with <literal tags> & café.\nA conclusion."
+        for preview in (False, True):
+            with self.subTest(preview=preview), tempfile.TemporaryDirectory() as tmp:
+                settings = self.settings(Path(tmp))
+                (settings.site / "episodes").mkdir(parents=True)
+                source_post = {**POST, "audience": "only_paid" if preview else "everyone"}
+                source = types.SimpleNamespace(post_text=lambda pub, post: (source_post, ARTICLE))
+                state = {"episodes": []}
+
+                def narrate(text, path, maximum):
+                    self.assertEqual(text, script)
+                    path.write_bytes(b"synthetic summary")
+
+                with patch("summarize.write_script", return_value=script) as writer, \
+                        patch("tts.synthesize", side_effect=narrate), patch("tts.duration", return_value=12), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    main.make_episode(source, {**PUB, "mode": "summary"}, POST,
+                                      datetime.now(timezone.utc), state, settings)
+                self.assertEqual(writer.call_args.args[-1], preview)
+                expected = (main.RESTRICTED_NOTICE + "\n" if preview else "") + script
+                self.assertEqual(state["episodes"][0]["description"], expected)
+                rss = feed.build(settings.site_url, state["episodes"])
+                item = ET.fromstring(rss).find("channel/item")
+                self.assertEqual(item.findtext("description"), feed.html(expected))
+                self.assertNotIn(ARTICLE, rss)
+
+    def test_restricted_article_text_keeps_notice(self):
+        self.assertEqual(main.episode_description(ARTICLE, True), main.RESTRICTED_NOTICE + "\n" + ARTICLE)
 
     def test_existing_notes_are_repaired_without_changing_audio_or_rss_identity(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=True):

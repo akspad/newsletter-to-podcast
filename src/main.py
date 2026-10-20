@@ -26,11 +26,8 @@ FULL_PLACEHOLDER = "Full narration of the text available from the source."
 RESTRICTED_NOTICE = "The source has restricted access; the returned text may be a preview."
 
 
-def episode_description(mode, text, preview):
-    if mode == "full":
-        return (RESTRICTED_NOTICE + "\n" if preview else "") + text
-    description = "Spoken summary of the text available from the source."
-    return description + (" " + RESTRICTED_NOTICE if preview else "")
+def episode_description(text, preview):
+    return (RESTRICTED_NOTICE + "\n" if preview else "") + text
 
 
 def refresh_descriptions(sub, pub, posts, state):
@@ -55,7 +52,7 @@ def refresh_descriptions(sub, pub, posts, state):
             security.check_text(text)
             if not text.strip():
                 raise ValueError("Source returned no article text")
-            description = episode_description("full", text, full.get("audience") not in (None, "everyone"))
+            description = episode_description(text, full.get("audience") not in (None, "everyone"))
         except Exception as error:
             # Provider messages and URLs may reveal private source configuration.
             print(f"Description refresh failed ({type(error).__name__}); will retry.", file=sys.stderr)
@@ -113,6 +110,7 @@ def make_episode(sub, pub, post, now, state, settings):
         script = summarize.write_script(pub["name"], author, post["title"], text,
                                         settings.max_seconds, settings.max_script_words, preview)
     security.check_text(script, security.MAX_ARTICLE_BYTES + 8192)
+    description = episode_description(text if mode == "full" else script, preview)
     key = post_key(pub, post)
     path = settings.site / "episodes" / f"{key}.mp3"
     try:
@@ -124,12 +122,11 @@ def make_episode(sub, pub, post, now, state, settings):
                 paths = [path]
         if len(paths) > security.MAX_AUDIO_PARTS:
             raise security.BudgetExceeded("Article produces too many audio parts")
-        if len(episode_description(mode, text, preview).encode("utf-8")) * len(paths) > 2 * 1024 * 1024:
+        if len(description.encode("utf-8")) * len(paths) > 2 * 1024 * 1024:
             raise security.BudgetExceeded("Article descriptions exceed the size limit")
         episodes = []
         for index, part in enumerate(paths, 1):
             suffix = f" (part {index} of {len(paths)})" if len(paths) > 1 else ""
-            description = episode_description(mode, text, preview)
             episodes.append({
                 "guid": key + (f"-part-{index:03d}" if len(paths) > 1 else ""),
                 "source_key": key,

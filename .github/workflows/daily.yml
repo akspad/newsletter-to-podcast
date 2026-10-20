@@ -46,7 +46,7 @@ jobs:
       PUBLISH_TO_PAGES: ${{ vars.PUBLISH_TO_PAGES }}
       REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
       EPISODE_MODE: ${{ vars.EPISODE_MODE || 'summary' }}
-      MAX_EPISODE_MINUTES: ${{ vars.MAX_EPISODE_MINUTES || '5' }}
+      MAX_EPISODE_MINUTES: ${{ vars.MAX_EPISODE_MINUTES || '10' }}
       MAX_SCRIPT_WORDS: ${{ vars.MAX_SCRIPT_WORDS || '700' }}
       MIN_WORDS: ${{ vars.MIN_WORDS || '1500' }}
       MAX_EPISODES_PER_RUN: ${{ vars.MAX_EPISODES_PER_RUN || '20' }}

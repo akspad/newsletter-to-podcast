@@ -34,12 +34,12 @@ class ConfigurationTests(unittest.TestCase):
     def test_defaults(self):
         with patch.dict(os.environ, {}, clear=True):
             settings = config.Settings.from_env()
-        self.assertEqual(settings.max_seconds, 300)
+        self.assertEqual(settings.max_seconds, 600)
         self.assertEqual(settings.mode, "summary")
         self.assertEqual(settings.state_dir, Path(".state"))
 
     def test_fractional_and_unlimited_duration(self):
-        for value, expected in [("2.5", 150), ("0", None)]:
+        for value, expected in [("5", 300), ("10", 600), ("2.5", 150), ("0", None)]:
             with patch.dict(os.environ, {"MAX_EPISODE_MINUTES": value}, clear=True):
                 self.assertEqual(config.Settings.from_env().max_seconds, expected)
 

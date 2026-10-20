@@ -140,7 +140,7 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `EPISODE_MODE` | `summary` | `summary` or `full`; per-source options override it. |
-| `MAX_EPISODE_MINUTES` | `5` | Maximum duration per MP3, in minutes. Full articles split into parts. `0` disables the per-MP3 duration cap; overall narration and other security ceilings still apply. |
+| `MAX_EPISODE_MINUTES` | `10` | Maximum duration per MP3, in minutes. Full articles split into parts. `0` disables the per-MP3 duration cap; overall narration and other security ceilings still apply. |
 | `MAX_SCRIPT_WORDS` | `700` | Additional summary word limit, including its introduction. |
 | `MIN_WORDS` | `1500` | Minimum article length in default summary selection. |
 | `LOOKBACK_HOURS` | automatic: at least `168` | Scan the past week and cover longer gaps with a 48-hour overlap before the last complete source scan. Set a value only to override this for a specific backfill. |
@@ -158,13 +158,13 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 
 Leave `LOOKBACK_HOURS` blank for automatic catch-up. If upgrading from an older example `.env` that sets it to `36`, remove or clear that value. Retaining `.state/` preserves completed-post history and the retry queue. Do not serve that directory.
 
-### Full-article podcast descriptions
+### Podcast descriptions
 
-Full narrations include the available article text in their podcast descriptions, including every split part, within the per-article description budget. Summary descriptions remain brief. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
+Full narrations include the available article text in their podcast descriptions, including every split part, within the per-article description budget. New summary episodes include the generated spoken summary in their descriptions. Existing summary descriptions are preserved because their original scripts were not saved. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
 
 This replaces the old generic full-narration placeholder and no longer requires `INCLUDE_FULL_TEXT`. The landing page continues to show only the original demo. Article text is part of the podcast feed output; subscription lists, per-source settings, credentials and retry payloads stay in private configuration and encrypted processing state. Source titles and article text are omitted from default workflow logs.
 
-Each full-narration episode opens with the newsletter name, article title, and author, followed by “Part X of Y” when split into multiple parts. The renderer groups complete narrated passages at sentence or paragraph boundaries and measures their audio, including the spoken introduction, to stay within the per-file duration limit. If one sentence is too long, it falls back to a clause or word boundary; it does not cut the finished audio mid-word. An unusually short limit that cannot fit the introduction and part number fails generation for retry rather than clipping them. Failed TTS passages likewise fail the article and queue a retry rather than silently omitting words. This applies to newly generated articles; existing published audio is preserved.
+Each full-narration episode opens with the newsletter name, article title, and author, followed by “Part X of Y” when split into multiple parts. The default per-file duration limit is 10 minutes; an explicit `MAX_EPISODE_MINUTES` value in your environment or repository variables overrides it. The renderer groups complete narrated passages at sentence or paragraph boundaries and measures their audio, including the spoken introduction, to stay within the per-file duration limit. If one sentence is too long, it falls back to a clause or word boundary; it does not cut the finished audio mid-word. An unusually short limit that cannot fit the introduction and part number fails generation for retry rather than clipping them. Failed TTS passages likewise fail the article and queue a retry rather than silently omitting words. This applies to newly generated articles; existing published audio is preserved.
 
 Completed TTS passages are checkpointed atomically under `STATE_DIR` (outside the served site). If a passage fails or the process is interrupted, the next attempt reuses validated speech with matching text, voice, and rate, including completed children of a split passage. Only missing or invalid speech is requested again; local audio assembly is repeated. All parts of an article must still finish before any of them enter the feed. Checkpoints expire after seven days without use and are bounded to 512 MiB, so evicted speech may need to be generated again.
 

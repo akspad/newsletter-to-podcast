@@ -19,7 +19,7 @@ def limit_words(script, maximum):
     return clipped[:ends[-1].end()] if ends else clipped
 
 
-def write_script(pub_name, author, title, text, max_seconds=300, max_words=700, preview=False):
+def write_script(pub_name, author, title, text, max_seconds=600, max_words=700, preview=False):
     security.check_text(text, security.MAX_MODEL_INPUT_BYTES)
     from google import genai
     from google.genai import errors, types
