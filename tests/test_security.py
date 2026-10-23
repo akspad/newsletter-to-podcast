@@ -122,6 +122,80 @@ class DestinationTests(unittest.TestCase):
             self.assertEqual(len(calls), 1)
             pause.assert_not_called()
 
+    def test_success_status_browser_challenges_are_rejected_before_article_parsing(self):
+        cases = [({'X-Vercel-Mitigated': 'challenge'}, b'Verification required', 'vercel_challenge'),
+                 ({'Cf-Mitigated': 'challenge'}, b'Verification required', 'cloudflare_challenge'),
+                 ({'Content-Type': 'text/html'}, b'<title>Vercel Security Checkpoint</title>', 'vercel_challenge'),
+                 ({'Content-Type': 'text/html'}, b'<title>Just a moment...</title>'
+                  b'<script src="/cdn-cgi/challenge-platform/example.js"></script>', 'cloudflare_challenge')]
+        for headers, body, protection in cases:
+            calls = []
+            response = types.SimpleNamespace(is_redirect=False, status_code=200, headers=headers)
+            fake = self.fake_transport([(response, [body])], calls)
+            with self.subTest(protection=protection, headers=headers), patch.dict(sys.modules, {'curl_cffi': fake}), \
+                    patch('security.public_destination', return_value=('fictional.example', 443, '93.184.216.34')), \
+                    patch('substack.time.sleep') as pause, self.assertRaises(substack.SourceDownloadError) as error:
+                substack.Substack('').get('https://fictional.example/story', raw=True)
+            self.assertEqual(error.exception.status_code, 200)
+            self.assertEqual(error.exception.protection, protection)
+            self.assertEqual(len(calls), 1)
+            pause.assert_not_called()
+
+    def test_ordinary_articles_and_json_quoting_checkpoint_text_are_not_blocked(self):
+        html = '<html><title>Understanding browser checks</title><article>We discuss Vercel Security Checkpoint.</article></html>'
+        data = {'body_html': '<title>Vercel Security Checkpoint</title>'}
+        for content, mime, raw, expected in ((html, 'text/html', True, html),
+                                           (json.dumps(data), 'application/json', False, data)):
+            calls = []
+            response = types.SimpleNamespace(is_redirect=False, status_code=200, headers={'Content-Type': mime})
+            fake = self.fake_transport([(response, [content.encode()])], calls)
+            with self.subTest(mime=mime), patch.dict(sys.modules, {'curl_cffi': fake}), \
+                    patch('security.public_destination', return_value=('fictional.example', 443, '93.184.216.34')):
+                self.assertEqual(substack.Substack('').get('https://fictional.example/story', raw=raw), expected)
+
+    def test_page_charset_declarations_preserve_accents_and_punctuation(self):
+        body = 'Café owners discuss a résumé. “Useful ideas,” said André, “deserve clear explanations.”'
+        for declaration in ('<meta charset="windows-1252">',
+                            '<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">'):
+            html = '<html><head>' + declaration + '</head><body><p>' + body + '</p></body></html>'
+            calls = []
+            response = types.SimpleNamespace(is_redirect=False, status_code=200, encoding='utf-8',
+                                             headers={'Content-Type': 'text/html'})
+            fake = self.fake_transport([(response, [html.encode('cp1252')])], calls)
+            with self.subTest(declaration=declaration), patch.dict(sys.modules, {'curl_cffi': fake}), \
+                    patch('security.public_destination', return_value=('fictional.example', 443, '93.184.216.34')):
+                self.assertEqual(substack.Substack('').get('https://fictional.example/story', raw=True), html)
+
+    def test_http_charset_bom_and_xml_encoding_are_respected(self):
+        text = '<html><p>Café — a useful résumé.</p></html>'
+        cases = [(text.encode('cp1252'), {'Content-Type': 'text/html; charset="windows-1252"'}, text),
+                 (text.encode('utf-8-sig'), {'Content-Type': 'text/html; charset=windows-1252'}, text),
+                 (text.encode('utf-16'), {'Content-Type': 'text/html'}, text),
+                 ('<?xml version="1.0" encoding="iso-8859-1"?><rss><title>Café</title></rss>'.encode('latin1'),
+                  {'Content-Type': 'application/rss+xml'},
+                  '<?xml version="1.0" encoding="iso-8859-1"?><rss><title>Café</title></rss>')]
+        for data, headers, expected in cases:
+            with self.subTest(headers=headers):
+                self.assertEqual(substack.decode_source(data, headers), expected)
+        declared = '<meta charset="windows-1252"><p>Café</p>'
+        self.assertEqual(substack.decode_source(declared.encode('cp1252'),
+                         {'Content-Type': 'text/html; charset=not-a-codec'}), declared)
+
+    def test_final_redirect_destination_is_retained_only_after_success(self):
+        calls = []
+        redirects = [(types.SimpleNamespace(is_redirect=True, headers={'Location': 'https://publication.example/stories/one'}), []),
+                     (types.SimpleNamespace(is_redirect=False, status_code=200), [b'{"ok":true}'])]
+        fake = self.fake_transport(redirects, calls)
+        source = substack.Substack('')
+        with patch.dict(sys.modules, {'curl_cffi': fake}), \
+                patch('security.public_destination', side_effect=lambda url: (url.split('/')[2], 443, '93.184.216.34')):
+            self.assertEqual(source.get('https://short.example/link'), {'ok': True})
+        self.assertEqual(source.last_url, 'https://publication.example/stories/one')
+        self.assertEqual([call[0] for call in calls], ['https://short.example/link', source.last_url])
+        with patch('security.public_destination', side_effect=ValueError('Private or reserved')), self.assertRaises(ValueError):
+            source.get('https://private.example/')
+        self.assertIsNone(source.last_url)
+
     def test_challenge_diagnostics_exclude_response_content_and_tokens(self):
         cases = [({"Server": "Vercel", "X-Vercel-Mitigated": "challenge", "Set-Cookie": "SECRET"},
                   b"SECRET", "server=vercel protection=vercel_challenge retry_after=none"),

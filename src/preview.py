@@ -85,8 +85,9 @@ def article_text(url):
     # Reuse the bounded downloader: public destinations only, DNS pinned, and
     # every redirect revalidated. No subscription cookies or private config.
     started = time.monotonic()
+    source = Substack("", request_timeout=60)
     try:
-        html = Substack("", request_timeout=60).get(url, raw=True)
+        html = source.get(url, raw=True)
     except Exception as error:
         status = getattr(error, "status_code", None)
         status_log = f" http_status={status}" if type(status) is int and 100 <= status <= 599 else ""
@@ -98,9 +99,10 @@ def article_text(url):
         raise
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")
-    publication, title, author = article_metadata(soup, url)
+    resolved_url = source.last_url or url
+    publication, title, author = article_metadata(soup, resolved_url)
     from article_extract import extract_text
-    text = extract_text(soup, title, author, url)
+    text = extract_text(soup, title, author, resolved_url)
     if not text:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
     if len(text.split()) < 20:
@@ -155,7 +157,8 @@ async def narrate(text, voice, path):
                 raise IncompleteSpeechError
             stage_log('speech', 'completed', started, attempt=attempt)
             return
-        except (edge_tts.exceptions.NoAudioReceived, ClientConnectionError, ClientResponseError,
+        except (edge_tts.exceptions.NoAudioReceived, edge_tts.exceptions.WebSocketError,
+                ClientConnectionError, ClientResponseError,
                 IncompleteSpeechError) as error:
             transient = not isinstance(error, ClientResponseError) or error.status == 429 or error.status >= 500
             if attempt == 3 or not transient:

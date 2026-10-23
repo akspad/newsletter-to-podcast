@@ -1,5 +1,6 @@
 """Reads posts from Substack publications (their unofficial web API), plain RSS feeds and plain web pages."""
 import json
+import codecs
 import hashlib
 import os
 import re
@@ -20,6 +21,26 @@ HEADERS = {"Accept": "application/json, text/plain, */*", "Accept-Language": "en
 AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceover_upload_id", "audio_items")
 
 
+def decode_source(body, headers):
+    """Decode bounded raw HTML/XML using a BOM, HTTP charset or page declaration."""
+    from bs4 import UnicodeDammit
+
+    content_type = next((value for key, value in headers.items() if key.lower() == 'content-type'), '')
+    charset = re.search(r'\bcharset\s*=\s*[\"\']?([^\s;\"\']+)', content_type, re.I)
+    encodings = []
+    if charset:
+        try:
+            encodings.append(codecs.lookup(charset[1]).name)
+        except LookupError:
+            pass  # A bad header must not mask a valid page-level declaration.
+    data = bytes(body)
+    if data.startswith((codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE,
+                        codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        encodings = []  # Let the detector's BOM take precedence over headers.
+    decoded = UnicodeDammit(data, known_definite_encodings=encodings, is_html=True)
+    return decoded.unicode_markup if decoded.unicode_markup is not None else data.decode('utf-8', errors='replace')
+
+
 class SourceDownloadError(RuntimeError):
     def __init__(self, message, status_code, *, headers=None, body=b""):
         super().__init__(message)
@@ -32,9 +53,16 @@ class SourceDownloadError(RuntimeError):
                        if name in server), "other" if server else "unknown")
         text = bytes(body[:128_000]).lower()
         protection = "none"
-        if headers.get("x-vercel-mitigated", "").lower() == "challenge" or b"vercel security checkpoint" in text:
+        html_page = ('text/html' in headers.get('content-type', '').lower() or
+                     'application/xhtml+xml' in headers.get('content-type', '').lower() or
+                     text.lstrip().startswith((b'<!doctype html', b'<html', b'<head', b'<title')))
+        vercel_page = html_page and re.search(rb'<title\b[^>]*>\s*vercel security checkpoint\s*</title\s*>', text)
+        cloudflare_page = (html_page and re.search(rb'<title\b[^>]*>\s*just a moment[^<]*</title\s*>', text) and
+                           (b'/cdn-cgi/challenge-platform/' in text or b'_cf_chl_opt' in text))
+        if (headers.get("x-vercel-mitigated", "").lower() == "challenge" or vercel_page or
+                status_code >= 400 and b"vercel security checkpoint" in text):
             protection = "vercel_challenge"
-        elif headers.get("cf-mitigated", "").lower() == "challenge":
+        elif headers.get("cf-mitigated", "").lower() == "challenge" or cloudflare_page:
             protection = "cloudflare_challenge"
         self.protection = protection
         delay = headers.get("retry-after", "")
@@ -49,6 +77,7 @@ class Substack:
             sid = sid[len("substack.sid="):]
         self.download_bytes = 0
         self.request_timeout = request_timeout
+        self.last_url = None
         self.cookie = f"substack.sid={sid}" if sid else None
         self.auth_hosts = {h.strip().lower() for h in os.environ.get("SUBSTACK_AUTH_HOSTS", "").split(",") if h.strip()}
 
@@ -62,6 +91,7 @@ class Substack:
     def get(self, url, raw=False, **params):
         from curl_cffi import CurlOpt, requests
 
+        self.last_url = None  # Failed requests must not retain a previous destination.
         # Pin an authorized address: a second DNS lookup must not enable rebinding.
         for _ in range(5):
             host, port, address = security.public_destination(url)
@@ -99,17 +129,21 @@ class Substack:
                     raise ValueError("Source redirect cannot downgrade HTTPS")
                 url, params = destination, None
                 continue
-            if r.status_code >= 400:
-                error = SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code,
-                                            headers=getattr(r, "headers", {}), body=body)
+            error = SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code,
+                                        headers=getattr(r, "headers", {}), body=body)
+            if r.status_code >= 400 or error.protection != "none":
                 # A browser challenge cannot be completed by repeating this request.
                 if r.status_code == 429 and error.protection == "none":
                     time.sleep(5)
                     continue
                 raise error
             # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
-            text = body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace")
-            return text if raw else json.loads(text)
+            if raw:
+                result = decode_source(body, getattr(r, "headers", {}))
+            else:
+                result = json.loads(body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace"))
+            self.last_url = url
+            return result
         raise SourceDownloadError("Source exceeded redirect/retry limit", r.status_code,
                                   headers=getattr(r, "headers", {}), body=body)
 

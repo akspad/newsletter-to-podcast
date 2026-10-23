@@ -21,6 +21,52 @@ import tts
 
 
 class PreviewTests(unittest.TestCase):
+    def test_redirect_destination_is_used_for_publication_and_article_selection(self):
+        from curl_cffi.requests import Response
+        from urllib.parse import urlparse
+        html = ('<html><head><title>A useful article</title></head><body>'
+                '<header><a href="https://publication.example/">Science Notes</a></header><main>'
+                '<article><h1><a href="/stories/other">A useful article</a></h1><div class="entry-content"><p>' +
+                'Unrelated recommendation. ' * 80 + '</p></div></article>'
+                '<article><h1><a href="/stories/useful">A useful article</a></h1><div class="entry-content"><p>' +
+                'Actual article sentence. ' * 30 + '</p></div></article></main></body></html>')
+        redirect, success = Response(), Response()
+        redirect.status_code = 302
+        redirect.headers['Location'] = 'https://publication.example/stories/useful'
+        success.status_code = 200
+        responses = iter([(redirect, b''), (success, html.encode())])
+        def get(url, **kwargs):
+            response, data = next(responses)
+            kwargs['content_callback'](data)
+            return response
+        with patch('curl_cffi.requests.get', side_effect=get), patch('security.public_destination',
+                side_effect=lambda url: (urlparse(url).hostname, 443, '93.184.216.34')):
+            text = preview.article_text('https://short.example/link')
+        self.assertTrue(text.startswith('Science Notes. A useful article.\nActual article sentence.'))
+        self.assertNotIn('Unrelated recommendation', text)
+        self.assertNotIn('short.example', text)
+
+    def test_worker_rejects_success_status_challenges_without_calling_speech(self):
+        from curl_cffi.requests import Response
+        response = Response()
+        response.status_code = 200
+        response.headers['X-Vercel-Mitigated'] = 'challenge'
+        def get(url, **kwargs):
+            kwargs['content_callback'](b'<main><h1>Security checkpoint</h1><p>' + b'PRIVATE verification text. ' * 30 + b'</p></main>')
+            return response
+        stderr = io.StringIO()
+        payload = io.TextIOWrapper(io.BytesIO(json.dumps({'url': 'https://fictional.example/story'}).encode()))
+        with tempfile.TemporaryDirectory() as tmp, patch('curl_cffi.requests.get', side_effect=get), \
+                patch('security.public_destination', return_value=('fictional.example', 443, '93.184.216.34')), \
+                patch('edge_tts.Communicate') as speak, patch('sys.stdin', payload), patch('sys.stderr', stderr), \
+                patch('sys.argv', ['preview.py', tmp]), self.assertRaises(SystemExit) as error:
+            runpy.run_path(preview.__file__, run_name='__main__')
+        self.assertEqual(error.exception.code, 3)
+        self.assertIn(preview.ARTICLE_BLOCKED_MESSAGE, stderr.getvalue())
+        self.assertIn('http_status=200', stderr.getvalue())
+        self.assertNotIn('PRIVATE', stderr.getvalue())
+        speak.assert_not_called()
+
     def test_input_and_excerpt_budgets(self):
         for payload in ([], {}, {"url": "https://example.com", "text": "both"}, {"text": 4},
                         {"text": "sample", "voice": []}, {"text": "sample", "voice": "unknown"},
@@ -421,8 +467,8 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_transient_speech_failures_retry_with_fresh_audio_and_same_voice(self):
         from aiohttp import ClientConnectionError
-        from edge_tts.exceptions import NoAudioReceived
-        for failure, failures in ((NoAudioReceived, 2), (ClientConnectionError, 1)):
+        from edge_tts.exceptions import NoAudioReceived, WebSocketError
+        for failure, failures in ((NoAudioReceived, 2), (ClientConnectionError, 1), (WebSocketError, 1)):
             attempts = []
             class Speech:
                 def __init__(self, *args, **kwargs):
@@ -446,6 +492,21 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('status=retry', stderr.getvalue())
             self.assertIn(f'attempt={failures + 1}', stderr.getvalue())
             self.assertNotIn('PRIVATE', stderr.getvalue())
+
+    async def test_persistent_websocket_errors_stop_after_three_attempts(self):
+        from edge_tts.exceptions import WebSocketError
+        class Speech:
+            async def stream(self):
+                raise WebSocketError('PRIVATE provider details')
+                yield
+        errors = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp, patch('edge_tts.Communicate', return_value=Speech()) as speak, \
+                patch('preview.asyncio.sleep', AsyncMock()) as delay, patch('sys.stderr', errors):
+            with self.assertRaises(WebSocketError):
+                await preview.narrate('An original article.', 'en-US-AndrewNeural', Path(tmp) / 'speech.mp3')
+        self.assertEqual(speak.call_count, 3)
+        self.assertEqual([call.args[0] for call in delay.await_args_list], [1, 2])
+        self.assertNotIn('PRIVATE', errors.getvalue())
 
     async def test_truncated_stream_retries_and_never_appends_previous_audio(self):
         class Speech:
