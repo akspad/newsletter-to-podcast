@@ -50,7 +50,7 @@ header {{ display: flex; align-items: center; justify-content: space-between; ga
 .brand {{ font-weight: 750; letter-spacing: -.03em; text-decoration: none; color: var(--ink); }}
 .brand img {{ width: 28px; height: 28px; vertical-align: middle; margin-right: 7px; }}
 .code {{ font-size: .86rem; }}
-.hero {{ padding: 60px 0 20px; max-width: 800px; }}
+.hero {{ padding: 28px 0 20px; max-width: 800px; }}
 .eyebrow {{ font-size: .72rem; letter-spacing: .16em; font-weight: 750; color: var(--green); margin: 0 0 12px; }}
 h1 {{ font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -.055em; margin: 0 0 22px; overflow-wrap: anywhere; }}
 .intro {{ font-size: 1.1rem; max-width: 620px; color: var(--muted); margin-bottom: 0; }}
@@ -91,7 +91,7 @@ footer p {{ margin: 6px 0; }}
 .preview-result h3 {{ margin-top: 0; }}
 .preview-result .actions {{ margin-top: 16px; }}
 @media(max-width: 640px) {{ .preview {{ padding: 18px 22px; }} .article-options {{ grid-template-columns: 1fr; }} .preview-options .button {{ width: 100%; }} header .code {{ white-space: nowrap; }} }}
-@media(max-width: 640px) {{ .wrap {{ padding: 0 18px; }} header {{ padding: 20px 0; }} .hero {{ padding-top: 42px; }} .sample, .grid {{ grid-template-columns: 1fr; }} .sample {{ padding: 18px 22px; gap: 16px; }} .section-head {{ align-items: stretch; }} input {{ width: 100%; }} }}
+@media(max-width: 640px) {{ .wrap {{ padding: 0 18px; }} header {{ padding: 20px 0; }} .hero {{ padding-top: 24px; }} .sample, .grid {{ grid-template-columns: 1fr; }} .sample {{ padding: 18px 22px; gap: 16px; }} .section-head {{ align-items: stretch; }} input {{ width: 100%; }} }}
 </style>
 <style>.feature {{ background: white; border: 1px solid var(--line); border-radius: 12px; padding: 18px 24px; }} .feature h2 {{ margin: 0 0 8px; font-size: 1.15rem; }} .feature p {{ color: var(--muted); margin: 0; font-size: .95rem; }} .quick-start {{ margin-top: 24px; }} code {{ display: inline-block; padding: 10px 14px; background: #eef2e7; border-radius: 8px; overflow-wrap: anywhere; }} @media(max-width:640px) {{ .grid {{ grid-template-columns:1fr; }} }}</style>
 </head>
