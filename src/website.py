@@ -60,7 +60,7 @@ h1 {{ font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -
 .sample {{ display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 28px; border: 1px solid var(--line); border-radius: 14px; padding: 28px; background: #eef2e7; margin-bottom: 48px; }}
 .sample h2 {{ margin: 0; font-size: 1.4rem; letter-spacing: -.03em; }}
 .sample p:last-child {{ color: var(--muted); font-size: .9rem; margin-bottom: 0; }}
-.grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }}
+.grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 40px; }}
 audio {{ display: block; width: 100%; }}
 footer {{ margin-top: 54px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }}
 footer p {{ margin: 6px 0; }}
