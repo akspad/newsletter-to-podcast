@@ -1,5 +1,6 @@
 """Article-preview landing page, never populated with personal feed metadata."""
 from html import escape
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ REPO = "https://github.com/akspad/newsletter-to-podcast"
 
 
 def render(sample=False, demo_url=None, preview_api_url=None):
+    script_version = hashlib.sha256((ROOT / "src" / "preview.js").read_bytes()).hexdigest()[:12]
     if preview_api_url is not None and preview_api_url != "/api/preview":
         parsed_api = urlparse(preview_api_url)
         if (parsed_api.scheme != "https" or not parsed_api.hostname or parsed_api.username is not None
@@ -101,6 +103,7 @@ footer p {{ margin: 6px 0; }}
 <div class="preview-options"><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
 <p class="hint">Up to 3 minutes · Opening excerpt · Usually ready within two minutes</p>
 <p class="hint">The free preview service may need an extra minute to wake up for your first request.</p>
+<p class="hint">If another preview is running, we’ll wait for a slot automatically. Waiting and generation can take up to four minutes.</p>
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
 </form>
 <p id="preview-status" role="status" aria-live="polite"></p>
@@ -116,7 +119,7 @@ footer p {{ margin: 6px 0; }}
 <section class="quick-start"><h2>Make it part of your listening routine</h2><p>Liked the preview? Turn your newsletters into a personal podcast feed. Narrate full articles or make spoken summaries, and listen in your usual podcast app.</p><div class="actions"><a class="button secondary" href="{REPO}#generate-full-articles-from-your-own-sources">Set up your own podcast ↗</a>{demo_link}</div></section>
 </main>
 <footer><p><a href="{REPO}">Newsletter to Podcast</a> is an open-source Python tool. The code and original demo are MIT licensed.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p><p>Use sources you are authorized to access and convert. Share generated audio only with permission.</p></footer>
-</div><script src="preview.js" defer></script></body></html>
+</div><script src="preview.js?v={script_version}" defer></script></body></html>
 '''
 
 

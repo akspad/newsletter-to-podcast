@@ -110,6 +110,7 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
         if origin and permitted:
             response.headers.update({"Access-Control-Allow-Origin": origin, "Vary": "Origin",
                                      "Access-Control-Allow-Methods": "POST, OPTIONS",
+                                     "Access-Control-Expose-Headers": "Retry-After",
                                      "Access-Control-Allow-Headers": "Content-Type"})
         return response
 
@@ -123,12 +124,14 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
             payload = preview.validate(await request.json())
         except (ValueError, TypeError):
             return web.json_response({"error": "Provide one public HTTP(S) article URL or pasted text and an available voice."}, status=400)
+        if slots.locked():
+            return web.json_response({"error": "The preview service is busy. Please try again shortly.",
+                                      "code": "preview_busy"}, status=503, headers={"Retry-After": "5"})
+        # Busy requests never start work, so waiting for capacity must not spend
+        # the client's generation allowance. Admission below has no await gap.
         if not limiter.allow(request.remote or "unknown"):
             return web.json_response({"error": "Preview limit reached. Please try again later."}, status=429,
                                      headers={"Retry-After": "600"})
-        if slots.locked():
-            return web.json_response({"error": "The preview service is busy. Please try again shortly."}, status=503,
-                                     headers={"Retry-After": "15"})
         async with slots:
             try:
                 audio = await generator(payload)

@@ -11,6 +11,45 @@
   let audioUrl;
   let pending = false;
 
+  function pause(milliseconds, signal) {
+    return new Promise((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        reject(new DOMException('Preview request timed out', 'AbortError'));
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      }, milliseconds);
+      if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort, {once: true});
+    });
+  }
+
+  async function requestPreview(payload, signal) {
+    const capacityDeadline = Date.now() + 120000;
+    while (true) {
+      const response = await fetch(form.dataset.endpoint, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        credentials: 'omit', referrerPolicy: 'no-referrer', signal, body: payload,
+      });
+      if (response.ok) return response;
+      const error = await response.json().catch(() => ({}));
+      // Retry only a confirmed rejection before generation started. Support
+      // the previous backend's exact busy response while a deploy rolls out.
+      const busy = response.status === 503 && (error.code === 'preview_busy' ||
+        error.error === 'The preview service is busy. Please try again shortly.');
+      if (!busy) throw new Error(typeof error.error === 'string' ? error.error : 'The preview service is unavailable. Please try again shortly.');
+      const delay = Math.min(15, Math.max(1, Number(response.headers.get('Retry-After')) || 5)) * 1000;
+      if (Date.now() + delay >= capacityDeadline) {
+        throw new Error('The demo is still handling other previews. Please try again in a couple of minutes.');
+      }
+      button.textContent = 'Waiting for your preview…';
+      status.textContent = 'Another preview is finishing. Yours will start automatically when a slot opens. Waiting and generation can take up to four minutes.';
+      await pause(delay, signal);
+    }
+  }
+
   async function waitForService(signal) {
     const endpoint = new URL(form.dataset.endpoint, window.location.href);
     const health = new URL('../health', endpoint);
@@ -26,10 +65,10 @@
         if (response.ok && (await response.json()).status === 'ok') return;
       } catch (error) {
         // Render may return a loading page while a free service spins up.
-        // Retry only the health check; never submit generation twice.
+        // Wake-up retries only check health; they never start generation.
         if (error.name === 'AbortError' || !(error instanceof TypeError || error instanceof SyntaxError)) throw error;
       }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await pause(2000, signal);
     }
     throw new DOMException('Service wake-up timed out', 'AbortError');
   }
@@ -63,24 +102,15 @@
     audio.pause();
     result.hidden = true;
     const controller = new AbortController();
+    const payload = JSON.stringify({url: articleUrl, text: paste ? text.value.trim() : '', voice: form.elements.voice.value});
     let timeout = setTimeout(() => controller.abort(), 90000);
     try {
       await waitForService(controller.signal);
       clearTimeout(timeout);
-      timeout = setTimeout(() => controller.abort(), 130000);
+      // Allow up to two minutes waiting for capacity, plus a two-minute job.
+      timeout = setTimeout(() => controller.abort(), 250000);
       status.textContent = paste ? 'Turning your text into speech. This can take up to two minutes…' : 'Reading your article and generating speech. This can take up to two minutes…';
-      const response = await fetch(form.dataset.endpoint, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        credentials: 'omit',
-        referrerPolicy: 'no-referrer',
-        signal: controller.signal,
-        body: JSON.stringify({url: articleUrl, text: paste ? text.value.trim() : '', voice: form.elements.voice.value}),
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(typeof error.error === 'string' ? error.error : 'The preview service is unavailable. Please try again shortly.');
-      }
+      const response = await requestPreview(payload, controller.signal);
       if (!response.headers.get('Content-Type')?.startsWith('audio/mpeg')) throw new Error('The service did not return audio. Please try again.');
       const blob = await response.blob();
       if (!blob.size || blob.size > 2 * 1024 * 1024) throw new Error('The service returned an invalid audio preview.');

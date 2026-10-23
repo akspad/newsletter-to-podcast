@@ -166,9 +166,17 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
             job = asyncio.create_task(client.post("/api/preview", json={"text": "article"}))
             await asyncio.wait_for(entered.wait(), 3)
             self.assertEqual((await client.get("/health")).status, 200)
-            self.assertEqual((await client.post("/api/preview", json={"text": "article"})).status, 503)
+            for _ in range(7):
+                busy = await client.post("/api/preview", json={"text": "article"})
+                self.assertEqual(busy.status, 503)
+                self.assertEqual((await busy.json())["code"], "preview_busy")
+                self.assertEqual(busy.headers["Retry-After"], "5")
             release.set()
             self.assertEqual((await job).status, 200)
+            # Seven busy rejections did not consume the five-job allowance.
+            for _ in range(4):
+                self.assertEqual((await client.post("/api/preview", json={"text": "article"})).status, 200)
+            self.assertEqual((await client.post("/api/preview", json={"text": "article"})).status, 429)
         finally:
             release.set()
             await client.close()
