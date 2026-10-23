@@ -36,6 +36,7 @@ class SourceDownloadError(RuntimeError):
             protection = "vercel_challenge"
         elif headers.get("cf-mitigated", "").lower() == "challenge":
             protection = "cloudflare_challenge"
+        self.protection = protection
         delay = headers.get("retry-after", "")
         delay = delay if re.fullmatch(r"[0-9]{1,6}", delay) else "present" if delay else "none"
         self.diagnostics = f"server={server} protection={protection} retry_after={delay}"
@@ -98,12 +99,14 @@ class Substack:
                     raise ValueError("Source redirect cannot downgrade HTTPS")
                 url, params = destination, None
                 continue
-            if r.status_code == 429:
-                time.sleep(5)
-                continue
             if r.status_code >= 400:
-                raise SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code,
-                                          headers=getattr(r, "headers", {}), body=body)
+                error = SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code,
+                                            headers=getattr(r, "headers", {}), body=body)
+                # A browser challenge cannot be completed by repeating this request.
+                if r.status_code == 429 and error.protection == "none":
+                    time.sleep(5)
+                    continue
+                raise error
             # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
             text = body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace")
             return text if raw else json.loads(text)

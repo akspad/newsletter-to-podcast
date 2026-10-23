@@ -109,6 +109,19 @@ class DestinationTests(unittest.TestCase):
             self.assertEqual(error.exception.status_code, status)
             self.assertEqual(len(calls), 5 if status == 429 else 1)
 
+    def test_browser_challenges_are_not_retried(self):
+        for headers, body in [({"x-vercel-mitigated": "challenge"}, b"Vercel Security Checkpoint"),
+                              ({"cf-mitigated": "challenge"}, b"Check your browser")]:
+            calls = []
+            response = types.SimpleNamespace(is_redirect=False, status_code=429, headers=headers)
+            fake = self.fake_transport([(response, [body])], calls)
+            with patch.dict(sys.modules, {"curl_cffi": fake}), patch("security.public_destination", return_value=(
+                    "fictional.example", 443, "93.184.216.34")), patch("substack.time.sleep") as pause, \
+                    self.assertRaises(substack.SourceDownloadError):
+                substack.Substack("").get("https://fictional.example")
+            self.assertEqual(len(calls), 1)
+            pause.assert_not_called()
+
     def test_challenge_diagnostics_exclude_response_content_and_tokens(self):
         cases = [({"Server": "Vercel", "X-Vercel-Mitigated": "challenge", "Set-Cookie": "SECRET"},
                   b"SECRET", "server=vercel protection=vercel_challenge retry_after=none"),

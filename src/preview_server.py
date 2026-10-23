@@ -71,6 +71,8 @@ async def generate_audio(payload):
                                 r" retry_after=(?:[0-9]{1,6}|present|none))?", line):
                     print(line, flush=True)
             if process.returncode:
+                if process.returncode == 3:
+                    raise PreviewError(preview.ARTICLE_BLOCKED_MESSAGE, 422)
                 if process.returncode == 2:
                     raise PreviewError("We couldn't read that article. Try a direct public article link or paste its text.", 422)
                 raise PreviewError("Audio generation is unavailable. Please try again shortly.")

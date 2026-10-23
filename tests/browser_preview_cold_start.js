@@ -104,6 +104,19 @@
     if (failedPosts !== 1) throw new Error('A provider failure replayed generation');
     if (!timing.hidden || eta.textContent || elapsed.textContent) throw new Error('Timer stayed active after failure');
 
+    const blockedMessage = 'This site blocked access to the article. Choose “Paste text” and paste the article text you can access.';
+    let blockedPosts = 0;
+    window.fetch = async (input) => {
+      if (new URL(input, window.location.href).pathname === '/health') return Response.json({status: 'ok'});
+      blockedPosts++;
+      return Response.json({error: blockedMessage}, {status: 422});
+    };
+    form.requestSubmit();
+    await waitFor(() => !errorMessage.hidden);
+    if (blockedPosts !== 1 || errorMessage.textContent !== blockedMessage || button.disabled || !timing.hidden) throw new Error('Blocked article did not display the paste-text prompt');
+    document.querySelector('input[name="input-mode"][value="text"]').click();
+    if (document.querySelector('#text-input').hidden || document.querySelector('#article-text').disabled) throw new Error('Paste text was not available after a blocked article');
+
     window.fetch = async () => new Response('', {status: 404});
     form.requestSubmit();
     await waitFor(() => !errorMessage.hidden);

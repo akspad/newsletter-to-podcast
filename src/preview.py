@@ -7,12 +7,15 @@ import re
 import subprocess
 import sys
 import time
+from substack import SourceDownloadError
 
 MAX_SECONDS = 60
 MAX_WORDS = 130
 MAX_EXCERPT_CHARS = 1000
 MAX_INPUT_BYTES = 100_000
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
+ARTICLE_BLOCKED_MESSAGE = ("This site blocked access to the article. Choose “Paste text” "
+                           "and paste the article text you can access.")
 VOICES = {
     "en-US-AndrewNeural": "Andrew · English (US)",
     "en-US-AriaNeural": "Aria · English (US)",
@@ -108,7 +111,7 @@ def article_metadata(soup, url):
 
 def article_text(url):
     from bs4 import BeautifulSoup
-    from substack import SourceDownloadError, Substack
+    from substack import Substack
 
     # Reuse the bounded downloader: public destinations only, DNS pinned, and
     # every redirect revalidated. No subscription cookies or private config.
@@ -200,6 +203,12 @@ if __name__ == "__main__":
     # Worker errors intentionally exclude URLs, pasted text and provider details.
     try:
         generate(json.loads(sys.stdin.buffer.read(MAX_INPUT_BYTES + 20_000)), Path(sys.argv[1]))
+    except SourceDownloadError as error:
+        if error.protection != "none" or error.status_code in (401, 403, 429):
+            print(ARTICLE_BLOCKED_MESSAGE, file=sys.stderr)
+            sys.exit(3)
+        print("We couldn't read that article. Try a direct public article link or paste its text.", file=sys.stderr)
+        sys.exit(2)
     except ValueError:
         print("We couldn't read that article. Try a direct public article link or paste its text.", file=sys.stderr)
         sys.exit(2)

@@ -2,6 +2,7 @@
 import asyncio
 import json
 import io
+import runpy
 from pathlib import Path
 import shutil
 import subprocess
@@ -136,6 +137,21 @@ class PreviewTests(unittest.TestCase):
             self.assertTrue(result.is_file())
             self.assertGreater(tts.duration(result), 59)
             self.assertLessEqual(tts.duration(result), 60)
+
+    def test_worker_classifies_source_errors_without_exposing_provider_details(self):
+        from substack import SourceDownloadError
+        for status, exit_code in [(401, 3), (403, 3), (429, 3), (404, 2), (500, 2)]:
+            stderr = io.StringIO()
+            payload = io.TextIOWrapper(io.BytesIO(json.dumps({"url": "https://fictional.example/story"}).encode()))
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp, \
+                    patch("substack.Substack.get", side_effect=SourceDownloadError("PRIVATE provider response", status)), \
+                    patch("sys.stdin", payload), patch("sys.stderr", stderr), patch("sys.argv", ["preview.py", tmp]), \
+                    self.assertRaises(SystemExit) as error:
+                runpy.run_path(str(Path(preview.__file__)), run_name="__main__")
+            self.assertEqual(error.exception.code, exit_code)
+            self.assertNotIn("PRIVATE", stderr.getvalue())
+            if exit_code == 3:
+                self.assertIn(preview.ARTICLE_BLOCKED_MESSAGE, stderr.getvalue())
 
     def test_rate_limits_and_expiry(self):
         limiter = preview_server.RateLimit()
@@ -302,6 +318,21 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(preview_server.PreviewError):
                 await preview_server.generate_audio({"url": "https://fictional.example/story"})
         self.assertEqual(output.getvalue(), diagnostic.decode() + "\n")
+
+    async def test_blocked_article_error_reaches_api_as_a_paste_text_prompt(self):
+        process = type("Process", (), {"pid": 98765, "returncode": 3,
+                                       "communicate": AsyncMock(return_value=(None, b"PRIVATE provider output")),
+                                       "wait": AsyncMock(return_value=0)})()
+        client = TestClient(TestServer(preview_server.create_app()))
+        await client.start_server()
+        try:
+            with patch("preview_server.asyncio.create_subprocess_exec", AsyncMock(return_value=process)), \
+                    patch("preview_server.os.killpg"):
+                response = await client.post("/api/preview", json={"url": "https://fictional.example/story"})
+            self.assertEqual(response.status, 422)
+            self.assertEqual(await response.json(), {"error": preview.ARTICLE_BLOCKED_MESSAGE})
+        finally:
+            await client.close()
 
     async def test_timeout_terminates_worker_and_removes_files(self):
         paths = []
