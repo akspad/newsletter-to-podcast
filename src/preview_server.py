@@ -71,7 +71,7 @@ async def generate_audio(payload):
                                 r" retry_after=(?:[0-9]{1,6}|present|none))?", line) or
                         re.fullmatch(r"preview_stage stage=(extract|speech|trim|validate)"
                                      r" status=(completed|failed|retry) elapsed=\d+\.\ds"
-                                     r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: attempt=[12])?", line)):
+                                     r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: attempt=[123])?", line)):
                     print(line, flush=True)
             if process.returncode:
                 if process.returncode == 3:

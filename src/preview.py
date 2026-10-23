@@ -113,9 +113,9 @@ async def narrate(text, voice, path):
     if cafile:
         edge_tts.communicate._SSL_CTX.load_verify_locations(cafile=cafile)
     # Edge sometimes closes a successful connection without returning speech.
-    # Retry once within generate's existing 70-second total speech deadline.
+    # Retry up to twice within generate's 70-second total speech deadline.
     # Start a fresh communicator and file so partial audio cannot be duplicated.
-    for attempt in (1, 2):
+    for attempt in (1, 2, 3):
         started = time.monotonic()
         try:
             count = 0
@@ -133,10 +133,10 @@ async def narrate(text, voice, path):
             return
         except (edge_tts.exceptions.NoAudioReceived, ClientConnectionError, ClientResponseError) as error:
             transient = not isinstance(error, ClientResponseError) or error.status == 429 or error.status >= 500
-            if attempt == 2 or not transient:
+            if attempt == 3 or not transient:
                 raise
             stage_log('speech', 'retry', started, error, attempt)
-            await asyncio.sleep(1)
+            await asyncio.sleep(attempt)
 
 
 def generate(payload, directory):

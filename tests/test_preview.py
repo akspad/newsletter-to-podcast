@@ -325,17 +325,17 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_transient_speech_failure_retries_once_with_fresh_audio_and_same_voice(self):
+    async def test_transient_speech_failures_retry_with_fresh_audio_and_same_voice(self):
         from aiohttp import ClientConnectionError
         from edge_tts.exceptions import NoAudioReceived
-        for failure in (NoAudioReceived, ClientConnectionError):
+        for failure, failures in ((NoAudioReceived, 2), (ClientConnectionError, 1)):
             attempts = []
             class Speech:
                 def __init__(self, *args, **kwargs):
                     attempts.append((args, kwargs))
                     self.attempt = len(attempts)
                 async def stream(self):
-                    if self.attempt == 1:
+                    if self.attempt <= failures:
                         yield {'type': 'audio', 'data': b'PARTIAL'}
                         raise failure('PRIVATE provider details')
                     yield {'type': 'audio', 'data': b'COMPLETE'}
@@ -346,10 +346,10 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 audio = Path(tmp) / 'speech.mp3'
                 await preview.narrate('Original text', 'en-US-AndrewNeural', audio)
                 self.assertEqual(audio.read_bytes(), b'COMPLETE')
-            self.assertEqual(len(attempts), 2)
-            self.assertEqual(attempts[0], attempts[1])
+            self.assertEqual(len(attempts), failures + 1)
+            self.assertTrue(all(attempt == attempts[0] for attempt in attempts))
             self.assertIn('status=retry', stderr.getvalue())
-            self.assertIn('attempt=2', stderr.getvalue())
+            self.assertIn(f'attempt={failures + 1}', stderr.getvalue())
             self.assertNotIn('PRIVATE', stderr.getvalue())
 
     async def test_speech_retry_does_not_repeat_nontransient_failures(self):
