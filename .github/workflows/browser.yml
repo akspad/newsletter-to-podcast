@@ -6,6 +6,7 @@ on:
       - src/demo.py
       - src/website.py
       - src/preview.js
+      - tests/browser_preview_cold_start.js
       - src/favicon.svg
       - samples/demo.mp3
       - samples/demo.json
@@ -82,6 +83,7 @@ jobs:
           agent-browser set viewport 390 844
           agent-browser eval 'if (document.documentElement.scrollWidth > window.innerWidth) throw new Error("Mobile horizontal overflow");'
           agent-browser screenshot browser-results/mobile.png --full
+          agent-browser eval --stdin < tests/browser_preview_cold_start.js
           agent-browser errors
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

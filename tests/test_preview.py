@@ -154,6 +154,40 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
             release.set()
             await client.close()
 
+    async def test_small_instance_runs_one_job_and_health_remains_responsive(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def blocked(payload):
+            entered.set()
+            await release.wait()
+            return b"ID3-audio-fixture"
+        client = TestClient(TestServer(preview_server.create_app(generator=blocked, max_concurrent=1)))
+        await client.start_server()
+        try:
+            job = asyncio.create_task(client.post("/api/preview", json={"text": "article"}))
+            await asyncio.wait_for(entered.wait(), 3)
+            self.assertEqual((await client.get("/health")).status, 200)
+            self.assertEqual((await client.post("/api/preview", json={"text": "article"})).status, 503)
+            release.set()
+            self.assertEqual((await job).status, 200)
+        finally:
+            release.set()
+            await client.close()
+
+    async def test_render_https_page_is_allowed_behind_http_proxy(self):
+        async def generator(payload):
+            return b"ID3-audio-fixture"
+        with patch.dict("os.environ", {"RENDER_EXTERNAL_URL": "https://preview.onrender.com/"}):
+            app = preview_server.create_app(generator=generator)
+        client = TestClient(TestServer(app))
+        await client.start_server()
+        try:
+            response = await client.post("/api/preview", json={"text": "article"},
+                                         headers={"Origin": "https://preview.onrender.com"})
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://preview.onrender.com")
+        finally:
+            await client.close()
+
 
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_worker_excludes_secrets_and_removes_temporary_audio(self):

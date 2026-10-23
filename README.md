@@ -34,6 +34,25 @@ Public URLs use the same bounded, DNS-pinned downloader as the podcast pipeline,
 
 ### Connect the GitHub Pages demo
 
+#### Render Free (recommended for the demo)
+
+[Deploy the free preview backend on Render](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fakspad%2Fnewsletter-to-podcast)
+
+Sign in to Render and review the blueprint. It creates one **Free** Docker web service named `newsletter-audio-preview` with Python 3.12, ffmpeg, a `/health` check, and permission for `https://akspad.github.io` to call it. No database, disk or API keys are required. The image runs as a non-root user and includes only public code, locked dependencies and the original sample. The free service processes one preview at a time (`PREVIEW_CONCURRENCY=1`) to fit its small CPU/memory allocation. For your own fork, change `PREVIEW_ALLOWED_ORIGINS` to your Pages origin. Render can choose a different hostname if the service name is already taken; use the actual URL shown in its dashboard.
+
+After the service shows **Live**, open `https://YOUR-SERVICE.onrender.com/health` and confirm `{"status":"ok"}`. Test a pasted-text preview from `https://YOUR-SERVICE.onrender.com/` before connecting Pages. Then set the GitHub repository variable `PREVIEW_API_URL` to `https://YOUR-SERVICE.onrender.com/api/preview` and run the **Newsletter podcast** workflow. Verify article links and pasted text from the Pages demo. Edge TTS access must be checked from the deployed host as well as locally.
+
+Render Free sleeps after 15 minutes without traffic and can take about a minute to start. On a generation request, the page waits up to 90 seconds for `/health`, then gives the audio request its own 130-second timeout. Health checks are retried while the host wakes; generation is submitted only once. It does not send background keep-alive traffic. In-memory rate limits reset when Render restarts the service. See [Render's free-service limits](https://render.com/docs/free).
+
+To run the same image locally:
+
+```sh
+docker build -t newsletter-preview .
+docker run --rm -p 8000:8000 newsletter-preview
+```
+
+#### Other Linux hosts
+
 GitHub Pages serves the interface but cannot run Python or generate speech. Host the backend on a Linux service with Python and ffmpeg, expose it over HTTPS, and run one instance with:
 
 ```sh
@@ -46,7 +65,7 @@ Use your own Pages **origin** in `PREVIEW_ALLOWED_ORIGINS` (no repository path o
 
 The API accepts `POST /api/preview` with JSON containing either `url` or `text`, plus an optional `voice`. It returns MP3 bytes directly; `/health` reports process health without calling providers. Configure a hosting request timeout above 120 seconds and HTTPS termination. Run the demo separately from your personal pipeline without subscription secrets or mounted private state.
 
-The server allows two simultaneous jobs, five attempts per client address per ten minutes, and sixty attempts total per hour. Limits are in memory and reset on restart. Behind a reverse proxy, clients share its address and therefore its five-attempt limit; forwarded IP headers are deliberately not trusted. For multiple instances or a larger public demo, put shared rate limiting at the gateway. The worker and its subprocesses are terminated after two minutes. Temporary audio files are removed after every job; audio returns only to the requesting browser and is never added to RSS or a public gallery. Access logs are disabled in the app; configure your host's logs separately. Text goes to Microsoft for speech generation.
+The server defaults to two simultaneous jobs (one in the Render Free blueprint), five attempts per client address per ten minutes, and sixty attempts total per hour. Limits are in memory and reset on restart. Behind a reverse proxy, clients share its address and therefore its five-attempt limit; forwarded IP headers are deliberately not trusted. For multiple instances or a larger public demo, put shared rate limiting at the gateway. The worker and its subprocesses are terminated after two minutes. Temporary audio files are removed after every job; audio returns only to the requesting browser and is never added to RSS or a public gallery. Access logs are disabled in the app; configure your host's logs separately. Text goes to Microsoft for speech generation.
 
 ## Quick start: hear a sample in under a minute
 

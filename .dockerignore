@@ -1,0 +1,11 @@
+# Only public code, the dependency lock and the original demo enter the image.
+*
+!Dockerfile
+!requirements.txt
+!LICENSE
+!src/
+!src/**
+!samples/
+!samples/demo.mp3
+**/__pycache__/
+**/*.pyc

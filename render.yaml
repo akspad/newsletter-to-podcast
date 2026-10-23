@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: newsletter-audio-preview
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+    numInstances: 1
+    envVars:
+      - key: PREVIEW_ALLOWED_ORIGINS
+        value: https://akspad.github.io
+      - key: PREVIEW_HOST
+        value: 0.0.0.0
+      - key: PREVIEW_CONCURRENCY
+        value: "1"
+      - key: PORT
+        value: "10000"

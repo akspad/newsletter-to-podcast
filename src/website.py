@@ -100,6 +100,7 @@ footer p {{ margin: 6px 0; }}
 <p class="hint" id="article-help">Use a direct article link. If a site blocks access or needs a login, try pasting text you can access.</p>
 <div class="preview-options"><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
 <p class="hint">Up to 3 minutes · Opening excerpt · Usually ready within two minutes</p>
+<p class="hint">The free preview service may need an extra minute to wake up for your first request.</p>
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
 </form>
 <p id="preview-status" role="status" aria-live="polite"></p>

@@ -79,10 +79,16 @@ async def generate_audio(payload):
             await process.wait()
 
 
-def create_app(allowed_origins=(), generator=generate_audio):
+def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
+    if max_concurrent not in (1, 2):
+        raise ValueError("Preview concurrency must be 1 or 2")
     limiter = RateLimit()
-    slots = asyncio.Semaphore(2)
-    origins = frozenset(allowed_origins)
+    slots = asyncio.Semaphore(max_concurrent)
+    origins = set(allowed_origins)
+    # Render terminates HTTPS before forwarding HTTP to the container. Its
+    # trusted canonical URL lets the backend's own demo work behind that proxy.
+    if public_url := os.environ.get("RENDER_EXTERNAL_URL"):
+        origins.add(public_url.rstrip("/"))
     for origin in origins:
         parsed = urlparse(origin)
         if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.path or parsed.query or parsed.fragment or parsed.username:
@@ -121,7 +127,7 @@ def create_app(allowed_origins=(), generator=generate_audio):
             return web.json_response({"error": "Preview limit reached. Please try again later."}, status=429,
                                      headers={"Retry-After": "600"})
         if slots.locked():
-            return web.json_response({"error": "Both preview slots are busy. Please try again shortly."}, status=503,
+            return web.json_response({"error": "The preview service is busy. Please try again shortly."}, status=503,
                                      headers={"Retry-After": "15"})
         async with slots:
             try:
@@ -163,5 +169,5 @@ if __name__ == "__main__":
     if os.name != "posix" or not all(shutil.which(name) for name in ("ffmpeg", "ffprobe")):
         sys.exit("The preview server needs macOS/Linux and ffmpeg (including ffprobe).")
     configured = [value.strip() for value in os.environ.get("PREVIEW_ALLOWED_ORIGINS", "").split(",") if value.strip()]
-    web.run_app(create_app(configured), host=os.environ.get("PREVIEW_HOST", "127.0.0.1"),
+    web.run_app(create_app(configured, max_concurrent=int(os.environ.get("PREVIEW_CONCURRENCY", "2"))), host=os.environ.get("PREVIEW_HOST", "127.0.0.1"),
                 port=int(os.environ.get("PORT", "8000")), access_log=None)

@@ -98,10 +98,11 @@ def generate(payload, directory):
     text = excerpt(payload["text"] or article_text(payload["url"]))
     raw, output = directory / "speech.mp3", directory / "preview.mp3"
     asyncio.run(asyncio.wait_for(narrate(text, payload["voice"], raw), timeout=70))
+    # Edge already returns MP3. Copy its audio frames while trimming instead of
+    # decoding, loudness-filtering and encoding again on the small free CPU.
     subprocess.run(["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", str(raw),
-                    "-t", "179.9", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-                    "-ar", "44100", "-ac", "1", "-b:a", "64k", str(output)],
-                   check=True, timeout=20, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    "-map", "0:a:0", "-t", "179.9", "-c:a", "copy", str(output)],
+                   check=True, timeout=40, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     from tts import duration
     seconds = duration(output)
     if not 0 < seconds <= MAX_SECONDS or output.stat().st_size > MAX_AUDIO_BYTES:
