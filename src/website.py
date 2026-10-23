@@ -105,13 +105,12 @@ footer p {{ margin: 6px 0; }}
 <article class="feature"><h2>Your own installation</h2><p>Run locally or in your own GitHub repository. Choose your sources and where to host your audio.</p></article>
 </section>
 <section class="preview" aria-labelledby="preview-heading">
-<h2 id="preview-heading">Try it with your own article</h2><p class="hint">Paste a public article link, choose a voice, and press play when your preview is ready.</p>
+<h2 id="preview-heading">Try it with your own article</h2><p class="hint" id="article-help">Use a direct article link. If a site blocks access or needs a login, try pasting text you can access.</p>
 {unavailable}
 <form id="preview-form" data-endpoint="{endpoint}">
 <fieldset class="input-modes"><legend>Bring your article</legend><label><input type="radio" name="input-mode" value="url" checked> Article link</label><label><input type="radio" name="input-mode" value="text"> Paste text</label></fieldset>
 <div id="url-input"><label for="article-url">Public article URL</label><input id="article-url" name="url" type="url" placeholder="https://your-favorite-blog.com/an-article" maxlength="8192" aria-describedby="article-help" required></div>
 <div id="text-input" hidden><label for="article-text">Article text</label><textarea id="article-text" name="text" placeholder="Paste the article or an excerpt here…" maxlength="100000" disabled></textarea></div>
-<p class="hint" id="article-help">Use a direct article link. If a site blocks access or needs a login, try pasting text you can access.</p>
 <div class="preview-options"><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
 <p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p>
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
