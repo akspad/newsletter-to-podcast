@@ -124,7 +124,7 @@ footer p {{ margin: 6px 0; }}
 </section>
 <section class="quick-start"><h2>Make it part of your listening routine</h2><p>Liked the preview? Turn your newsletters into a personal podcast feed. Narrate full articles or make spoken summaries, and listen in your usual podcast app.</p><div class="actions"><a class="button secondary" href="{REPO}#generate-full-articles-from-your-own-sources">Set up your own podcast ↗</a>{demo_link}</div></section>
 </main>
-<footer><p><a href="{REPO}">Newsletter to Podcast</a> is an open-source Python tool. The code and original demo are MIT licensed.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p><p>Use sources you are authorized to access and convert. Share generated audio only with permission.</p></footer>
+<footer><p><a href="{REPO}">Newsletter to Podcast</a> is an open-source Python tool. The code and original demo are MIT licensed.</p><p>Use sources you are authorized to access and convert. Share generated audio only with permission.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p></footer>
 </div><script src="preview.js?v={script_version}" defer></script></body></html>
 '''
 
