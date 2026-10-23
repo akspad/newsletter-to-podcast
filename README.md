@@ -6,7 +6,9 @@ Full article narration uses Edge TTS, with **no API key or paid TTS subscription
 
 Choose **spoken summaries** or **full article narration**. Set a maximum episode length; long full articles become multiple parts rather than losing the rest of the article.
 
-**[Listen to the demo](https://akspad.github.io/newsletter-to-podcast/)** · [Quick start](#quick-start-hear-a-sample-in-under-a-minute)
+**[Try the article-to-audio demo](https://akspad.github.io/newsletter-to-podcast/)** · [Run the interactive demo](#run-the-interactive-demo) · [Offline sample](#quick-start-hear-a-sample-in-under-a-minute)
+
+The demo leads with your own reading: paste a public article URL or its text, choose a voice, and generate an opening excerpt of **up to three minutes** with Edge TTS. No Microsoft login, API key or Gemini account is needed. Live previews require the small backend below; a static page without a connected backend explains this and offers the original audio sample.
 
 - Reads Substack publications, RSS and Atom feeds, and simple article listing pages.
 - Generates summaries with Gemini and audio with Edge TTS.
@@ -14,9 +16,37 @@ Choose **spoken summaries** or **full article narration**. Set a maximum episode
 - Runs locally or on a configurable schedule in your own GitHub repository: four times a day by default.
 - Keeps your source list, credentials, and processing state out of the shared code.
 
-This is a Python command-line project, not a hosted service. It reads the text a source makes available to you; it does not bypass paywalls, and feed excerpts may be shorter than the original article.
+The personal podcast pipeline is a Python command-line project. The optional demo backend generates individual previews without reading your subscriptions or writing to your podcast feed. The project reads the text a source makes available to you; it does not bypass paywalls, and feed excerpts may be shorter than the original article.
 
 Built by [@akspad](https://x.com/akspad)
+
+## Run the interactive demo
+
+Install Python 3.12+, ffmpeg (including ffprobe), and the dependencies using the [installation commands](#generate-full-articles-from-your-own-sources), then run:
+
+```sh
+python src/preview_server.py
+```
+
+Open **http://localhost:8000/**, paste a direct public article link or select **Paste text**, choose a narrator, and select **Generate audio preview**. The result has a player, MP3 download and original-article link. The preview narrates the opening excerpt, not a summary. It selects up to 390 words / 3,000 characters and measures the finished MP3 to enforce a strict 180-second limit. The final limit can cut the ending for a slow voice. All three bundled voices speak English.
+
+Public URLs use the same bounded, DNS-pinned downloader as the podcast pipeline, with every redirect checked against private and reserved destinations. Extraction looks for an article or main-content element; blocked sites, paywalls and some page layouts need the paste-text fallback. Edge TTS is an unofficial online service and can change or become unavailable.
+
+### Connect the GitHub Pages demo
+
+GitHub Pages serves the interface but cannot run Python or generate speech. Host the backend on a Linux service with Python and ffmpeg, expose it over HTTPS, and run one instance with:
+
+```sh
+PREVIEW_HOST=0.0.0.0 PORT=8000 \
+PREVIEW_ALLOWED_ORIGINS=https://akspad.github.io \
+python src/preview_server.py
+```
+
+Use your own Pages **origin** in `PREVIEW_ALLOWED_ORIGINS` (no repository path or trailing slash). Multiple exact origins can be comma-separated. Set the GitHub repository **variable** `PREVIEW_API_URL` to `https://YOUR-BACKEND-HOST/api/preview`, then run the existing Newsletter podcast workflow to rebuild/publish the landing page. This variable is a public endpoint, not a secret. Local static builds can set the same environment variable when running `--demo`. Until it is configured, generation is disabled with a local-setup link; the original sample remains playable.
+
+The API accepts `POST /api/preview` with JSON containing either `url` or `text`, plus an optional `voice`. It returns MP3 bytes directly; `/health` reports process health without calling providers. Configure a hosting request timeout above 120 seconds and HTTPS termination. Run the demo separately from your personal pipeline without subscription secrets or mounted private state.
+
+The server allows two simultaneous jobs, five attempts per client address per ten minutes, and sixty attempts total per hour. Limits are in memory and reset on restart. Behind a reverse proxy, clients share its address and therefore its five-attempt limit; forwarded IP headers are deliberately not trusted. For multiple instances or a larger public demo, put shared rate limiting at the gateway. The worker and its subprocesses are terminated after two minutes. Temporary audio files are removed after every job; audio returns only to the requesting browser and is never added to RSS or a public gallery. Access logs are disabled in the app; configure your host's logs separately. Text goes to Microsoft for speech generation.
 
 ## Quick start: hear a sample in under a minute
 
@@ -89,7 +119,7 @@ python src/main.py --env-file .env
 python -m http.server 8000 --bind 127.0.0.1 --directory site
 ```
 
-Open `http://localhost:8000/feed.xml` to inspect your personal feed. The root page shows only the original project demo. To listen on another device, host the contents of `site/` at a URL your podcast app can reach and set `SITE_URL` to that address before generating it. Choose authenticated hosting if the content should be private; the local HTTP preview has no access controls.
+Open `http://localhost:8000/feed.xml` to inspect your personal feed. The root page shows the project demo, without your personal episode list. To listen on another device, host the contents of `site/` at a URL your podcast app can reach and set `SITE_URL` to that address before generating it. Choose authenticated hosting if the content should be private; the local HTTP preview has no access controls.
 
 Full narration uses Edge TTS and needs internet access, but does not require Gemini. Summary mode needs a Gemini API key.
 
@@ -162,7 +192,7 @@ Leave `LOOKBACK_HOURS` blank for automatic catch-up. If upgrading from an older 
 
 Full narrations include the available article text in their podcast descriptions, including every split part, within the per-article description budget. New summary episodes include the generated spoken summary in their descriptions. Existing summary descriptions are preserved because their original scripts were not saved. Existing full-narration placeholders are updated on the next successful run when the article is still returned by its configured source; audio, dates and episode identities are preserved. Unavailable articles retain their existing notes for a later retry.
 
-This replaces the old generic full-narration placeholder and no longer requires `INCLUDE_FULL_TEXT`. The landing page continues to show only the original demo. Article text is part of the podcast feed output; subscription lists, per-source settings, credentials and retry payloads stay in private configuration and encrypted processing state. Source titles and article text are omitted from default workflow logs.
+This replaces the old generic full-narration placeholder and no longer requires `INCLUDE_FULL_TEXT`. The landing page continues to show the project demo without personal feed metadata. Article text is part of the podcast feed output; subscription lists, per-source settings, credentials and retry payloads stay in private configuration and encrypted processing state. Source titles and article text are omitted from default workflow logs.
 
 Each full-narration episode opens with the newsletter name, article title, and author, followed by “Part X of Y” when split into multiple parts. The default per-file duration limit is 10 minutes; an explicit `MAX_EPISODE_MINUTES` value in your environment or repository variables overrides it. The renderer groups complete narrated passages at sentence or paragraph boundaries and measures their audio, including the spoken introduction, to stay within the per-file duration limit. If one sentence is too long, it falls back to a clause or word boundary; it does not cut the finished audio mid-word. An unusually short limit that cannot fit the introduction and part number fails generation for retry rather than clipping them. Failed TTS passages likewise fail the article and queue a retry rather than silently omitting words. This applies to newly generated articles; existing published audio is preserved.
 
@@ -218,7 +248,7 @@ Private hosting limits distribution; it does not grant rights to access or conve
 
 Keep the default `EPISODE_MODE=summary` for public feeds and remove per-source `full` overrides unless you have redistribution rights. Summaries should use original wording, avoid extensive quotations, and retain source links; review them before sharing. Summary mode reduces copying but does not guarantee that publication is permitted. Changing modes affects new episodes only: existing full audio and article-text descriptions remain published until you remove them from the host and feed. Copies already downloaded may persist.
 
-Set `PUBLISH_TO_PAGES=true` only for content you deliberately want everyone to see. Then run the workflow and configure Settings → Pages to deploy the `gh-pages` branch, folder `/`. The default feed address is `https://<owner>.github.io/<repo>/feed.xml`. The root address opens a project landing page featuring only the original demo. It does not list your episodes, display your feed title or link to your personal RSS feed. Your existing RSS and MP3 URLs remain available directly through Pages.
+Set `PUBLISH_TO_PAGES=true` only for content you deliberately want everyone to see. Then run the workflow and configure Settings → Pages to deploy the `gh-pages` branch, folder `/`. The default feed address is `https://<owner>.github.io/<repo>/feed.xml`. The root address opens the project demo page. It does not list your episodes, display your feed title or link to your personal RSS feed. Your existing RSS and MP3 URLs remain available directly through Pages.
 
 A public repository can use a `PUBLICATIONS` **secret**, including personal per-source filters and modes. Generated RSS and audio are public. Processing state and the retry queue are encrypted into `podcast-state.enc` with your secret state key and restored on the next run. Plaintext runtime state is never published or cached by the public workflow. Keep that key stable and back it up privately: losing or changing it prevents the next run from decrypting the queue. Restrict repository write access to people you trust with your Actions secrets.
 

@@ -54,6 +54,7 @@ jobs:
       RUNS_PER_DAY: ${{ vars.RUNS_PER_DAY || '4' }}
       TTS_VOICE: ${{ vars.TTS_VOICE || 'en-US-AndrewNeural' }}
       TTS_RATE: ${{ vars.TTS_RATE || '+0%' }}
+      PREVIEW_API_URL: ${{ vars.PREVIEW_API_URL }}
       SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'gemini-flash-latest' }}
       FEED_TITLE: ${{ vars.FEED_TITLE }}
       LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
@@ -212,7 +213,7 @@ jobs:
           head = Path('incoming/published-head.txt').read_text()
           if head and not re.fullmatch(r'[0-9a-f]{40}', head):
               raise ValueError('Invalid previous publication revision')
-          required = {'feed.xml', 'index.html', 'favicon.svg', 'podcast-state.enc', 'demo/sample.mp3'}
+          required = {'feed.xml', 'index.html', 'favicon.svg', 'preview.js', 'podcast-state.enc', 'demo/sample.mp3'}
           seen = set()
           destination = Path('publish')
           destination.mkdir()
@@ -226,7 +227,7 @@ jobs:
               if not required <= seen:
                   raise ValueError('Public bundle is incomplete')
               bundle.extractall(destination, filter='data')
-          print('Verified public bundle; no executable or private state files accepted.')
+          print('Verified public bundle; only approved site assets and encrypted state accepted.')
           PYVERIFY
       - name: Publish explicitly public feed to gh-pages
         env:

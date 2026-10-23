@@ -6,7 +6,7 @@ import re
 import sys
 import tarfile
 
-ROOT_FILES = ("feed.xml", "index.html", "favicon.svg", "podcast-state.enc", "demo/sample.mp3")
+ROOT_FILES = ("feed.xml", "index.html", "favicon.svg", "preview.js", "podcast-state.enc", "demo/sample.mp3")
 AUDIO_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,250}\.mp3")
 
 

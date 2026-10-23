@@ -170,6 +170,7 @@ class PublicBundleTests(unittest.TestCase):
             self.assertEqual(self.verify(root, digest).returncode, 0)
             published = root / "publish"
             self.assertEqual((published / "episodes/substack-123.mp3").read_bytes(), b"existing audio")
+            self.assertEqual((published / "preview.js").read_bytes(), b"public data")
             self.assertFalse((published / "state.json").exists())
             self.assertFalse((published / ".env").exists())
             self.assertEqual((root / "incoming/published-head.txt").read_text(), "a" * 40)

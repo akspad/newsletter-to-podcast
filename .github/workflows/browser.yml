@@ -5,6 +5,7 @@ on:
     paths:
       - src/demo.py
       - src/website.py
+      - src/preview.js
       - src/favicon.svg
       - samples/demo.mp3
       - samples/demo.json
@@ -53,6 +54,7 @@ jobs:
           agent-browser wait --load networkidle
           agent-browser snapshot -i
           agent-browser set viewport 1440 1100
+          agent-browser eval 'if (!document.querySelector("#preview-form") || !document.querySelector("#generate-preview").disabled) throw new Error("Static demo must show the preview form without claiming a live backend"); document.querySelector("input[value=text]").click(); if (document.querySelector("#text-input").hidden || !document.querySelector("#article-text").required || !document.querySelector("#article-url").disabled) throw new Error("Paste-text fallback failed"); document.querySelector("input[value=url]").click(); if (document.querySelector("#url-input").hidden || !document.querySelector("#article-url").required) throw new Error("Article URL mode failed");'
           agent-browser eval 'if (!document.querySelector(".sample audio")) throw new Error("Missing original sample player"); if (document.documentElement.outerHTML.includes("PRIVATE_")) throw new Error("Personal metadata appeared on landing page"); if (document.querySelector("a[href*=\"feed.xml\"], link[type=\"application/rss+xml\"], .episode")) throw new Error("Personal feed advertised"); if (document.querySelector("[data-nextjs-dialog], .vite-error-overlay")) throw new Error("Error overlay");'
           agent-browser screenshot browser-results/desktop.png --full
           agent-browser eval --stdin <<'JS'
