@@ -152,7 +152,7 @@
     button.textContent = 'Generating your preview…';
     form.setAttribute('aria-busy', 'true');
     status.dataset.error = 'false';
-    status.textContent = 'Connecting to the preview service. If it is asleep, waking it can take about a minute…';
+    status.textContent = '';
     startTiming();
     audio.pause();
     result.hidden = true;
