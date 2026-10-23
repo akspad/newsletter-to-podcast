@@ -4,7 +4,7 @@
   const url = document.getElementById('article-url');
   const text = document.getElementById('article-text');
   const button = document.getElementById('generate-preview');
-  const status = document.getElementById('preview-status');
+  const errorMessage = document.getElementById('preview-error');
   const result = document.getElementById('preview-result');
   const audio = document.getElementById('preview-audio');
   const source = document.getElementById('preview-source');
@@ -17,6 +17,11 @@
   let timingStarted;
   let timingInterval;
   let estimate;
+
+  function showError(message) {
+    errorMessage.textContent = message;
+    errorMessage.hidden = false;
+  }
 
   function formatTime(seconds) {
     const minutes = Math.floor(seconds / 60);
@@ -98,7 +103,6 @@
         throw new Error('The demo is still handling other previews. Please try again in a couple of minutes.');
       }
       button.textContent = 'Waiting for your preview…';
-      status.textContent = 'Another preview is finishing. Yours will start automatically when a slot opens. Waiting and generation can take up to four minutes.';
       setEstimate('waiting', generationRange[0] + 15, generationRange[1] + 120);
       await pause(delay, signal);
     }
@@ -143,16 +147,15 @@
     const paste = form.elements['input-mode'].value === 'text';
     const articleUrl = paste ? '' : url.value.trim();
     if (articleUrl && !['https:', 'http:'].includes(new URL(articleUrl).protocol)) {
-      status.textContent = 'Use a public article link starting with https:// or http://.';
-      status.dataset.error = 'true';
+      showError('Use a public article link starting with https:// or http://.');
       return;
     }
     pending = true;
     button.disabled = true;
     button.textContent = 'Generating your preview…';
     form.setAttribute('aria-busy', 'true');
-    status.dataset.error = 'false';
-    status.textContent = '';
+    errorMessage.hidden = true;
+    errorMessage.textContent = '';
     startTiming();
     audio.pause();
     result.hidden = true;
@@ -168,7 +171,6 @@
       clearTimeout(timeout);
       // Allow up to two minutes waiting for capacity, plus a two-minute job.
       timeout = setTimeout(() => controller.abort(), 250000);
-      status.textContent = '';
       setEstimate('generating', ...generationRange);
       const response = await requestPreview(payload, controller.signal, generationRange);
       if (!response.headers.get('Content-Type')?.startsWith('audio/mpeg')) throw new Error('The service did not return audio. Please try again.');
@@ -183,10 +185,8 @@
       if (articleUrl) source.href = articleUrl;
       else source.removeAttribute('href');
       result.hidden = false;
-      status.textContent = 'Your preview is ready. Press play to listen.';
     } catch (error) {
-      status.dataset.error = 'true';
-      status.textContent = error.name === 'AbortError' ? 'The preview service took too long to respond. Try a shorter excerpt or try again shortly.' : error instanceof TypeError ? 'Couldn’t reach the preview service. Please try again shortly.' : error.message;
+      showError(error.name === 'AbortError' ? 'The preview service took too long to respond. Try a shorter excerpt or try again shortly.' : error instanceof TypeError ? 'Couldn’t reach the preview service. Please try again shortly.' : error.message);
     } finally {
       clearTimeout(timeout);
       stopTiming();
