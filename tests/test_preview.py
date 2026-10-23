@@ -26,8 +26,8 @@ class PreviewTests(unittest.TestCase):
             with self.subTest(payload=str(payload)[:100]), self.assertRaises(ValueError):
                 preview.validate(payload)
         self.assertEqual(preview.validate({"text": "  hello  "})["text"], "hello")
-        self.assertLessEqual(len(preview.excerpt("word " * 1000).split()), 390)
-        self.assertLessEqual(len(preview.excerpt("文" * 10000)), 3000)
+        self.assertLessEqual(len(preview.excerpt("word " * 1000).split()), 130)
+        self.assertLessEqual(len(preview.excerpt("文" * 10000)), 1000)
         self.assertEqual(preview.excerpt("win\u200bner"), "winner")
 
     def test_extraction_excludes_navigation_and_requires_article_content(self):
@@ -57,15 +57,15 @@ class PreviewTests(unittest.TestCase):
                 website.render(preview_api_url=endpoint)
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg required")
-    def test_real_audio_is_capped_at_three_minutes(self):
+    def test_real_audio_is_capped_at_one_minute(self):
         async def fake_narrate(text, voice, path):
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "anullsrc=r=24000:cl=mono", "-t", "190", str(path)], check=True)
+                            "anullsrc=r=24000:cl=mono", "-t", "70", str(path)], check=True)
         with tempfile.TemporaryDirectory() as tmp, patch("preview.narrate", side_effect=fake_narrate):
             result = preview.generate({"text": "An original short article."}, Path(tmp))
             self.assertTrue(result.is_file())
-            self.assertGreater(tts.duration(result), 179)
-            self.assertLessEqual(tts.duration(result), 180)
+            self.assertGreater(tts.duration(result), 59)
+            self.assertLessEqual(tts.duration(result), 60)
 
     def test_rate_limits_and_expiry(self):
         limiter = preview_server.RateLimit()

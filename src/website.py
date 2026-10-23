@@ -37,7 +37,7 @@ def render(sample=False, demo_url=None, preview_api_url=None):
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" sizes="any" href="favicon.svg">
 <title>Newsletter to Podcast · Hear your next read</title>
-<meta name="description" content="Paste a public newsletter or blog article and hear an audio preview of up to three minutes with Edge TTS. No login or API key needed.">
+<meta name="description" content="Paste a public newsletter or blog article and hear an audio preview of up to one minute with Edge TTS. No login or API key needed.">
 {rss_metadata}
 <style>
 :root {{ color-scheme: light; --ink: #172a25; --muted: #596962; --green: #18583c; --line: #dce3da; --paper: #f7f8f2; }}
@@ -96,7 +96,7 @@ footer p {{ margin: 6px 0; }}
 <body><div class="wrap">
 <header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
 <main>
-<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Bring an article from your favorite newsletter or blog. Turn it into an audio preview of up to three minutes, free with Edge TTS. No login. No API key.</p></section>
+<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Bring an article from your favorite newsletter or blog. Turn it into an audio preview of up to one minute, free with Edge TTS. No login. No API key.</p></section>
 <section class="preview" aria-labelledby="preview-heading">
 <h2 id="preview-heading">Try it with your own article</h2><p class="hint">Paste a public article link, choose a voice, and press play when your preview is ready.</p>
 {unavailable}
@@ -106,7 +106,7 @@ footer p {{ margin: 6px 0; }}
 <div id="text-input" hidden><label for="article-text">Article text</label><textarea id="article-text" name="text" placeholder="Paste the article or an excerpt here…" maxlength="100000" disabled></textarea></div>
 <p class="hint" id="article-help">Use a direct article link. If a site blocks access or needs a login, try pasting text you can access.</p>
 <div class="preview-options"><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
-<p class="hint">Up to 3 minutes · Opening excerpt · Usually ready within two minutes</p>
+<p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p>
 <p class="hint">The free preview service may need an extra minute to wake up for your first request.</p>
 <p class="hint">If another preview is running, we’ll wait for a slot automatically. Waiting and generation can take up to four minutes.</p>
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>

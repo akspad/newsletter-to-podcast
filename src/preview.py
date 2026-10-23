@@ -7,8 +7,9 @@ import re
 import subprocess
 import sys
 
-MAX_SECONDS = 180
-MAX_WORDS = 390
+MAX_SECONDS = 60
+MAX_WORDS = 130
+MAX_EXCERPT_CHARS = 1000
 MAX_INPUT_BYTES = 100_000
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
 VOICES = {
@@ -65,8 +66,8 @@ def excerpt(text):
     if not words:
         raise ValueError("Add some readable article text.")
     # Bound both word count and characters, including languages without spaces.
-    selected = " ".join(words[:MAX_WORDS])[:3000]
-    if len(words) > MAX_WORDS or len(" ".join(words[:MAX_WORDS])) > 3000:
+    selected = " ".join(words[:MAX_WORDS])[:MAX_EXCERPT_CHARS]
+    if len(words) > MAX_WORDS or len(" ".join(words[:MAX_WORDS])) > MAX_EXCERPT_CHARS:
         ends = list(re.finditer(r"[.!?。！？](?:\s|$)", selected))
         if ends and ends[-1].end() > len(selected) // 2:
             selected = selected[:ends[-1].end()].strip()
@@ -101,7 +102,7 @@ def generate(payload, directory):
     # Edge already returns MP3. Copy its audio frames while trimming instead of
     # decoding, loudness-filtering and encoding again on the small free CPU.
     subprocess.run(["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", str(raw),
-                    "-map", "0:a:0", "-t", "179.9", "-c:a", "copy", str(output)],
+                    "-map", "0:a:0", "-t", str(MAX_SECONDS - 0.1), "-c:a", "copy", str(output)],
                    check=True, timeout=40, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     from tts import duration
     seconds = duration(output)
