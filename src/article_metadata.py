@@ -69,8 +69,12 @@ def article_metadata(soup, url):
     # from the hostname. Ignore generic Home links and restrict to this host.
     home_name = ''
     for link in soup.select('a[href]'):
-        parsed = urlparse(urljoin(url, link['href']))
-        if parsed.hostname != urlparse(url).hostname or parsed.path not in ('', '/'):
+        try:
+            parsed = urlparse(urljoin(url, link['href']))
+            same_host = parsed.hostname == urlparse(url).hostname
+        except ValueError:
+            continue  # A malformed navigation link must not spoil an article.
+        if not same_host or parsed.path not in ('', '/'):
             continue
         label = clean(link.get('title') or link.get_text(' ', strip=True), 80)
         if not label:

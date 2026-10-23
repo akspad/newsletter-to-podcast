@@ -39,6 +39,8 @@ class ArticleMetadataTests(unittest.TestCase):
         html = ('<nav><a href="/" title="Home">Home</a><a href="/">Science Notes logo</a></nav>'
                 '<meta property="og:title" content="A discovery | Science Notes">')
         self.assertEqual(metadata(html), ('Science Notes', 'A discovery', ''))
+        self.assertEqual(metadata('<a href="http://[broken">Broken menu link</a>' + html),
+                         ('Science Notes', 'A discovery', ''))
         html = ('<link rel="alternate" type="application/atom+xml" title="The Research Blog">'
                 '<main><h1>The Research Blog</h1><h1>A discovery</h1></main><title>A discovery - Research</title>')
         self.assertEqual(metadata(html), ('The Research Blog', 'A discovery', ''))
