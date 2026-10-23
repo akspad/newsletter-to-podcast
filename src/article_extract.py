@@ -1,13 +1,9 @@
 """Find narration text in already-downloaded HTML; never fetch extra resources."""
 import re
 from soupsieve import match
-from article_scope import article_scope, editorial
+from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden
 
 
-BODY_SELECTORS = (
-    '[itemprop~="articleBody"], .entry-content, .post-content, .post__content, '
-    '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text'
-)
 EXCLUDED = (
     'script, style, noscript, template, nav, header, footer, aside, form, '
     'button, input, select, textarea, svg, video, audio, figcaption, '
@@ -34,6 +30,9 @@ DATE = re.compile(
 
 
 def clean_tree(root, title, author):
+    for node in root.select('[style], [hidden], [aria-hidden]'):
+        if node.parent is not None and explicitly_hidden(node):
+            node.decompose()
     for paragraph in list(root.find_all('p')):
         if paragraph.find_parent(['blockquote', 'pre', 'code']):
             continue
@@ -114,7 +113,7 @@ def extract_text(soup, title='', author='', url=''):
     for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
         if node.parent is not None and (not editorial(node) or
                 (node is not scope and not any(parent is node for parent in scope.parents)
-                 and node.name == 'article' and scope.name == 'article')):
+                 and node.name == 'article' and (scope.name in ('article', 'main') or scope.get('role') == 'main'))):
             node.decompose()
     clean_tree(soup, title, author)
     if deferred is not None:

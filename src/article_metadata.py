@@ -4,7 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from article_scope import article_scope, belongs_to_scope, editorial
+from article_scope import article_scope, belongs_to_scope, editorial, heading_matches, url_identity
 
 
 def clean(value, limit=160):
@@ -61,9 +61,24 @@ def article_metadata(soup, url):
     articles = [node for node in nodes if any(isinstance(kind, str) and
                 (kind.rsplit('/', 1)[-1].endswith('Article') or kind.rsplit('/', 1)[-1] == 'BlogPosting')
                 for kind in kinds(node))]
-    article = next((node for node in articles if node.get('url') == url or
-                    (isinstance(node.get('@id'), str) and node['@id'].split('#')[0] == url)),
-                   articles[0] if articles else {})
+    def article_urls(node):
+        values = [node.get('url'), node.get('@id')]
+        page = node.get('mainEntityOfPage')
+        if isinstance(page, dict):
+            values.extend([page.get('url'), page.get('@id')])
+        elif isinstance(page, str):
+            values.append(page)
+        return {identity for value in values if (identity := url_identity(value, url))}
+
+    requested = url_identity(url)
+    canonical = soup.select_one('link[rel~="canonical"][href]')
+    canonical_url = url_identity(canonical.get('href'), url) if canonical else None
+    social_title = clean(meta('og:title', 'twitter:title'))
+    def article_score(node):
+        identities = article_urls(node)
+        return (requested in identities, canonical_url is not None and canonical_url in identities,
+                heading_matches(clean(node.get('headline')), social_title))
+    article = max(articles, key=article_score) if articles else {}
     site = next((node for node in nodes if 'WebSite' in kinds(node)), {})
 
     # A site's home link is an explicit identity fallback, not an inferred name
@@ -117,7 +132,7 @@ def article_metadata(soup, url):
     if not headings:
         # Nonsemantic collection layouts can place h1 outside article/main.
         # Require a metadata match so unrelated site branding cannot win.
-        headings = [node for node in soup.select('h1') if not node.find_parent(['header', 'nav', 'aside'])
+        headings = [node for node in soup.select('h1') if editorial(node) and not node.find_parent(['header', 'nav', 'aside'])
                     and matches_heading(node)]
     # Match metadata to distinguish an article heading from blog branding (Go
     # has both as h1). Otherwise prefer the visible headline over its SEO variant.

@@ -3,6 +3,7 @@ import asyncio
 from collections import defaultdict, deque
 from contextvars import ContextVar
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -35,7 +36,7 @@ class RateLimit:
         self.clients = defaultdict(deque)
         self.total = deque()
 
-    def allow(self, client):
+    def retry_after(self, client):
         now = time.monotonic()
         for key in list(self.clients):
             while self.clients[key] and self.clients[key][0] <= now - 600:
@@ -44,8 +45,17 @@ class RateLimit:
                 del self.clients[key]
         while self.total and self.total[0] <= now - 3600:
             self.total.popleft()
-        if len(self.clients.get(client, ())) >= 5 or len(self.total) >= 60:
+        deadlines = [now]
+        if len(events := self.clients.get(client, ())) >= 5:
+            deadlines.append(events[len(events) - 5] + 600)
+        if len(self.total) >= 60:
+            deadlines.append(self.total[len(self.total) - 60] + 3600)
+        return math.ceil(max(deadlines) - now)
+
+    def allow(self, client):
+        if self.retry_after(client):
             return False
+        now = time.monotonic()
         self.clients[client].append(now)
         self.total.append(now)
         return True
@@ -175,9 +185,10 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
                                       "code": "preview_busy"}, status=503, headers={"Retry-After": "5"})
         # Busy requests never start work, so waiting for capacity must not spend
         # the client's generation allowance. Admission below has no await gap.
-        if not limiter.allow(request.remote or "unknown"):
+        client = request.remote or "unknown"
+        if not limiter.allow(client):
             return web.json_response({"error": "Preview limit reached. Please try again later."}, status=429,
-                                     headers={"Retry-After": "600"})
+                                     headers={"Retry-After": str(max(1, limiter.retry_after(client)))})
         async with slots:
             try:
                 audio = await generator(payload)

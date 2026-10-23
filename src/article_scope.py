@@ -1,6 +1,47 @@
 """Choose one article consistently for attribution and narration, without I/O."""
 import re
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
+
+
+BODY_SELECTORS = (
+    '[itemprop~="articleBody"], .entry-content, .post-content, .post__content, '
+    '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text'
+)
+
+
+def url_identity(value, base=''):
+    """Ignore known tracking fields, retaining query parameters that select content."""
+    if not isinstance(value, str) or not value or value.startswith('#'):
+        return None
+    try:
+        parsed = urlsplit(urljoin(base, value))
+        if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+            return None
+        query = tuple((key, val) for key, val in parse_qsl(parsed.query, keep_blank_values=True)
+                      if not key.casefold().startswith('utm_') and key.casefold() not in
+                      {'fbclid', 'gclid', 'msclkid', 'mc_cid', 'mc_eid'})
+        return parsed.scheme, parsed.netloc.casefold(), parsed.path.rstrip('/'), query
+    except ValueError:
+        return None
+
+
+def explicitly_hidden(node):
+    if node.has_attr('hidden') or node.get('aria-hidden', '').casefold() == 'true':
+        return True
+    # Evaluate literal inline display declarations, including precedence. Do not
+    # infer visibility from class names or fetch stylesheets / execute scripts.
+    style = node.get('style', '')
+    if not style:
+        return False
+    style = re.sub(r'/\*.*?\*/', '', style, flags=re.S)
+    display, important = '', False
+    for declaration in re.finditer(r'(?:^|;)\s*display\s*:\s*([^;]+)', style, re.I):
+        value = declaration[1].strip().casefold()
+        priority = bool(re.search(r'!\s*important\s*$', value))
+        if priority or not important:
+            display = re.sub(r'!\s*important\s*$', '', value).strip()
+            important = priority
+    return display == 'none'
 
 
 def editorial(node):
@@ -8,7 +49,7 @@ def editorial(node):
         if not hasattr(parent, 'attrs'):
             continue
         classes = set(parent.get('class', []))
-        if (parent.has_attr('hidden') or parent.get('aria-hidden') == 'true' or
+        if (explicitly_hidden(parent) or
                 parent.name in ('nav', 'aside', 'footer') or
                 classes & {'related-posts', 'related-articles', 'recommendations', 'comments', 'author-bio'}):
             return False
@@ -25,16 +66,10 @@ def heading_matches(value, title):
 def article_scope(soup, title='', url=''):
     articles = [node for node in soup.select('article') if editorial(node)]
     mains = [node for node in soup.select('main, [role="main"]') if editorial(node)]
+    requested = url_identity(url)
 
     def same_url(value):
-        if not url or not isinstance(value, str) or value.startswith('#'):
-            return False
-        try:
-            target, requested = urlsplit(urljoin(url, value)), urlsplit(url)
-            return ((target.scheme, target.netloc, target.path.rstrip('/'), target.query) ==
-                    (requested.scheme, requested.netloc, requested.path.rstrip('/'), requested.query))
-        except ValueError:
-            return False
+        return requested is not None and url_identity(value, url) == requested
 
     def score(node):
         headings = [h for h in node.select('h1, h2, .entry-title') if editorial(h)]
@@ -51,8 +86,15 @@ def article_scope(soup, title='', url=''):
         own_prose = [p for p in main.select('p') if not p.find_parent('article') and editorial(p)]
         matched = any(heading_matches(h.get_text(' ', strip=True), title) and not h.find_parent('article')
                       for h in main.select('h1') if editorial(h))
-        if own_prose and (matched or not main.select('article') and
-                          not any(any(score(node)[:2]) for node in articles)):
+        own_body = any(not node.find_parent('article') and editorial(node)
+                       for node in main.select(BODY_SELECTORS))
+        # A short deck outside a semantic article isn't the main story body.
+        inside_prose = max((score(node)[3] for node in articles
+                            if any(parent is main for parent in node.parents)), default=0)
+        if not own_body and sum(len(p.get_text(' ', strip=True)) for p in own_prose) < inside_prose:
+            continue
+        if (own_prose or own_body) and (matched or not main.select('article') and
+                                      not any(any(score(node)[:2]) for node in articles)):
             return main
     if articles:
         return max(articles, key=score)

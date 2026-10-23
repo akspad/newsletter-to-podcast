@@ -233,6 +233,25 @@ class PreviewTests(unittest.TestCase):
             self.assertTrue(limiter.allow("client"))
             self.assertEqual(len(limiter.clients), 1)
 
+    def test_rate_limit_retry_delay_tracks_client_and_global_windows(self):
+        limiter = preview_server.RateLimit()
+        with patch('preview_server.time.monotonic', return_value=1000):
+            for _ in range(5):
+                self.assertTrue(limiter.allow('client'))
+            self.assertEqual(limiter.retry_after('client'), 600)
+            self.assertEqual(limiter.retry_after('new-client'), 0)
+            for i in range(55):
+                self.assertTrue(limiter.allow(f'other-{i}'))
+            self.assertEqual(limiter.retry_after('client'), 3600)
+        with patch('preview_server.time.monotonic', return_value=1601):
+            self.assertEqual(limiter.retry_after('client'), 2999)
+            self.assertFalse(limiter.allow('client'))
+        with patch('preview_server.time.monotonic', return_value=4599.1):
+            self.assertEqual(limiter.retry_after('client'), 1)
+        with patch('preview_server.time.monotonic', return_value=4600):
+            self.assertEqual(limiter.retry_after('client'), 0)
+            self.assertTrue(limiter.allow('client'))
+
 
 class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -314,6 +333,22 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limited.status, 429)
         self.assertIn("Retry-After", limited.headers)
         self.assertEqual(len(self.calls), 5)
+
+    async def test_global_rate_limit_returns_the_actual_retry_after_delay(self):
+        limiter = preview_server.RateLimit()
+        with patch('preview_server.RateLimit', return_value=limiter):
+            app = preview_server.create_app(generator=AsyncMock())
+        client = TestClient(TestServer(app))
+        await client.start_server()
+        try:
+            for age, expected in ((0, 3600), (601, 2999)):
+                limiter.total.clear()
+                limiter.total.extend([preview_server.time.monotonic() - age] * 60)
+                response = await client.post('/api/preview', json={'text': 'An original passage.'})
+                self.assertEqual(response.status, 429)
+                self.assertLessEqual(abs(int(response.headers['Retry-After']) - expected), 1)
+        finally:
+            await client.close()
 
     async def test_busy_service_and_provider_failures_are_actionable(self):
         entered, release = asyncio.Event(), asyncio.Event()

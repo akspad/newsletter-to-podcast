@@ -15,6 +15,44 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_tracking_parameters_do_not_select_an_unrelated_schema_author(self):
+        data = [{'@type': 'Article', 'url': 'https://fictional.example/other', 'headline': 'Other story',
+                 'author': {'name': 'Other Writer'}},
+                {'@type': 'Article', 'url': 'https://fictional.example/story', 'headline': 'Requested article',
+                 'author': {'name': 'Correct Writer'}}]
+        html = ('<script type="application/ld+json">' + json.dumps(data) + '</script>'
+                '<meta property="og:title" content="Requested article">'
+                '<main><article><h1>Requested article</h1><p class="byline">Correct Writer</p></article></main>')
+        for query in ('', '?utm_source=newsletter', '?fbclid=tracking&utm_medium=email#section'):
+            with self.subTest(query=query):
+                self.assertEqual(article_metadata(BeautifulSoup(html, 'html.parser'),
+                                 'https://fictional.example/story' + query)[1:], ('Requested article', 'Correct Writer'))
+
+    def test_content_selecting_query_parameters_remain_distinct(self):
+        data = [{'@type': 'Article', 'url': 'https://fictional.example/story?id=1',
+                 'headline': 'First story', 'author': {'name': 'First Writer'}},
+                {'@type': 'Article', 'url': 'https://fictional.example/story?id=2',
+                 'headline': 'Second story', 'author': {'name': 'Second Writer'}}]
+        html = '<script type="application/ld+json">' + json.dumps(data) + '</script>'
+        self.assertEqual(article_metadata(BeautifulSoup(html, 'html.parser'),
+                         'https://fictional.example/story?id=2&utm_source=email')[1:], ('Second story', 'Second Writer'))
+
+    def test_canonical_and_main_entity_metadata_identify_the_article_after_a_redirect(self):
+        for identity in ({'mainEntityOfPage': {'@id': 'https://fictional.example/story'}},
+                         {'url': 'https://fictional.example/story'}):
+            data = [{'@type': 'Article', 'url': 'https://fictional.example/other', 'author': {'name': 'Other Writer'}},
+                    {'@type': 'Article', **identity, 'headline': 'Requested article', 'author': {'name': 'Correct Writer'}}]
+            html = ('<link rel="canonical" href="/story"><script type="application/ld+json">' + json.dumps(data) + '</script>')
+            with self.subTest(identity=identity):
+                self.assertEqual(article_metadata(BeautifulSoup(html, 'html.parser'),
+                                 'https://fictional.example/old-link')[2], 'Correct Writer')
+
+    def test_inline_hidden_headlines_and_author_lists_cannot_override_visible_attribution(self):
+        html = ('<meta property="og:title" content="Requested article"><main>'
+                '<div style="display:none"><h1>Requested article</h1><div class="article-authors">Other Writer</div></div>'
+                '<article><h1>Requested article</h1><div class="article-authors">Correct Writer</div></article></main>')
+        self.assertEqual(metadata(html)[1:], ('Requested article', 'Correct Writer'))
+
     def test_byline_and_title_follow_the_requested_article_instead_of_an_earlier_card(self):
         for byline in ('<div class="article-authors"><a>{}</a></div>', '<p class="byline">{}</p>'):
             html = ('<meta property="og:title" content="Requested article">'

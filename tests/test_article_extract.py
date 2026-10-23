@@ -24,6 +24,45 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_unwrapped_main_story_excludes_recommendation_articles_before_and_after_it(self):
+        card = '<article><h2>Another story</h2><div class="entry-content"><p>Unrelated recommendation.</p></div></article>'
+        for marked in (True, False):
+            body = '<p>' + PARAGRAPHS[0] + '</p>'
+            if marked:
+                body = '<div class="entry-content">' + body + '</div>'
+            for start, end in (('<main>', '</main>'), ('<div role="main">', '</div>')):
+                html = start + '<h1>Requested article</h1>' + card + body + card + end
+                with self.subTest(marked=marked, wrapper=start):
+                    self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
+    def test_main_deck_does_not_replace_a_longer_semantic_article(self):
+        html = ('<main><h1>Requested article</h1><p>A brief introductory deck.</p><article>'
+                '<div class="entry-content"><p>' + PARAGRAPHS[0] + '</p></div></article></main>')
+        self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
+    def test_unwrapped_explicit_body_without_paragraph_tags_is_preserved(self):
+        html = ('<main><h1>Requested article</h1><article><div class="entry-content">'
+                '<p>An unrelated recommendation.</p></div></article><div class="entry-content">' +
+                PARAGRAPHS[0] + '</div></main>')
+        self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
+    def test_inline_display_none_and_hidden_ancestors_are_not_narrated(self):
+        for style in ('display: none', 'DISPLAY : NONE ! IMPORTANT;', 'color:red; display:/* comment */none',
+                      'display: block; display: none', 'display:none!important; display:block'):
+            html = ('<article><div class="entry-content"><div style="' + style + '">'
+                    '<p>Hidden mobile duplicate.</p></div><p>' + PARAGRAPHS[0] + '</p></div></article>')
+            with self.subTest(style=style):
+                self.assertEqual(extract(html), PARAGRAPHS[0])
+
+    def test_visible_display_overrides_and_css_discussion_are_preserved(self):
+        for style in ('display:none; display:block', 'display:none; display:block!important',
+                      'display:none!important; display:block!important', '--example:display:none; color:red'):
+            html = '<div class="entry-content"><p style="' + style + '">' + PARAGRAPHS[0] + '</p></div>'
+            with self.subTest(style=style):
+                self.assertEqual(extract(html), PARAGRAPHS[0])
+        self.assertEqual(extract('<div class="entry-content"><p>We discuss display: none in CSS.</p></div>'),
+                         'We discuss display: none in CSS.')
+
     def test_requested_article_wins_over_an_earlier_longer_recommendation(self):
         for marked in (False, True):
             recommendation = '<p>Unrelated recommendation. </p>' * 80
@@ -51,8 +90,10 @@ class ArticleExtractionTests(unittest.TestCase):
                 '<p>Unrelated recommendation.</p></div></article><article><h2>'
                 '<a href="/story">A discovery</a></h2><div class="entry-content"><p>' +
                 PARAGRAPHS[0] + '</p></div></article></main>')
-        soup = BeautifulSoup(html, 'html.parser')
-        self.assertEqual(extract_text(soup, 'A discovery', url='https://fictional.example/story'), PARAGRAPHS[0])
+        for query in ('', '?utm_source=newsletter'):
+            soup = BeautifulSoup(html, 'html.parser')
+            with self.subTest(query=query):
+                self.assertEqual(extract_text(soup, 'A discovery', url='https://fictional.example/story' + query), PARAGRAPHS[0])
 
     def test_external_main_headline_does_not_hide_the_actual_article_body(self):
         html = ('<main><h1>Requested article</h1><article><div class="entry-content"><p>' +
