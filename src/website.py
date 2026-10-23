@@ -104,7 +104,7 @@ footer p {{ margin: 6px 0; }}
 <article class="feature"><h2>Your own installation</h2><p>Run locally or in your own GitHub repository. Choose your sources and where to host your audio.</p></article>
 </section>
 <section class="preview" aria-labelledby="preview-heading">
-<h2 id="preview-heading">Try it with your own article</h2><p class="hint">Paste a public article link, choose a voice, and press play when your preview is ready. Article links start with the blog, title, and author when available.</p>
+<h2 id="preview-heading">Try it with your own article</h2><p class="hint">Paste a public article link, choose a voice, and press play when your preview is ready.</p>
 {unavailable}
 <form id="preview-form" data-endpoint="{endpoint}">
 <fieldset class="input-modes"><legend>Bring your article</legend><label><input type="radio" name="input-mode" value="url" checked> Article link</label><label><input type="radio" name="input-mode" value="text"> Paste text</label></fieldset>

@@ -168,7 +168,7 @@
       clearTimeout(timeout);
       // Allow up to two minutes waiting for capacity, plus a two-minute job.
       timeout = setTimeout(() => controller.abort(), 250000);
-      status.textContent = paste ? 'Turning your text into speech. This can take up to two minutes…' : 'Reading your article and generating speech. This can take up to two minutes…';
+      status.textContent = '';
       setEstimate('generating', ...generationRange);
       const response = await requestPreview(payload, controller.signal, generationRange);
       if (!response.headers.get('Content-Type')?.startsWith('audio/mpeg')) throw new Error('The service did not return audio. Please try again.');
