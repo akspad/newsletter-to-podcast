@@ -70,13 +70,13 @@ footer p {{ margin: 6px 0; }}
 .preview h2 {{ margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -.03em; }}
 .preview label {{ display: block; font-weight: 650; margin-bottom: 8px; }}
 .preview input, .preview textarea, .preview select {{ width: 100%; border: 1px solid #b7c4b9; border-radius: 8px; padding: 13px; background: var(--paper); color: var(--ink); font: inherit; min-width: 0; }}
-.preview select {{ height: 53px; }}
+.preview select {{ height: 40px; padding: 6px 13px; }}
 .preview textarea {{ resize: vertical; min-height: 150px; }}
 .preview input[type="radio"] {{ width: auto; margin: 0; padding: 0; accent-color: var(--green); }}
 .article-options {{ display: grid; grid-template-columns: max-content minmax(0, 16rem); justify-content: start; align-items: start; gap: 16px 32px; margin: 16px 0; }}
 .input-modes {{ display: flex; flex-wrap: wrap; gap: 20px; border: 0; min-width: 0; margin: 0; padding: 0; }}
 .input-modes legend {{ font-weight: 650; margin-bottom: 8px; }}
-.input-modes label {{ display: flex; align-items: center; gap: 7px; min-height: 53px; font-weight: 400; margin: 0; cursor: pointer; }}
+.input-modes label {{ display: flex; align-items: center; gap: 7px; min-height: 40px; font-weight: 400; margin: 0; cursor: pointer; }}
 .preview-options {{ display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }}
 .preview-options .button {{ flex-shrink: 0; }}
 .preview-options .hint {{ flex: 1 1 16rem; margin: 0; }}
