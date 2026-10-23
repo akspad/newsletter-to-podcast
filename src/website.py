@@ -50,22 +50,22 @@ header {{ display: flex; align-items: center; justify-content: space-between; ga
 .brand {{ font-weight: 750; letter-spacing: -.03em; text-decoration: none; color: var(--ink); }}
 .brand img {{ width: 28px; height: 28px; vertical-align: middle; margin-right: 7px; }}
 .code {{ font-size: .86rem; }}
-.hero {{ padding: 60px 0 28px; max-width: 800px; }}
+.hero {{ padding: 60px 0 20px; max-width: 800px; }}
 .eyebrow {{ font-size: .72rem; letter-spacing: .16em; font-weight: 750; color: var(--green); margin: 0 0 12px; }}
 h1 {{ font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -.055em; margin: 0 0 22px; overflow-wrap: anywhere; }}
-.intro {{ font-size: 1.1rem; max-width: 620px; color: var(--muted); }}
+.intro {{ font-size: 1.1rem; max-width: 620px; color: var(--muted); margin-bottom: 0; }}
 .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }}
 .button {{ display: inline-block; padding: 11px 19px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: white; font: inherit; font-weight: 650; text-decoration: none; cursor: pointer; }}
 .secondary {{ background: transparent; color: var(--green); }}
-.sample {{ display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 28px; border: 1px solid var(--line); border-radius: 14px; padding: 28px; background: #eef2e7; margin-bottom: 48px; }}
+.sample {{ display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 28px; border: 1px solid var(--line); border-radius: 14px; padding: 20px 28px; background: #eef2e7; margin-bottom: 24px; }}
 .sample h2 {{ margin: 0; font-size: 1.4rem; letter-spacing: -.03em; }}
 .sample p:last-child {{ color: var(--muted); font-size: .9rem; margin-bottom: 0; }}
-.grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 40px; }}
+.grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; margin-bottom: 24px; }}
 audio {{ display: block; width: 100%; }}
-footer {{ margin-top: 54px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }}
+footer {{ margin-top: 32px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }}
 footer p {{ margin: 6px 0; }}
 [hidden] {{ display: none !important; }}
-.preview {{ border: 1px solid var(--line); border-radius: 16px; background: white; padding: 30px; margin-bottom: 40px; box-shadow: 0 12px 32px #172a2506; }}
+.preview {{ border: 1px solid var(--line); border-radius: 16px; background: white; padding: 22px 30px; margin-bottom: 24px; box-shadow: 0 12px 32px #172a2506; }}
 .preview h2 {{ margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -.03em; }}
 .preview label {{ display: block; font-weight: 650; margin-bottom: 8px; }}
 .preview input, .preview textarea, .preview select {{ width: 100%; border: 1px solid #b7c4b9; border-radius: 8px; padding: 13px; background: var(--paper); color: var(--ink); font: inherit; min-width: 0; }}
@@ -88,10 +88,10 @@ footer p {{ margin: 6px 0; }}
 .preview-result {{ margin-top: 24px; border-top: 1px solid var(--line); padding-top: 24px; }}
 .preview-result h3 {{ margin-top: 0; }}
 .preview-result .actions {{ margin-top: 16px; }}
-@media(max-width: 640px) {{ .preview {{ padding: 22px; }} .preview-options {{ grid-template-columns: 1fr; }} header .code {{ white-space: nowrap; }} }}
-@media(max-width: 640px) {{ .wrap {{ padding: 0 18px; }} header {{ padding: 20px 0; }} .hero {{ padding-top: 42px; }} .sample, .grid {{ grid-template-columns: 1fr; }} .sample {{ padding: 22px; gap: 20px; }} .section-head {{ align-items: stretch; }} input {{ width: 100%; }} }}
+@media(max-width: 640px) {{ .preview {{ padding: 18px 22px; }} .preview-options {{ grid-template-columns: 1fr; }} header .code {{ white-space: nowrap; }} }}
+@media(max-width: 640px) {{ .wrap {{ padding: 0 18px; }} header {{ padding: 20px 0; }} .hero {{ padding-top: 42px; }} .sample, .grid {{ grid-template-columns: 1fr; }} .sample {{ padding: 18px 22px; gap: 16px; }} .section-head {{ align-items: stretch; }} input {{ width: 100%; }} }}
 </style>
-<style>.feature {{ background: white; border: 1px solid var(--line); border-radius: 12px; padding: 24px; }} .feature h2 {{ margin: 0 0 12px; font-size: 1.15rem; }} .feature p {{ color: var(--muted); margin: 0; font-size: .95rem; }} .quick-start {{ margin-top: 38px; }} code {{ display: inline-block; padding: 10px 14px; background: #eef2e7; border-radius: 8px; overflow-wrap: anywhere; }} @media(max-width:640px) {{ .grid {{ grid-template-columns:1fr; }} }}</style>
+<style>.feature {{ background: white; border: 1px solid var(--line); border-radius: 12px; padding: 18px 24px; }} .feature h2 {{ margin: 0 0 8px; font-size: 1.15rem; }} .feature p {{ color: var(--muted); margin: 0; font-size: .95rem; }} .quick-start {{ margin-top: 24px; }} code {{ display: inline-block; padding: 10px 14px; background: #eef2e7; border-radius: 8px; overflow-wrap: anywhere; }} @media(max-width:640px) {{ .grid {{ grid-template-columns:1fr; }} }}</style>
 </head>
 <body><div class="wrap">
 <header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
