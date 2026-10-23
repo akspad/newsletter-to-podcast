@@ -97,6 +97,11 @@ footer p {{ margin: 6px 0; }}
 <header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
 <main>
 <section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Bring an article from your favorite newsletter or blog. Turn it into an audio preview of up to one minute, free with Edge TTS. No login. No API key.</p></section>
+<section class="grid" aria-label="What the tool does">
+<article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
+<article class="feature"><h2>Your preferred length</h2><p>Set a maximum episode duration. Longer full readings split into parts.</p></article>
+<article class="feature"><h2>Your own installation</h2><p>Run locally or in your own GitHub repository. Choose your sources and where to host your audio.</p></article>
+</section>
 <section class="preview" aria-labelledby="preview-heading">
 <h2 id="preview-heading">Try it with your own article</h2><p class="hint">Paste a public article link, choose a voice, and press play when your preview is ready.</p>
 {unavailable}
@@ -117,11 +122,6 @@ footer p {{ margin: 6px 0; }}
 <noscript><p>Enable JavaScript to generate a preview. You can still play the original sample below.</p></noscript>
 </section>
 {sample_player}
-<section class="grid" aria-label="What the tool does">
-<article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
-<article class="feature"><h2>Your preferred length</h2><p>Set a maximum episode duration. Longer full readings split into parts.</p></article>
-<article class="feature"><h2>Your own installation</h2><p>Run locally or in your own GitHub repository. Choose your sources and where to host your audio.</p></article>
-</section>
 <section class="quick-start"><h2>Make it part of your listening routine</h2><p>Liked the preview? Turn your newsletters into a personal podcast feed. Narrate full articles or make spoken summaries, and listen in your usual podcast app.</p><div class="actions"><a class="button secondary" href="{REPO}#generate-full-articles-from-your-own-sources">Set up your own podcast ↗</a>{demo_link}</div></section>
 </main>
 <footer><p><a href="{REPO}">Newsletter to Podcast</a> is an open-source Python tool. The code and original demo are MIT licensed.</p><p>Use sources you are authorized to access and convert. Share generated audio only with permission.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p></footer>
