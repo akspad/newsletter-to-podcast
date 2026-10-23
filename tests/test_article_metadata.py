@@ -15,6 +15,23 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_byline_and_title_follow_the_requested_article_instead_of_an_earlier_card(self):
+        for byline in ('<div class="article-authors"><a>{}</a></div>', '<p class="byline">{}</p>'):
+            html = ('<meta property="og:title" content="Requested article">'
+                    '<main><article><h1>Other article</h1>' + byline.format('Other Writer') + '</article>'
+                    '<article><h1>Requested article</h1>' + byline.format('Correct Writer') + '</article></main>')
+            with self.subTest(byline=byline):
+                self.assertEqual(metadata(html)[1:], ('Requested article', 'Correct Writer'))
+
+    def test_unmarked_author_card_cannot_override_the_selected_article_author(self):
+        html = ('<meta property="og:title" content="Requested article">'
+                '<section><article><div class="article-authors"><a>Other Writer</a></div></article></section>'
+                '<main><article><h1>Requested article</h1>'
+                '<div class="article-authors"><a>Correct Writer</a></div></article></main>')
+        self.assertEqual(metadata(html)[2], 'Correct Writer')
+        # With no visible byline on the requested article, omit the author.
+        self.assertEqual(metadata(html.replace('<a>Correct Writer</a>', ''))[2], '')
+
     def test_linked_schema_authors_and_publisher_resolve_without_a_request(self):
         data = {'@graph': [
             {'@type': 'Article', 'headline': 'A discovery', 'author': [{'@id': '#alex'}, {'@id': '#sam'}],

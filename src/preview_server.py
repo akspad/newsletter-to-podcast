@@ -84,6 +84,8 @@ async def generate_audio(payload):
                     raise PreviewError("We couldn't read that article. Try a direct public article link or paste its text.", 422)
                 if process.returncode == 4:
                     raise PreviewError(preview.SPEECH_UNAVAILABLE_MESSAGE)
+                if process.returncode == 5:
+                    raise PreviewError(preview.ARTICLE_UNAVAILABLE_MESSAGE, 422)
                 raise PreviewError("Audio generation is unavailable. Please try again shortly.")
             path = Path(tmp) / "preview.mp3"
             if not path.is_file() or not 0 < path.stat().st_size <= preview.MAX_AUDIO_BYTES:

@@ -1,5 +1,7 @@
 """Find narration text in already-downloaded HTML; never fetch extra resources."""
 import re
+from soupsieve import match
+from article_scope import article_scope, editorial
 
 
 BODY_SELECTORS = (
@@ -101,23 +103,29 @@ def plain_text(root):
     return ' '.join(root.get_text('', strip=False).split())
 
 
-def extract_text(soup, title='', author=''):
+def extract_text(soup, title='', author='', url=''):
     # LessWrong streams its explicit post body inside an initially hidden React
     # container. Detach only that body before discarding hidden page sections.
     deferred = soup.select_one('.PostsPage-postContent')
     if deferred is not None:
         deferred.extract()
+    scope = article_scope(soup, title, url)
+    # Select before cleanup removes the headline used to identify the article.
+    for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
+        if node.parent is not None and (not editorial(node) or
+                (node is not scope and not any(parent is node for parent in scope.parents)
+                 and node.name == 'article' and scope.name == 'article')):
+            node.decompose()
     clean_tree(soup, title, author)
     if deferred is not None:
         clean_tree(deferred, title, author)
         return plain_text(deferred)
-    candidates = soup.select(BODY_SELECTORS)
+    candidates = scope.select(BODY_SELECTORS)
+    if match(BODY_SELECTORS, scope):
+        candidates = [scope]
     if candidates:
         # Some publications split the article among sibling body containers.
         # Read each outermost section once, inside the same semantic article.
-        first_article = candidates[0].find_parent('article')
-        if first_article is not None:
-            candidates = [node for node in candidates if node.find_parent('article') is first_article]
         identities = {id(node) for node in candidates}
         sections = [node for node in candidates if not any(id(parent) in identities for parent in node.parents)]
         pieces = []
@@ -129,7 +137,7 @@ def extract_text(soup, title='', author=''):
     # Density-based extraction handles unmarked layouts and separates article
     # prose from metadata, related stories, controls and comments.
     from trafilatura import bare_extraction
-    body = soup.select_one('article') or soup.select_one('main')
+    body = scope if scope is not soup else None
     source = str(body if body is not None else soup)
     if body is not None or soup.find('html') is None:
         source = '<html><body>' + source + '</body></html>'

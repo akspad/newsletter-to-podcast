@@ -1,6 +1,7 @@
 """Short, stateless article previews, isolated from the personal podcast pipeline."""
 import asyncio
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -17,6 +18,8 @@ MAX_INPUT_BYTES = 100_000
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
 ARTICLE_BLOCKED_MESSAGE = ("This site blocked access to the article. Choose “Paste text” "
                            "and paste the article text you can access.")
+ARTICLE_UNAVAILABLE_MESSAGE = ("We couldn't download that article. The site may be slow or unreachable. "
+                               "Choose “Paste text” and paste the article text you can access.")
 SPEECH_UNAVAILABLE_MESSAGE = ("The speech service couldn't generate audio. "
                               "Please try again or choose another narrator.")
 VOICES = {
@@ -53,6 +56,20 @@ class SpeechUnavailableError(RuntimeError):
     """The upstream speech request failed, rather than article access."""
 
 
+class IncompleteSpeechError(SpeechUnavailableError):
+    """A successful stream contained implausibly little audio for the excerpt."""
+
+
+class ArticleUnavailableError(RuntimeError):
+    """The source could not be downloaded, before any speech was requested."""
+
+
+def minimum_audio_seconds(text):
+    # Match the personal pipeline's generous 600 words/minute ceiling. This is
+    # a gross-truncation check, not a promise of exact spoken completeness.
+    return min(len(text.split()) / 10, MAX_SECONDS - 0.1)
+
+
 def stage_log(stage, status, started, error=None, attempt=None):
     details = f" error_type={type(error).__name__}" if error is not None else ""
     details += f" attempt={attempt}" if attempt is not None else ""
@@ -63,6 +80,7 @@ def stage_log(stage, status, started, error=None, attempt=None):
 def article_text(url):
     from bs4 import BeautifulSoup
     from substack import Substack
+    from curl_cffi.requests.exceptions import RequestException
 
     # Reuse the bounded downloader: public destinations only, DNS pinned, and
     # every redirect revalidated. No subscription cookies or private config.
@@ -75,12 +93,14 @@ def article_text(url):
         details = f" {error.diagnostics}" if isinstance(error, SourceDownloadError) else ""
         print(f"article_download status=failed elapsed={time.monotonic() - started:.1f}s "
               f"error_type={type(error).__name__}{status_log}{details}", file=sys.stderr)
+        if isinstance(error, (RequestException, OSError)):
+            raise ArticleUnavailableError from error
         raise
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")
     publication, title, author = article_metadata(soup, url)
     from article_extract import extract_text
-    text = extract_text(soup, title, author)
+    text = extract_text(soup, title, author, url)
     if not text:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
     if len(text.split()) < 20:
@@ -107,6 +127,7 @@ def excerpt(text):
 async def narrate(text, voice, path):
     import edge_tts
     from aiohttp import ClientConnectionError, ClientResponseError
+    from tts import duration
     # edge-tts pins a certifi SSLContext. Add an explicitly configured CA bundle
     # for managed networks while retaining certificate and hostname validation.
     cafile = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
@@ -129,9 +150,13 @@ async def narrate(text, voice, path):
                         output.write(item["data"])
             if not count:
                 raise edge_tts.exceptions.NoAudioReceived("No speech returned")
+            seconds = duration(path)
+            if not math.isfinite(seconds) or seconds <= 0 or seconds < minimum_audio_seconds(text):
+                raise IncompleteSpeechError
             stage_log('speech', 'completed', started, attempt=attempt)
             return
-        except (edge_tts.exceptions.NoAudioReceived, ClientConnectionError, ClientResponseError) as error:
+        except (edge_tts.exceptions.NoAudioReceived, ClientConnectionError, ClientResponseError,
+                IncompleteSpeechError) as error:
             transient = not isinstance(error, ClientResponseError) or error.status == 429 or error.status >= 500
             if attempt == 3 or not transient:
                 raise
@@ -170,6 +195,8 @@ def generate(payload, directory):
     try:
         from tts import duration
         seconds = duration(output)
+        if not math.isfinite(seconds) or seconds < minimum_audio_seconds(text):
+            raise IncompleteSpeechError
         if not 0 < seconds <= MAX_SECONDS or output.stat().st_size > MAX_AUDIO_BYTES:
             raise RuntimeError("Invalid preview audio")
     except Exception as error:
@@ -189,6 +216,9 @@ if __name__ == "__main__":
             sys.exit(3)
         print("We couldn't read that article. Try a direct public article link or paste its text.", file=sys.stderr)
         sys.exit(2)
+    except ArticleUnavailableError:
+        print(ARTICLE_UNAVAILABLE_MESSAGE, file=sys.stderr)
+        sys.exit(5)
     except SpeechUnavailableError:
         print(SPEECH_UNAVAILABLE_MESSAGE, file=sys.stderr)
         sys.exit(4)

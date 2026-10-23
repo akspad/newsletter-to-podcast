@@ -24,6 +24,41 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_requested_article_wins_over_an_earlier_longer_recommendation(self):
+        for marked in (False, True):
+            recommendation = '<p>Unrelated recommendation. </p>' * 80
+            actual = '<p>' + PARAGRAPHS[0] + '</p>'
+            if marked:
+                recommendation = '<div class="entry-content">' + recommendation + '</div>'
+                actual = '<div class="entry-content">' + actual + '</div>'
+            html = ('<main><article><h1>Another story</h1>' + recommendation + '</article>'
+                    '<article><h1>Requested article</h1>' + actual + '</article></main>')
+            with self.subTest(marked=marked):
+                self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
+    def test_main_content_wins_over_a_card_outside_main_without_a_title_match(self):
+        for semantic_article in (True, False):
+            body = '<div class="entry-content"><p>' + PARAGRAPHS[0] + '</p></div>'
+            if semantic_article:
+                body = '<article>' + body + '</article>'
+            html = ('<section><article><div class="entry-content"><p>Unrelated recommendation.</p>'
+                    '</div></article></section><main>' + body + '</main>')
+            with self.subTest(semantic_article=semantic_article):
+                self.assertEqual(extract(html), PARAGRAPHS[0])
+
+    def test_requested_url_distinguishes_cards_with_the_same_title(self):
+        html = ('<main><article><h2><a href="/other">A discovery</a></h2><div class="entry-content">'
+                '<p>Unrelated recommendation.</p></div></article><article><h2>'
+                '<a href="/story">A discovery</a></h2><div class="entry-content"><p>' +
+                PARAGRAPHS[0] + '</p></div></article></main>')
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertEqual(extract_text(soup, 'A discovery', url='https://fictional.example/story'), PARAGRAPHS[0])
+
+    def test_external_main_headline_does_not_hide_the_actual_article_body(self):
+        html = ('<main><h1>Requested article</h1><article><div class="entry-content"><p>' +
+                PARAGRAPHS[0] + '</p></div></article></main>')
+        self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
     def test_unmarked_table_layout_falls_back_to_article_prose(self):
         html = ('<nav>Subscribe and browse</nav><table><tr><td><font face="verdana">'
                 '<p>July 2013<br><br>' + '<br><br>'.join(PARAGRAPHS) + '</p>'

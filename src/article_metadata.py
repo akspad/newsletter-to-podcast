@@ -4,6 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
+from article_scope import article_scope, belongs_to_scope, editorial
 
 
 def clean(value, limit=160):
@@ -103,7 +104,7 @@ def article_metadata(soup, url):
     social = clean(meta('og:title', 'twitter:title'))
     page_title = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
     headings = [node for node in soup.select('.PostsPageTitle-root, article h1, main h1, .entry-title')
-                if not node.find_parent(['nav', 'aside'])]
+                if editorial(node)]
     def matches_heading(node):
         value = clean(node.get_text(' ', strip=True))
         # Some sites put Markdown emphasis into social/SEO metadata. Compare
@@ -120,20 +121,25 @@ def article_metadata(soup, url):
                     and matches_heading(node)]
     # Match metadata to distinguish an article heading from blog branding (Go
     # has both as h1). Otherwise prefer the visible headline over its SEO variant.
-    heading = next((node for node in headings if matches_heading(node)), headings[0] if headings else None)
+    preliminary_scope = article_scope(soup, structured or social or page_title, url)
+    preferred_headings = [node for node in headings if any(parent is preliminary_scope for parent in node.parents)]
+    heading = next((node for node in headings if matches_heading(node)),
+                   next(iter(preferred_headings or headings), None))
     title = clean(heading.get_text(' ', strip=True) if heading else '') or structured or social or page_title
     title = strip_suffix(title)
 
-    scope = soup.select_one('article') or soup.select_one('main') or soup
-    byline = scope.select_one('[rel~="author"], [itemprop="author"], .PostsAuthors-root, .byline, '
-                              '.news-article--authored-by, p.author')
+    scope = article_scope(soup, title, url)
+    byline = next((node for node in scope.select('[rel~="author"], [itemprop="author"], '
+                  '.PostsAuthors-root, .byline, .news-article--authored-by, p.author')
+                   if belongs_to_scope(node, scope)), None)
     if byline is None:
         # An ordinary link to somebody's author page in the prose isn't a
         # byline. Accept these links only inside article attribution markup.
         byline = scope.select_one('header a[href*="/authors/"], header a[href*="/author/"], '
                                   '.blog-post-meta a[href*="/author/"]')
     if byline is None:
-        byline = soup.select_one('.PostsAuthors-root, .byline, .news-article--authored-by')
+        byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by')
+                       if belongs_to_scope(node, scope)), None)
     byline_name = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.
@@ -150,11 +156,9 @@ def article_metadata(soup, url):
     # An explicit visible author list is stronger evidence than a generic
     # publisher account in JSON-LD (for example "The Editors"). Read the whole
     # group so a multi-author byline isn't reduced to its first link.
-    group = next((node for node in soup.select('.article-authors')
-                  if not any(parent.has_attr('hidden') or parent.get('aria-hidden') == 'true' or
-                             parent.name in ('nav', 'aside') or
-                             set(parent.get('class', [])) & {'related-posts', 'related-articles', 'comments'}
-                             for parent in [node, *node.parents] if hasattr(parent, 'attrs'))), None)
+    groups = [node for node in soup.select('.article-authors') if belongs_to_scope(node, scope)]
+    group = next((node for node in groups if any(parent is scope for parent in node.parents)),
+                 next(iter(groups), None))
     visible_authors = ''
     if group is not None:
         members = group.select('a, [itemprop="name"]')

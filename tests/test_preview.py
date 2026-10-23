@@ -194,6 +194,33 @@ class PreviewTests(unittest.TestCase):
         self.assertIn('stage=speech status=failed', stderr.getvalue())
         self.assertNotIn('PRIVATE', stderr.getvalue())
 
+    def test_download_network_failures_suggest_paste_text_before_calling_speech(self):
+        from curl_cffi.requests.exceptions import Timeout, ConnectionError
+        for failure in (Timeout, ConnectionError, OSError):
+            stderr = io.StringIO()
+            payload = io.TextIOWrapper(io.BytesIO(json.dumps({'url': 'https://fictional.example/story'}).encode()))
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp, \
+                    patch('substack.Substack.get', side_effect=failure('PRIVATE source details')), \
+                    patch('edge_tts.Communicate') as speak, patch('sys.stdin', payload), \
+                    patch('sys.stderr', stderr), patch('sys.argv', ['preview.py', tmp]), \
+                    self.assertRaises(SystemExit) as error:
+                runpy.run_path(preview.__file__, run_name='__main__')
+            self.assertEqual(error.exception.code, 5)
+            self.assertIn(preview.ARTICLE_UNAVAILABLE_MESSAGE, stderr.getvalue())
+            self.assertNotIn('PRIVATE', stderr.getvalue())
+            speak.assert_not_called()
+
+    @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg required')
+    def test_valid_but_truncated_mp3_is_rejected_while_short_input_is_allowed(self):
+        async def short_audio(text, voice, path):
+            subprocess.run(['ffmpeg', '-nostdin', '-y', '-v', 'error', '-f', 'lavfi', '-i',
+                            'sine=frequency=440:sample_rate=24000', '-t', '5', str(path)], check=True)
+        with tempfile.TemporaryDirectory() as tmp, patch('preview.narrate', side_effect=short_audio):
+            with self.assertRaises(preview.SpeechUnavailableError):
+                preview.generate({'text': 'An original sentence for the requested article. ' * 30}, Path(tmp))
+            result = preview.generate({'text': 'A brief sentence.'}, Path(tmp))
+            self.assertGreater(tts.duration(result), 0)
+
     def test_rate_limits_and_expiry(self):
         limiter = preview_server.RateLimit()
         with patch("preview_server.time.monotonic", return_value=1000):
@@ -374,6 +401,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             stderr = io.StringIO()
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp, \
                     patch('edge_tts.Communicate', Speech), patch('preview.asyncio.sleep', AsyncMock()), \
+                    patch('tts.duration', return_value=1), \
                     patch('sys.stderr', stderr):
                 audio = Path(tmp) / 'speech.mp3'
                 await preview.narrate('Original text', 'en-US-AndrewNeural', audio)
@@ -383,6 +411,39 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('status=retry', stderr.getvalue())
             self.assertIn(f'attempt={failures + 1}', stderr.getvalue())
             self.assertNotIn('PRIVATE', stderr.getvalue())
+
+    async def test_truncated_stream_retries_and_never_appends_previous_audio(self):
+        class Speech:
+            async def stream(self):
+                yield {'type': 'audio', 'data': b'ONE-ATTEMPT'}
+        for durations, succeeds in (([5, 5, 45], True), ([5, 5, 5], False),
+                                    ([float('nan'), float('inf'), 45], True), ([0, -1, 45], True)):
+            with self.subTest(durations=durations), tempfile.TemporaryDirectory() as tmp, \
+                    patch('edge_tts.Communicate', return_value=Speech()) as speak, \
+                    patch('tts.duration', side_effect=durations), patch('preview.asyncio.sleep', AsyncMock()):
+                path = Path(tmp) / 'speech.mp3'
+                if succeeds:
+                    await preview.narrate('word ' * 126, 'en-US-AndrewNeural', path)
+                else:
+                    with self.assertRaises(preview.SpeechUnavailableError):
+                        await preview.narrate('word ' * 126, 'en-US-AndrewNeural', path)
+                self.assertEqual(speak.call_count, 3)
+                self.assertEqual(path.read_bytes(), b'ONE-ATTEMPT')
+
+    async def test_download_timeout_error_reaches_the_api_as_a_paste_text_prompt(self):
+        process = type('Process', (), {'pid': 98765, 'returncode': 5,
+                       'communicate': AsyncMock(return_value=(None, b'PRIVATE provider details')),
+                       'wait': AsyncMock(return_value=0)})()
+        client = TestClient(TestServer(preview_server.create_app()))
+        await client.start_server()
+        try:
+            with patch('preview_server.asyncio.create_subprocess_exec', AsyncMock(return_value=process)), \
+                    patch('preview_server.os.killpg'):
+                response = await client.post('/api/preview', json={'url': 'https://fictional.example/story'})
+            self.assertEqual(response.status, 422)
+            self.assertEqual(await response.json(), {'error': preview.ARTICLE_UNAVAILABLE_MESSAGE})
+        finally:
+            await client.close()
 
     async def test_speech_retry_does_not_repeat_nontransient_failures(self):
         class OversizedSpeech:
