@@ -111,6 +111,16 @@ class PreviewTests(unittest.TestCase):
                 text = preview.article_text("https://www.lesswrong.com/posts/fictional/story")
             self.assertEqual(text, "lesswrong.com. An original story. By Alex Writer.\n" + body.strip())
 
+    def test_title_omits_only_a_matching_publication_suffix(self):
+        for raw, expected in [("A useful story - Science Notes", "A useful story"),
+                              ("A useful story - Another subject", "A useful story - Another subject")]:
+            html = ('<meta property="og:site_name" content="Science Notes">'
+                    '<meta property="og:title" content="' + raw + '">'
+                    '<article><p>' + 'Original sentence. ' * 40 + '</p></article>')
+            with self.subTest(title=raw), patch("substack.Substack.get", return_value=html):
+                text = preview.article_text("https://fictional.example/story")
+            self.assertTrue(text.startswith("Science Notes. " + expected + ".\n"))
+
     def test_long_metadata_leaves_room_for_the_article(self):
         html = ('<meta property="og:site_name" content="' + 'Blog ' * 100 + '">'
                 '<meta name="author" content="' + 'Writer ' * 100 + '">'
