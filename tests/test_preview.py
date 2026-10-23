@@ -44,9 +44,10 @@ class PreviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Private or reserved"):
                 preview.article_text("http://fictional.example/article")
 
-    def test_page_keeps_preview_primary_and_does_not_invent_a_backend(self):
+    def test_page_section_order_and_optional_backend(self):
         page = website.render(sample=True)
-        self.assertLess(page.index('id="preview-form"'), page.index('class="sample"'))
+        self.assertLess(page.index('class="sample"'), page.index('class="grid"'))
+        self.assertLess(page.index('class="grid"'), page.index('id="preview-form"'))
         self.assertIn('id="generate-preview" type="submit" disabled', page)
         self.assertIn("Live previews aren’t connected", page)
         page = website.render(sample=True, preview_api_url="https://preview.example/api/preview")

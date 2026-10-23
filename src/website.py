@@ -18,7 +18,7 @@ def render(sample=False, demo_url=None, preview_api_url=None):
                 or parsed_api.password is not None or parsed_api.fragment or parsed_api.query):
             raise ValueError("Preview API URL must be HTTPS without credentials, query or fragment")
     endpoint = escape(preview_api_url or "", quote=True)
-    unavailable = "" if preview_api_url else f'<p class="notice">Live previews aren’t connected on this page yet. <a href="{REPO}#run-the-interactive-demo">Run the interactive demo locally</a>, or listen to the original sample below.</p>'
+    unavailable = "" if preview_api_url else f'<p class="notice">Live previews aren’t connected on this page yet. <a href="{REPO}#run-the-interactive-demo">Run the interactive demo locally</a>, or listen to the original sample above.</p>'
     disabled = "" if preview_api_url else " disabled"
     # Only the isolated --demo page may advertise its synthetic RSS feed.
     rss_metadata = ""
@@ -97,6 +97,7 @@ footer p {{ margin: 6px 0; }}
 <header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
 <main>
 <section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Bring an article from your favorite newsletter or blog. Turn it into an audio preview of up to one minute, free with Edge TTS. No login. No API key.</p></section>
+{sample_player}
 <section class="grid" aria-label="What the tool does">
 <article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
 <article class="feature"><h2>Your preferred length</h2><p>Set a maximum episode duration. Longer full readings split into parts.</p></article>
@@ -119,9 +120,8 @@ footer p {{ margin: 6px 0; }}
 <p id="preview-status" role="status" aria-live="polite"></p>
 <div id="preview-timing" class="preview-timing" aria-label="Preview time estimate" hidden><div class="timing-values" aria-live="off"><span id="preview-eta"></span><span id="preview-elapsed" role="timer" aria-live="off"></span></div><p class="hint">Approximate timing. Article access and service speed can change the estimate.</p></div>
 <div id="preview-result" class="preview-result" hidden><h3>Your article, ready to listen</h3><audio id="preview-audio" controls preload="metadata" aria-label="Listen to your article preview"></audio><div class="actions"><a id="preview-download" download="article-preview.mp3">Download MP3</a><a id="preview-source" target="_blank" rel="noopener noreferrer" hidden>Read the original article ↗</a></div></div>
-<noscript><p>Enable JavaScript to generate a preview. You can still play the original sample below.</p></noscript>
+<noscript><p>Enable JavaScript to generate a preview. You can still play the original sample above.</p></noscript>
 </section>
-{sample_player}
 <section class="quick-start"><h2>Make it part of your listening routine</h2><p>Liked the preview? Turn your newsletters into a personal podcast feed. Narrate full articles or make spoken summaries, and listen in your usual podcast app.</p><div class="actions"><a class="button secondary" href="{REPO}#generate-full-articles-from-your-own-sources">Set up your own podcast ↗</a>{demo_link}</div></section>
 </main>
 <footer><p><a href="{REPO}">Newsletter to Podcast</a> is an open-source Python tool. The code and original demo are MIT licensed.</p><p>Use sources you are authorized to access and convert. Share generated audio only with permission.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p></footer>
