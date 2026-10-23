@@ -100,7 +100,7 @@ footer p {{ margin: 6px 0; }}
 <body><div class="wrap">
 <header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
 <main>
-<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Turn newsletters and blogs into free audio previews with Edge TTS—up to one minute, no login or API key.</p></section>
+<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Turn newsletters and blogs into free audio previews with Edge TTS up to one minute, no login or API key.</p></section>
 {sample_player}
 <section class="grid" aria-label="What the tool does">
 <article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
