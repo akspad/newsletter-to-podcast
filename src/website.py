@@ -85,7 +85,7 @@ footer p {{ margin: 6px 0; }}
 .hint, .notice, #preview-error {{ font-size: .9rem; color: var(--muted); }}
 .notice {{ padding: 12px 16px; background: #eef2e7; border-radius: 8px; }}
 #preview-error {{ color: #a12a20; }}
-.preview-timing {{ margin: 14px 0 22px; padding: 14px 16px; background: #eef2e7; border-radius: 8px; }}
+.preview-timing {{ margin: 14px 0 0; padding: 14px 16px; background: #eef2e7; border-radius: 8px; }}
 .timing-values {{ display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; font-variant-numeric: tabular-nums; }}
 #preview-eta {{ font-weight: 650; }}
 #preview-elapsed {{ color: var(--muted); }}

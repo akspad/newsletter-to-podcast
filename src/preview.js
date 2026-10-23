@@ -40,7 +40,7 @@
       return;
     }
     const range = low > 0 && low !== high ? `${formatTime(low)}–${formatTime(high)}` : `up to ${formatTime(high)}`;
-    const label = estimate.phase === 'waking' ? 'Estimated wake-up' : estimate.phase === 'waiting' ? 'Estimated remaining (wait + audio)' : 'Estimated remaining';
+    const label = estimate.phase === 'waking' ? 'Estimated wake-up' : estimate.phase === 'waiting' ? 'Estimated time remaining (wait + audio)' : 'Estimated time remaining';
     eta.textContent = `${label}: ${range}`;
   }
 
