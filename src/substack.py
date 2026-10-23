@@ -21,11 +21,12 @@ AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceov
 
 
 class Substack:
-    def __init__(self, sid: str):
+    def __init__(self, sid: str, *, request_timeout=30):
         sid = sid.strip().strip('"')
         if sid.startswith("substack.sid="):  # tolerate pasting the whole cookie pair
             sid = sid[len("substack.sid="):]
         self.download_bytes = 0
+        self.request_timeout = request_timeout
         self.cookie = f"substack.sid={sid}" if sid else None
         self.auth_hosts = {h.strip().lower() for h in os.environ.get("SUBSTACK_AUTH_HOSTS", "").split(",") if h.strip()}
 
@@ -60,7 +61,7 @@ class Substack:
                 r = requests.get(
                     url, params=params,
                     headers={**HEADERS, "Accept-Encoding": "identity", **self.auth_headers(url)},
-                    allow_redirects=False, timeout=30, impersonate="chrome",
+                    allow_redirects=False, timeout=self.request_timeout, impersonate="chrome",
                     accept_encoding="identity", content_callback=receive,
                     curl_options={CurlOpt.RESOLVE: [f"{host}:{port}:{target}".encode()],
                                   CurlOpt.PROXY: b"", CurlOpt.MAXFILESIZE_LARGE: security.MAX_RESPONSE_BYTES})

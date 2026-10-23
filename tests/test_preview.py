@@ -1,6 +1,7 @@
 """Interactive demo boundaries, provider failures and actual audio duration."""
 import asyncio
 import json
+import io
 from pathlib import Path
 import shutil
 import subprocess
@@ -287,6 +288,19 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("SUBSTACK_SID", environments[0])
         self.assertFalse(paths[0].exists())
         terminate.assert_called_once()
+
+    async def test_download_diagnostics_exclude_raw_provider_messages(self):
+        diagnostic = b"article_download status=failed elapsed=60.0s error_type=Timeout"
+        process = type("Process", (), {"pid": 98765, "returncode": 1,
+                                       "communicate": AsyncMock(return_value=(None, diagnostic +
+                                           b"\nhttps://private.example/token SECRET article text\n")),
+                                       "wait": AsyncMock(return_value=0)})()
+        output = io.StringIO()
+        with patch("preview_server.asyncio.create_subprocess_exec", AsyncMock(return_value=process)), \
+                patch("preview_server.os.killpg"), patch("sys.stdout", output):
+            with self.assertRaises(preview_server.PreviewError):
+                await preview_server.generate_audio({"url": "https://fictional.example/story"})
+        self.assertEqual(output.getvalue(), diagnostic.decode() + "\n")
 
     async def test_timeout_terminates_worker_and_removes_files(self):
         paths = []

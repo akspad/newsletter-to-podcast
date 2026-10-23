@@ -84,6 +84,19 @@ class DestinationTests(unittest.TestCase):
         self.assertEqual(calls[0][1]["curl_options"][1], [b"fictional.example:443:93.184.216.34"])
         self.assertEqual(calls[0][1]["curl_options"][2], b"")
 
+    def test_preview_timeout_override_keeps_the_download_limits(self):
+        for timeout in (30, 60):
+            calls = []
+            fake = self.fake_transport([(types.SimpleNamespace(is_redirect=False, status_code=200),
+                                         [b'{"ok":true}'])], calls)
+            with patch.dict(sys.modules, {"curl_cffi": fake}), patch("security.public_destination", return_value=(
+                    "fictional.example", 443, "93.184.216.34")):
+                source = substack.Substack("") if timeout == 30 else substack.Substack("", request_timeout=60)
+                self.assertEqual(source.get("https://fictional.example"), {"ok": True})
+            self.assertEqual(calls[0][1]["timeout"], timeout)
+            self.assertEqual(calls[0][1]["curl_options"][1], [b"fictional.example:443:93.184.216.34"])
+            self.assertEqual(calls[0][1]["curl_options"][3], security.MAX_RESPONSE_BYTES)
+
     def test_chunked_response_and_aggregate_downloads_abort_before_parsing(self):
         for response_limit, run_limit in [(5, 100), (100, 5)]:
             calls = []

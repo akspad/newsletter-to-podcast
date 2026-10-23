@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import sys
@@ -59,7 +60,13 @@ async def generate_audio(payload):
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
             env=environment, start_new_session=True)
         try:
-            await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), timeout=120)
+            _, diagnostics = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), timeout=120)
+            # Forward only download timing and exception class, never source content,
+            # URLs, raw exception messages, or other provider output.
+            for line in diagnostics.decode("utf-8", errors="replace").splitlines():
+                if re.fullmatch(r"article_download status=(completed|failed) elapsed=\d+\.\ds"
+                                r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?", line):
+                    print(line, flush=True)
             if process.returncode:
                 if process.returncode == 2:
                     raise PreviewError("We couldn't read that article. Try a direct public article link or paste its text.", 422)
