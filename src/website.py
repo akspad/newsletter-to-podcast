@@ -83,6 +83,7 @@ footer p {{ margin: 6px 0; }}
 .preview .button {{ min-height: 53px; }}
 .button:disabled {{ opacity: .55; cursor: not-allowed; }}
 .hint, .notice, #preview-error {{ font-size: .9rem; color: var(--muted); }}
+.preview-privacy {{ margin-bottom: 0; }}
 .notice {{ padding: 12px 16px; background: #eef2e7; border-radius: 8px; }}
 #preview-error {{ color: #a12a20; }}
 .preview-timing {{ margin: 14px 0 0; padding: 14px 16px; background: #eef2e7; border-radius: 8px; }}
@@ -116,7 +117,7 @@ footer p {{ margin: 6px 0; }}
 <div id="text-input" hidden><label for="article-text">Article text</label><textarea id="article-text" name="text" placeholder="Paste the article or an excerpt here…" maxlength="100000" disabled></textarea></div>
 <div class="preview-options"><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button><p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p></div>
 <p id="preview-error" role="alert" hidden></p>
-<p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
+<p class="hint preview-privacy">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
 </form>
 <div id="preview-timing" class="preview-timing" aria-label="Preview time estimate" hidden><div class="timing-values" aria-live="off"><span id="preview-eta"></span><span id="preview-elapsed" role="timer" aria-live="off"></span></div></div>
 <div id="preview-result" class="preview-result" hidden><h3>Your article, ready to listen</h3><audio id="preview-audio" controls preload="metadata" aria-label="Listen to your article preview"></audio><div class="actions"><a id="preview-download" download="article-preview.mp3">Download MP3</a><a id="preview-source" target="_blank" rel="noopener noreferrer" hidden>Read the original article ↗</a></div></div>
