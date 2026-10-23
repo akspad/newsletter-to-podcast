@@ -10,6 +10,8 @@ Choose **spoken summaries** or **full article narration**. Set a maximum episode
 
 The demo leads with your own reading: paste a public article URL or its text, choose a voice, and generate an opening excerpt of **up to three minutes** with Edge TTS. No Microsoft login, API key or Gemini account is needed. Live previews require the small backend below; a static page without a connected backend explains this and offers the original audio sample.
 
+While preparing audio, the page shows an approximate remaining-time range and an elapsed timer. Estimates distinguish service wake-up, a busy service (including time to generate audio), and generation. Short pasted excerpts use a shorter initial range; unknown article lengths use a conservative two-minute range. These are rough estimates, not progress reported by Edge TTS. If a range is exceeded, the page says it is still working.
+
 - Reads Substack publications, RSS and Atom feeds, and simple article listing pages.
 - Generates summaries with Gemini and audio with Edge TTS.
 - Produces MP3s with podcast loudness normalization and an RSS feed.

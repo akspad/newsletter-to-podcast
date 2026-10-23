@@ -80,6 +80,11 @@ footer p {{ margin: 6px 0; }}
 .hint, .notice, #preview-status {{ font-size: .9rem; color: var(--muted); }}
 .notice {{ padding: 12px 16px; background: #eef2e7; border-radius: 8px; }}
 #preview-status[data-error="true"] {{ color: #a12a20; }}
+.preview-timing {{ margin: 14px 0 22px; padding: 14px 16px; background: #eef2e7; border-radius: 8px; }}
+.timing-values {{ display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; font-variant-numeric: tabular-nums; }}
+#preview-eta {{ font-weight: 650; }}
+#preview-elapsed {{ color: var(--muted); }}
+.preview-timing p {{ margin: 6px 0 0; }}
 .preview-result {{ margin-top: 24px; border-top: 1px solid var(--line); padding-top: 24px; }}
 .preview-result h3 {{ margin-top: 0; }}
 .preview-result .actions {{ margin-top: 16px; }}
@@ -107,6 +112,7 @@ footer p {{ margin: 6px 0; }}
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
 </form>
 <p id="preview-status" role="status" aria-live="polite"></p>
+<div id="preview-timing" class="preview-timing" aria-label="Preview time estimate" hidden><div class="timing-values" aria-live="off"><span id="preview-eta"></span><span id="preview-elapsed" role="timer" aria-live="off"></span></div><p class="hint">Approximate timing. Article access and service speed can change the estimate.</p></div>
 <div id="preview-result" class="preview-result" hidden><h3>Your article, ready to listen</h3><audio id="preview-audio" controls preload="metadata" aria-label="Listen to your article preview"></audio><div class="actions"><a id="preview-download" download="article-preview.mp3">Download MP3</a><a id="preview-source" target="_blank" rel="noopener noreferrer" hidden>Read the original article ↗</a></div></div>
 <noscript><p>Enable JavaScript to generate a preview. You can still play the original sample below.</p></noscript>
 </section>

@@ -5,6 +5,10 @@
   const button = document.querySelector('#generate-preview');
   const result = document.querySelector('#preview-result');
   const status = document.querySelector('#preview-status');
+  const timing = document.querySelector('#preview-timing');
+  const eta = document.querySelector('#preview-eta');
+  const elapsed = document.querySelector('#preview-elapsed');
+  const nativeNow = Date.now;
   let healthChecks = 0;
   let posts = 0;
   let generated = 0;
@@ -41,12 +45,40 @@
     document.querySelector('#preview-voice').value = 'en-GB-SoniaNeural';
     form.requestSubmit();
     if (!button.disabled || posts !== 0) throw new Error('Generation started before the service woke');
+    if (timing.hidden || timing.dataset.phase !== 'waking' || !eta.textContent.includes('Estimated wake-up') || elapsed.textContent !== 'Elapsed: 0s') throw new Error('Wake-up estimate did not start');
     await waitFor(() => status.textContent.includes('Another preview is finishing'));
+    if (timing.dataset.phase !== 'waiting' || !eta.textContent.includes('wait + audio')) throw new Error('Queue estimate did not include generation');
     document.querySelector('#article-text').value = 'Edited while waiting; do not substitute this for the submitted text.';
     await waitFor(() => !result.hidden);
     if (healthChecks !== 2 || posts !== 2 || generated !== 1) throw new Error('Cold start or capacity retry duplicated generation');
     if (submitted.text !== 'An original passage to test the preview.' || submitted.voice !== 'en-GB-SoniaNeural') throw new Error('Form values changed during wake-up');
     if (button.disabled || form.hasAttribute('aria-busy')) throw new Error('Form stayed busy after success');
+    if (!timing.hidden || eta.textContent || elapsed.textContent) throw new Error('Timer stayed active after success');
+
+    let finishAudio;
+    const heldAudio = new Promise((resolve) => { finishAudio = resolve; });
+    window.fetch = async (input) => {
+      if (new URL(input, window.location.href).pathname === '/health') return Response.json({status: 'ok'});
+      await heldAudio;
+      return new Response(sample, {headers: {'Content-Type': 'audio/mpeg'}});
+    };
+    document.querySelector('input[name="input-mode"][value="url"]').click();
+    document.querySelector('#article-url').value = 'https://example.com/article';
+    form.requestSubmit();
+    if (elapsed.textContent !== 'Elapsed: 0s') throw new Error('New request retained previous elapsed time');
+    await waitFor(() => timing.dataset.phase === 'generating');
+    const initialEta = eta.textContent;
+    if (!initialEta.includes('30s–2m')) throw new Error('Article URL did not use the conservative estimate');
+    Date.now = () => nativeNow() + 10000;
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    if (eta.textContent === initialEta || !/Elapsed: 1\ds/.test(elapsed.textContent)) throw new Error('ETA and elapsed time did not advance');
+    Date.now = () => nativeNow() + 130000;
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    if (!eta.textContent.includes('Taking longer than estimated') || !elapsed.textContent.includes('2m')) throw new Error('Overdue estimate showed a misleading zero countdown');
+    Date.now = nativeNow;
+    finishAudio();
+    await waitFor(() => !result.hidden);
+    if (!timing.hidden) throw new Error('Timer stayed visible after delayed audio');
 
     let compatiblePosts = 0;
     window.fetch = async (input) => {
@@ -68,6 +100,7 @@
     form.requestSubmit();
     await waitFor(() => status.dataset.error === 'true');
     if (failedPosts !== 1) throw new Error('A provider failure replayed generation');
+    if (!timing.hidden || eta.textContent || elapsed.textContent) throw new Error('Timer stayed active after failure');
 
     window.fetch = async () => new Response('', {status: 404});
     form.requestSubmit();
@@ -78,8 +111,9 @@
     form.requestSubmit();
     await waitFor(() => status.dataset.error === 'true');
     if (!status.textContent.includes('took too long') || button.disabled) throw new Error('Wake-up timeout was not actionable');
-    return 'Verified cold-start and busy-service recovery, one generation, service errors and timeout recovery';
+    return 'Verified ETA countdown, elapsed time, overdue/reset states, cold-start and busy recovery, and error handling';
   } finally {
     window.fetch = nativeFetch;
+    Date.now = nativeNow;
   }
 })()
