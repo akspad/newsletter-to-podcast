@@ -4,7 +4,7 @@ import re
 
 BODY_SELECTORS = (
     '[itemprop~="articleBody"], .entry-content, .post-content, .post__content, '
-    '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage'
+    '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text'
 )
 EXCLUDED = (
     'script, style, noscript, template, nav, header, footer, aside, form, '
@@ -19,6 +19,8 @@ EXCLUDED = (
     '.author-bio, .post-author, .post-categories, .related-posts, .related-articles, '
     '.comments, #comments, #Sidebar, #Footer, .linkedlist .smallprint, '
     '.gh-post-upgrade-cta, .gh-post-upgrade-cta-content, .post-access-cta, '
+    '.j-icon, .sharedaddy, .translate-post, #jp-relatedposts, .harvard-sharing, '
+    '.article-cta-box, .collection-cta, .collection-dateline, [class*="AscendiumAdUnit_wrapper__"], '
     '.wp-block-image, .wp-caption, .wp-block-video, .caption, '
     'figure:has(img), figure:has(video), figure:has(audio)'
 )
@@ -30,6 +32,19 @@ DATE = re.compile(
 
 
 def clean_tree(root, title, author):
+    for paragraph in list(root.find_all('p')):
+        if paragraph.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        value = paragraph.get_text(' ', strip=True)
+        # Short, standalone promotional/caption paragraphs inside the prose.
+        # Do not match ordinary sentences mentioning reading or newsletters.
+        related = (re.match(r'^Read more:', value, re.I) and paragraph.find('a') and
+                   paragraph.find('strong') and len(value) < 250)
+        newsletter = (re.match(r'^Enjoying .{1,100}\?\s*Subscribe to our free newsletter', value, re.I)
+                      and paragraph.find('a') and len(value) < 250)
+        credit = re.match(r'^Lead Image:', value, re.I) and paragraph.find('em') and len(value) < 300
+        if related or newsletter or credit:
+            paragraph.decompose()
     for heading in list(root.find_all(['h2', 'h3'])):
         if (heading.get_text(' ', strip=True).casefold() == 'written by' and
                 heading.parent is not root and len(heading.parent.get_text(' ', strip=True)) < 600):

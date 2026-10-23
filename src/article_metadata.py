@@ -104,13 +104,23 @@ def article_metadata(soup, url):
     page_title = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
     headings = [node for node in soup.select('.PostsPageTitle-root, article h1, main h1, .entry-title')
                 if not node.find_parent(['nav', 'aside'])]
+    def matches_heading(node):
+        value = clean(node.get_text(' ', strip=True))
+        # Some sites put Markdown emphasis into social/SEO metadata. Compare
+        # without those markers, then read the visible heading as plain text.
+        comparable = lambda value: re.sub(r'[*_`]', '', value)
+        value = comparable(value)
+        return bool(value) and any(raw and (comparable(raw) == value or
+                    any(comparable(raw).startswith(value + sep) for sep in (' | ', ' - ', ' — ', ' – ')))
+                    for raw in (structured, social, page_title))
+    if not headings:
+        # Nonsemantic collection layouts can place h1 outside article/main.
+        # Require a metadata match so unrelated site branding cannot win.
+        headings = [node for node in soup.select('h1') if not node.find_parent(['header', 'nav', 'aside'])
+                    and matches_heading(node)]
     # Match metadata to distinguish an article heading from blog branding (Go
     # has both as h1). Otherwise prefer the visible headline over its SEO variant.
-    heading = next((node for node in headings if any(raw and
-                    (raw == clean(node.get_text(' ', strip=True)) or
-                     any(raw.startswith(clean(node.get_text(' ', strip=True)) + sep)
-                         for sep in (' | ', ' - ', ' — ', ' – ')))
-                    for raw in (structured, social, page_title))), headings[0] if headings else None)
+    heading = next((node for node in headings if matches_heading(node)), headings[0] if headings else None)
     title = clean(heading.get_text(' ', strip=True) if heading else '') or structured or social or page_title
     title = strip_suffix(title)
 
@@ -137,7 +147,20 @@ def article_metadata(soup, url):
                 pieces.append(child.get_text(' ', strip=True) if hasattr(child, 'get_text') else str(child))
             byline_name = ' '.join(pieces)
         byline_name = re.split(r',\s+(?:Chief|Senior|Staff|Principal|Contributing)\b', byline_name)[0]
-    author = names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    # An explicit visible author list is stronger evidence than a generic
+    # publisher account in JSON-LD (for example "The Editors"). Read the whole
+    # group so a multi-author byline isn't reduced to its first link.
+    group = next((node for node in soup.select('.article-authors')
+                  if not any(parent.has_attr('hidden') or parent.get('aria-hidden') == 'true' or
+                             parent.name in ('nav', 'aside') or
+                             set(parent.get('class', [])) & {'related-posts', 'related-articles', 'comments'}
+                             for parent in [node, *node.parents] if hasattr(parent, 'attrs'))), None)
+    visible_authors = ''
+    if group is not None:
+        members = group.select('a, [itemprop="name"]')
+        values = [clean(node.get_text(' ', strip=True), 100) for node in members[:5]]
+        visible_authors = ', '.join(dict.fromkeys(filter(None, values))) or clean(group.get_text(' ', strip=True), 100)
+    author = visible_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     if not author:
         rust_byline = soup.select_one('.publish-date-author')
         google_byline = soup.select_one('.basic-hero--blog-detail__description')
@@ -154,5 +177,5 @@ def article_metadata(soup, url):
     author = clean(author or meta('article:author'), 100)
     if author.startswith(('http://', 'https://')):
         author = ''
-    author = re.sub(r'^by\s+', '', author, flags=re.I)
+    author = re.sub(r'^by(?:\s*:\s*|\s+)', '', author, flags=re.I)
     return publication, title, author

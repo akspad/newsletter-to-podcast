@@ -70,6 +70,30 @@ class ArticleMetadataTests(unittest.TestCase):
         self.assertEqual(metadata('<article><h1>A discovery</h1><p>As '
                                   '<a href="/authors/somebody">Another Writer</a> said.</p></article>')[2], '')
 
+    def test_visible_author_group_overrides_generic_schema_without_losing_coauthors(self):
+        html = ('<script type="application/ld+json">'
+                '{"@type":"Article","author":{"name":"The Editors"}}</script>'
+                '<div class="article-authors"><span>By: </span><a href="/daily-author/alex">Alex Writer</a>'
+                '<a href="/daily-author/sam">Sam Author</a></div><article><h1>A discovery</h1></article>')
+        self.assertEqual(metadata(html)[2], 'Alex Writer, Sam Author')
+        self.assertEqual(metadata(html.replace('<a href="/daily-author/alex">Alex Writer</a>'
+                                             '<a href="/daily-author/sam">Sam Author</a>', 'Alex Writer'))[2], 'Alex Writer')
+
+    def test_hidden_and_related_author_groups_do_not_override_attribution(self):
+        html = ('<script type="application/ld+json">'
+                '{"@type":"Article","author":{"name":"Alex Writer"}}</script>'
+                '<div hidden><div class="article-authors"><a>Hidden Name</a></div></div>'
+                '<aside><div class="article-authors"><a>Related Name</a></div></aside>')
+        self.assertEqual(metadata(html)[2], 'Alex Writer')
+
+    def test_matching_nonsemantic_headline_uses_visible_text_without_markdown(self):
+        html = ('<meta property="og:site_name" content="Science Notes">'
+                '<title>The *Quiet Book* (1677) — Science Notes</title>'
+                '<div class="collection-header"><h1>The <em>Quiet Book</em> (1677)</h1></div>')
+        self.assertEqual(metadata(html), ('Science Notes', 'The Quiet Book (1677)', ''))
+        html = '<meta property="og:title" content="Actual article"><div><h1>Unrelated branding</h1></div>'
+        self.assertEqual(metadata(html)[1], 'Actual article')
+
 
 if __name__ == '__main__':
     unittest.main()

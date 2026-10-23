@@ -233,6 +233,38 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get("/health")).status, 200)
         self.assertEqual((await self.client.get("/.state/state.json")).status, 404)
 
+    async def test_request_identifiers_correlate_concurrent_jobs_without_logging_content(self):
+        identities = []
+        entered = asyncio.Event()
+        async def generator(payload):
+            identities.append(preview_server.REQUEST_ID.get())
+            if len(identities) == 2:
+                entered.set()
+            await asyncio.wait_for(entered.wait(), 3)
+            return b'ID3-audio-fixture'
+        client = TestClient(TestServer(preview_server.create_app(['https://demo.example'], generator)))
+        await client.start_server()
+        output = io.StringIO()
+        try:
+            with patch('sys.stdout', output):
+                responses = await asyncio.gather(*[
+                    client.post('/api/preview', json={'text': 'PRIVATE article content'},
+                                headers={'Origin': 'https://demo.example', 'X-Preview-Request-ID': 'PRIVATE'})
+                    for _ in range(2)])
+            self.assertEqual(len(set(identities)), 2)
+            self.assertEqual({response.headers['X-Preview-Request-ID'] for response in responses}, set(identities))
+            for response in responses:
+                identity = response.headers['X-Preview-Request-ID']
+                self.assertRegex(identity, r'^[a-f0-9]{32}$')
+                self.assertEqual(response.headers['X-Preview-Request-ID'], identity)
+                self.assertIn('X-Preview-Request-ID', response.headers['Access-Control-Expose-Headers'])
+                self.assertIn(f'request_id={identity} event=received', output.getvalue())
+                self.assertIn(f'request_id={identity} event=finished http_status=200', output.getvalue())
+            self.assertNotIn('PRIVATE', output.getvalue())
+            self.assertEqual(preview_server.REQUEST_ID.get(), '')
+        finally:
+            await client.close()
+
     async def test_rejected_origin_and_invalid_inputs_never_generate(self):
         denied = await self.client.post("/api/preview", json={"text": "article"}, headers={"Origin": "https://untrusted.example"})
         self.assertEqual(denied.status, 403)
@@ -395,6 +427,22 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(preview_server.PreviewError):
                 await preview_server.generate_audio({"url": "https://fictional.example/story"})
         self.assertEqual(output.getvalue(), diagnostic.decode() + "\n")
+
+    async def test_worker_diagnostics_include_the_active_request_identifier(self):
+        diagnostic = b'preview_stage stage=speech status=failed elapsed=12.0s error_type=NoAudioReceived'
+        process = type('Process', (), {'pid': 98765, 'returncode': 4,
+                       'communicate': AsyncMock(return_value=(None, diagnostic + b'\nPRIVATE provider text')),
+                       'wait': AsyncMock(return_value=0)})()
+        output = io.StringIO()
+        token = preview_server.REQUEST_ID.set('a' * 32)
+        try:
+            with patch('preview_server.asyncio.create_subprocess_exec', AsyncMock(return_value=process)), \
+                    patch('preview_server.os.killpg'), patch('sys.stdout', output):
+                with self.assertRaises(preview_server.PreviewError):
+                    await preview_server.generate_audio({'text': 'PRIVATE article text'})
+        finally:
+            preview_server.REQUEST_ID.reset(token)
+        self.assertEqual(output.getvalue(), 'request_id=' + 'a' * 32 + ' ' + diagnostic.decode() + '\n')
 
     async def test_speech_diagnostics_and_actionable_error_reach_server_without_private_output(self):
         diagnostic = b'preview_stage stage=speech status=failed elapsed=12.0s error_type=NoAudioReceived'

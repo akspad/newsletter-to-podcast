@@ -1,6 +1,7 @@
 """Run the article-to-audio demo: python src/preview_server.py."""
 import asyncio
 from collections import defaultdict, deque
+from contextvars import ContextVar
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import signal
 import sys
 import tempfile
 import time
+import uuid
 from urllib.parse import urlparse
 
 from aiohttp import web
@@ -19,6 +21,7 @@ import website
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUEST_BYTES = 120_000
+REQUEST_ID = ContextVar('preview_request_id', default='')
 
 
 class PreviewError(Exception):
@@ -72,7 +75,8 @@ async def generate_audio(payload):
                         re.fullmatch(r"preview_stage stage=(extract|speech|trim|validate)"
                                      r" status=(completed|failed|retry) elapsed=\d+\.\ds"
                                      r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: attempt=[123])?", line)):
-                    print(line, flush=True)
+                    identity = REQUEST_ID.get()
+                    print((f"request_id={identity} " if identity else '') + line, flush=True)
             if process.returncode:
                 if process.returncode == 3:
                     raise PreviewError(preview.ARTICLE_BLOCKED_MESSAGE, 422)
@@ -112,6 +116,29 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
             raise ValueError("PREVIEW_ALLOWED_ORIGINS must contain exact HTTP(S) origins without paths")
 
     @web.middleware
+    async def trace_request(request, handler):
+        if request.path != '/api/preview' or request.method != 'POST':
+            return await handler(request)
+        identity = uuid.uuid4().hex  # Never trust a client-supplied identifier.
+        token = REQUEST_ID.set(identity)
+        started = time.monotonic()
+        print(f"preview_request request_id={identity} event=received", flush=True)
+        try:
+            response = await handler(request)
+            response.headers['X-Preview-Request-ID'] = identity
+            # This records the handler's result, not proof of delivery through
+            # a hosting gateway or of playback in the browser.
+            print(f"preview_request request_id={identity} event=finished http_status={response.status} "
+                  f"elapsed={time.monotonic() - started:.1f}s", flush=True)
+            return response
+        except (Exception, asyncio.CancelledError) as error:
+            print(f"preview_request request_id={identity} event=failed error_type={type(error).__name__} "
+                  f"elapsed={time.monotonic() - started:.1f}s", flush=True)
+            raise
+        finally:
+            REQUEST_ID.reset(token)
+
+    @web.middleware
     async def boundaries(request, handler):
         origin = request.headers.get("Origin")
         own_origin = f"{request.scheme}://{request.host}"
@@ -127,7 +154,7 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
         if origin and permitted:
             response.headers.update({"Access-Control-Allow-Origin": origin, "Vary": "Origin",
                                      "Access-Control-Allow-Methods": "POST, OPTIONS",
-                                     "Access-Control-Expose-Headers": "Retry-After",
+                                     "Access-Control-Expose-Headers": "Retry-After, X-Preview-Request-ID",
                                      "Access-Control-Allow-Headers": "Content-Type"})
         return response
 
@@ -174,7 +201,7 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
     async def health(request):
         return web.json_response({"status": "ok"})
 
-    app = web.Application(middlewares=[boundaries], client_max_size=REQUEST_BYTES)
+    app = web.Application(middlewares=[trace_request, boundaries], client_max_size=REQUEST_BYTES)
     app.router.add_get("/", index)
     app.router.add_get("/favicon.svg", favicon)
     app.router.add_get("/preview.js", script)

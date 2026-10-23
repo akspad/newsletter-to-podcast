@@ -110,6 +110,43 @@ class ArticleExtractionTests(unittest.TestCase):
                 '<div><h2>Tags:</h2><ul class="post-tags"><li>Testing</li></ul></div></section>')
         self.assertEqual(extract(html), PARAGRAPHS[0])
 
+    def test_science_story_body_excludes_summary_metadata_and_reference_panels(self):
+        html = ('<main><h1>A discovery</h1><dl><dt>Date:</dt><dd>October 2026</dd>'
+                '<dt>Source:</dt><dd>Research Institute</dd><dt>Summary:</dt><dd>A teaser.</dd>'
+                '<dt>Share:</dt><dd>Facebook</dd></dl><div id="story_text">'
+                '<figure><img src="/photo"><figcaption>A media caption.</figcaption></figure>'
+                '<p>' + PARAGRAPHS[0] + '</p><div><p>' + PARAGRAPHS[1] + '</p></div></div>'
+                '<div id="story_source">Story Source: Research Institute</div>'
+                '<div id="journal_references">Cite This Page:</div></main>')
+        self.assertEqual(extract(html), ' '.join(PARAGRAPHS[:2]))
+
+    def test_article_icon_and_sharing_translation_and_donation_widgets_are_removed(self):
+        html = ('<div class="entry-content"><div class="j-icon">The icon indicates free access.</div>'
+                '<p>' + PARAGRAPHS[0] + '</p><div class="sharedaddy">Share this:</div>'
+                '<div class="translate-post">Can you translate this article?</div>'
+                '<div id="jp-relatedposts">Related</div><div class="harvard-sharing">Print/PDF</div>'
+                '<div class="collection-cta"><div class="article-cta-box">Support our work.</div></div>'
+                '<div class="collection-dateline">Published October 2026</div></div>')
+        self.assertEqual(extract(html), PARAGRAPHS[0])
+
+    def test_inline_ads_teasers_and_caption_paragraphs_are_removed(self):
+        html = ('<article><p>' + PARAGRAPHS[0] + '</p><div class="AscendiumAdUnit_wrapper__abc">'
+                'Subscribe to skip ads Advertisement</div><p><strong>Read more: </strong>'
+                '<a href="/other">Another story</a></p><p>' + PARAGRAPHS[1] + '</p>'
+                '<p><em>Enjoying</em> Science Notes? <a href="/newsletter">Subscribe to our free newsletter</a>.</p>'
+                '<p><em>Lead Image: Alex Photographer</em></p></article>')
+        self.assertEqual(extract(html), ' '.join(PARAGRAPHS[:2]))
+
+    def test_editorial_discussion_of_newsletters_and_quoted_promotions_is_preserved(self):
+        html = ('<div class="entry-content"><p>We invite readers to read more about how newsletters work.</p>'
+                '<p>Subscribe to our free newsletter was the slogan we chose to analyze.</p>'
+                '<blockquote><p><em>Enjoying</em> Science Notes? '
+                '<a href="/newsletter">Subscribe to our free newsletter</a>.</p></blockquote></div>')
+        text = extract(html)
+        self.assertIn('read more about how newsletters work', text)
+        self.assertIn('was the slogan we chose to analyze', text)
+        self.assertIn('Enjoying Science Notes?', text)
+
 
 if __name__ == '__main__':
     unittest.main()
