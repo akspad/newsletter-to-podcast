@@ -54,7 +54,7 @@ jobs:
       RUNS_PER_DAY: ${{ vars.RUNS_PER_DAY || '4' }}
       TTS_VOICE: ${{ vars.TTS_VOICE || 'en-US-AndrewNeural' }}
       TTS_RATE: ${{ vars.TTS_RATE || '+0%' }}
-      PREVIEW_API_URL: ${{ vars.PREVIEW_API_URL }}
+      PREVIEW_API_URL: ${{ vars.PREVIEW_API_URL || (github.repository == 'akspad/newsletter-to-podcast' && 'https://newsletter-audio-preview.onrender.com/api/preview' || '') }}
       SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'gemini-flash-latest' }}
       FEED_TITLE: ${{ vars.FEED_TITLE }}
       LOOKBACK_HOURS: ${{ inputs.lookback_hours }}

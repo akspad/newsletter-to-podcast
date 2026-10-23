@@ -44,6 +44,8 @@ After the service shows **Live**, open `https://YOUR-SERVICE.onrender.com/health
 
 Render Free sleeps after 15 minutes without traffic and can take about a minute to start. On a generation request, the page waits up to 90 seconds for `/health`, then gives the audio request its own 130-second timeout. Health checks are retried while the host wakes; generation is submitted only once. It does not send background keep-alive traffic. In-memory rate limits reset when Render restarts the service. See [Render's free-service limits](https://render.com/docs/free).
 
+For `akspad/newsletter-to-podcast`, the publishing workflow defaults to `https://newsletter-audio-preview.onrender.com/api/preview`. A `PREVIEW_API_URL` repository variable overrides that value. Forks have no default backend and should set their own variable after deploying a service.
+
 To run the same image locally:
 
 ```sh
