@@ -42,6 +42,69 @@ def validate(payload):
     return {"url": url, "text": text, "voice": voice}
 
 
+def article_metadata(soup, url):
+    """Read attribution from the downloaded page, without extra requests."""
+    from urllib.parse import urlparse
+    from tts import speech_text
+
+    def clean(value, limit):
+        if not isinstance(value, str):
+            return ""
+        return " ".join(speech_text(value).split())[:limit].strip()
+
+    def meta(*keys):
+        for key in keys:
+            node = soup.find("meta", attrs={"property": key}) or soup.find("meta", attrs={"name": key})
+            if node and node.get("content", "").strip():
+                return node["content"]
+        return ""
+
+    def names(value):
+        values = value[:5] if isinstance(value, list) else [value]
+        return ", ".join(filter(None, (clean(item.get("name", "") if isinstance(item, dict) else item, 100)
+                                      for item in values)))
+
+    article = {}
+    for script in soup.select('script[type="application/ld+json"]')[:20]:
+        try:
+            data = json.loads(script.string or script.get_text())
+        except (ValueError, RecursionError):
+            continue
+        pending = data[:] if isinstance(data, list) else [data]
+        for _ in range(100):
+            if not pending:
+                break
+            node = pending.pop(0)
+            if not isinstance(node, dict):
+                continue
+            kinds = node.get("@type", [])
+            kinds = [kinds] if isinstance(kinds, str) else kinds
+            if isinstance(kinds, list) and any(isinstance(kind, str) and
+                    (kind.rsplit("/", 1)[-1].endswith("Article") or kind.rsplit("/", 1)[-1] == "BlogPosting") for kind in kinds):
+                article = node
+                break
+            graph = node.get("@graph", [])
+            if isinstance(graph, list):
+                pending.extend(graph[:100])
+        if article:
+            break
+
+    heading = soup.select_one("article h1, main h1")
+    byline = soup.select_one('[rel~="author"], [itemprop="author"]')
+    publication = clean(meta("og:site_name") or names(article.get("publisher")) or
+                        names(article.get("isPartOf")) or meta("application-name"), 80)
+    publication = publication or clean((urlparse(url).hostname or "").removeprefix("www."), 80)
+    title = clean(article.get("headline"), 160) or clean(heading.get_text(" ", strip=True) if heading else "", 160)
+    title = title or clean(meta("og:title", "twitter:title") or (soup.title.get_text(" ", strip=True) if soup.title else ""), 160)
+    author = clean(names(article.get("author")) or meta("author", "parsely-author") or
+                   (byline.get_text(" ", strip=True) if byline else "") or meta("article:author"), 100)
+    # Some sites put a profile URL in article:author; don't announce it as a name.
+    if author.startswith(("http://", "https://")):
+        author = ""
+    author = re.sub(r"^by\s+", "", author, flags=re.IGNORECASE)
+    return publication, title, author
+
+
 def article_text(url):
     from bs4 import BeautifulSoup
     from substack import Substack
@@ -49,15 +112,25 @@ def article_text(url):
     # Reuse the bounded downloader: public destinations only, DNS pinned, and
     # every redirect revalidated. No subscription cookies or private config.
     soup = BeautifulSoup(Substack("").get(url, raw=True), "html.parser")
+    publication, title, author = article_metadata(soup, url)
     for node in soup.select("script, style, noscript, nav, header, footer, aside, form, [hidden]"):
         node.decompose()
-    body = soup.select_one("article") or soup.select_one("main")
+    body = (soup.select_one('[itemprop~="articleBody"], .entry-content, .post-content, .post__content')
+            or soup.select_one("article") or soup.select_one("main"))
     if body is None:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
+    # The title and a recognized byline are already spoken in the introduction.
+    for node in body.select('h1, [rel~="author"], [itemprop="author"]'):
+        value = " ".join(node.get_text(" ", strip=True).split())
+        if (title and value[:160].strip() == title) or (author and
+                re.sub(r"^by\s+", "", value, flags=re.IGNORECASE)[:100].strip() == author):
+            node.decompose()
     text = body.get_text(" ", strip=True)
     if len(text.split()) < 20:
         raise ValueError("That page has too little readable text. Try pasting the article text instead.")
-    return text
+    parts = [publication, title, f"By {author}" if author else ""]
+    intro = " ".join(part if part.endswith((".", "!", "?")) else part + "." for part in parts if part)
+    return f"{intro}\n{text}"
 
 
 def excerpt(text):

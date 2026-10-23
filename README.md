@@ -30,9 +30,9 @@ Install Python 3.12+, ffmpeg (including ffprobe), and the dependencies using the
 python src/preview_server.py
 ```
 
-Open **http://localhost:8000/**, paste a direct public article link or select **Paste text**, choose a narrator, and select **Generate audio preview**. The result has a player, MP3 download and original-article link. The preview narrates the opening excerpt, not a summary. It selects up to 130 words / 1,000 characters and measures the finished MP3 to enforce a strict 60-second limit. The final limit can cut the ending for a slow voice. All three bundled voices speak English.
+Open **http://localhost:8000/**, paste a direct public article link or select **Paste text**, choose a narrator, and select **Generate audio preview**. The result has a player, MP3 download and original-article link. The preview narrates the opening excerpt, not a summary. Article links begin with “Blog name. Article title. By author.” using available page metadata, with the hostname as a fallback for the blog name. Missing titles or authors are omitted; pasted text is read as supplied. The introduction and excerpt together fit the 130-word / 1,000-character budget, and the finished MP3 is measured to enforce a strict 60-second limit. The final limit can cut the ending for a slow voice. All three bundled voices speak English.
 
-Public URLs use the same bounded, DNS-pinned downloader as the podcast pipeline, with every redirect checked against private and reserved destinations. Extraction looks for an article or main-content element; blocked sites, paywalls and some page layouts need the paste-text fallback. Edge TTS is an unofficial online service and can change or become unavailable.
+Public URLs use the same bounded, DNS-pinned downloader as the podcast pipeline, with every redirect checked against private and reserved destinations. Extraction recognizes common article-body markup, then falls back to an article or main-content element; blocked sites, paywalls and some page layouts need the paste-text fallback. Edge TTS is an unofficial online service and can change or become unavailable.
 
 ### Connect the GitHub Pages demo
 

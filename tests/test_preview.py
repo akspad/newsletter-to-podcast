@@ -1,5 +1,6 @@
 """Interactive demo boundaries, provider failures and actual audio duration."""
 import asyncio
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -44,6 +45,66 @@ class PreviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Private or reserved"):
                 preview.article_text("http://fictional.example/article")
 
+    def test_article_intro_uses_page_metadata_without_repeating_title_or_byline(self):
+        html = ('<meta property="og:site_name" content="Curiosity Weekly">'
+                '<meta name="author" content="Alex Writer">'
+                '<article><h1>A little room for curiosity</h1><a rel="author">Alex Writer</a>'
+                '<p>' + 'An original sentence. ' * 40 + '</p></article>')
+        with patch("substack.Substack.get", return_value=html) as fetch:
+            text = preview.article_text("https://fictional.example/story")
+        self.assertTrue(text.startswith("Curiosity Weekly. A little room for curiosity. By Alex Writer.\n"))
+        self.assertEqual(text.count("A little room for curiosity"), 1)
+        self.assertEqual(text.count("Alex Writer"), 1)
+        fetch.assert_called_once_with("https://fictional.example/story", raw=True)
+
+    def test_article_intro_supports_json_ld_graph_and_multiple_authors(self):
+        data = {"@graph": [{"@type": "WebSite", "name": "Unrelated"},
+                           {"@type": ["Article", "BlogPosting"], "headline": "An original story",
+                            "publisher": {"name": "The Thoughtful Blog"},
+                            "author": [{"@type": "Person", "name": "Alex"}, {"name": "Sam"}]}]}
+        html = ('<script type="application/ld+json">' + json.dumps(data) + '</script>'
+                '<article><p>' + 'Original sentence. ' * 40 + '</p></article>')
+        with patch("substack.Substack.get", return_value=html):
+            text = preview.article_text("https://fictional.example/story")
+        self.assertTrue(text.startswith("The Thoughtful Blog. An original story. By Alex, Sam.\n"))
+
+    def test_missing_or_malformed_metadata_never_invents_an_author(self):
+        html = ('<script type="application/ld+json">{broken</script>'
+                '<meta property="article:author" content="https://fictional.example/profile">'
+                '<title>A quiet afternoon</title><main><p>' + 'Original sentence. ' * 40 + '</p></main>')
+        with patch("substack.Substack.get", return_value=html):
+            text = preview.article_text("https://www.fictional.example/story")
+        self.assertTrue(text.startswith("fictional.example. A quiet afternoon.\n"))
+        self.assertNotIn("By ", text)
+        self.assertNotIn("/profile", text)
+
+    def test_site_header_does_not_override_article_title(self):
+        html = ('<header><h1>Site branding</h1></header><meta property="og:title" content="Actual article title">'
+                '<main><p>' + 'Original sentence. ' * 40 + '</p></main>')
+        with patch("substack.Substack.get", return_value=html):
+            text = preview.article_text("https://fictional.example/story")
+        self.assertTrue(text.startswith("fictional.example. Actual article title.\n"))
+        self.assertNotIn("Site branding", text)
+
+    def test_explicit_article_body_is_preferred_over_an_author_bio(self):
+        html = ('<meta property="og:site_name" content="Example Blog"><meta name="author" content="Alex">'
+                '<main><h1>A useful story</h1><article class="author-bio">' + 'Author biography. ' * 40 +
+                '</article><section class="post__content"><p>' + 'Actual article sentence. ' * 40 + '</p></section></main>')
+        with patch("substack.Substack.get", return_value=html):
+            text = preview.article_text("https://fictional.example/story")
+        self.assertTrue(text.startswith("Example Blog. A useful story. By Alex.\nActual article sentence."))
+        self.assertNotIn("Author biography", text)
+
+    def test_long_metadata_leaves_room_for_the_article(self):
+        html = ('<meta property="og:site_name" content="' + 'Blog ' * 100 + '">'
+                '<meta name="author" content="' + 'Writer ' * 100 + '">'
+                '<article><h1>' + 'Title ' * 100 + '</h1><p>' + 'Body sentence. ' * 100 + '</p></article>')
+        with patch("substack.Substack.get", return_value=html):
+            text = preview.excerpt(preview.article_text("https://fictional.example/story"))
+        self.assertIn("Body sentence.", text)
+        self.assertLessEqual(len(text.split()), 130)
+        self.assertLessEqual(len(text), 1000)
+
     def test_page_section_order_and_optional_backend(self):
         page = website.render(sample=True)
         self.assertLess(page.index('class="sample"'), page.index('class="grid"'))
@@ -59,11 +120,18 @@ class PreviewTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg required")
     def test_real_audio_is_capped_at_one_minute(self):
+        spoken = []
         async def fake_narrate(text, voice, path):
+            spoken.append(text)
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
                             "anullsrc=r=24000:cl=mono", "-t", "70", str(path)], check=True)
-        with tempfile.TemporaryDirectory() as tmp, patch("preview.narrate", side_effect=fake_narrate):
-            result = preview.generate({"text": "An original short article."}, Path(tmp))
+        html = ('<meta property="og:site_name" content="Original Blog"><meta name="author" content="Alex">'
+                '<article><h1>A short story</h1><p>' + 'Original sentence. ' * 200 + '</p></article>')
+        with tempfile.TemporaryDirectory() as tmp, patch("preview.narrate", side_effect=fake_narrate), \
+                patch("substack.Substack.get", return_value=html):
+            result = preview.generate({"url": "https://fictional.example/story"}, Path(tmp))
+            self.assertTrue(spoken[0].startswith("Original Blog. A short story. By Alex."))
+            self.assertLessEqual(len(spoken[0].split()), 130)
             self.assertTrue(result.is_file())
             self.assertGreater(tts.duration(result), 59)
             self.assertLessEqual(tts.duration(result), 60)
