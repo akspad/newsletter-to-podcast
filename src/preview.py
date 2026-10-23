@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from substack import SourceDownloadError
+from article_metadata import article_metadata
 
 MAX_SECONDS = 60
 MAX_WORDS = 130
@@ -16,6 +17,8 @@ MAX_INPUT_BYTES = 100_000
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
 ARTICLE_BLOCKED_MESSAGE = ("This site blocked access to the article. Choose “Paste text” "
                            "and paste the article text you can access.")
+SPEECH_UNAVAILABLE_MESSAGE = ("The speech service couldn't generate audio. "
+                              "Please try again or choose another narrator.")
 VOICES = {
     "en-US-AndrewNeural": "Andrew · English (US)",
     "en-US-AriaNeural": "Aria · English (US)",
@@ -46,72 +49,15 @@ def validate(payload):
     return {"url": url, "text": text, "voice": voice}
 
 
-def article_metadata(soup, url):
-    """Read attribution from the downloaded page, without extra requests."""
-    from urllib.parse import urlparse
-    from tts import speech_text
+class SpeechUnavailableError(RuntimeError):
+    """The upstream speech request failed, rather than article access."""
 
-    def clean(value, limit):
-        if not isinstance(value, str):
-            return ""
-        return " ".join(speech_text(value).split())[:limit].strip()
 
-    def meta(*keys):
-        for key in keys:
-            node = soup.find("meta", attrs={"property": key}) or soup.find("meta", attrs={"name": key})
-            if node and node.get("content", "").strip():
-                return node["content"]
-        return ""
-
-    def names(value):
-        values = value[:5] if isinstance(value, list) else [value]
-        return ", ".join(filter(None, (clean(item.get("name", "") if isinstance(item, dict) else item, 100)
-                                      for item in values)))
-
-    article = {}
-    for script in soup.select('script[type="application/ld+json"]')[:20]:
-        try:
-            data = json.loads(script.string or script.get_text())
-        except (ValueError, RecursionError):
-            continue
-        pending = data[:] if isinstance(data, list) else [data]
-        for _ in range(100):
-            if not pending:
-                break
-            node = pending.pop(0)
-            if not isinstance(node, dict):
-                continue
-            kinds = node.get("@type", [])
-            kinds = [kinds] if isinstance(kinds, str) else kinds
-            if isinstance(kinds, list) and any(isinstance(kind, str) and
-                    (kind.rsplit("/", 1)[-1].endswith("Article") or kind.rsplit("/", 1)[-1] == "BlogPosting") for kind in kinds):
-                article = node
-                break
-            graph = node.get("@graph", [])
-            if isinstance(graph, list):
-                pending.extend(graph[:100])
-        if article:
-            break
-
-    heading = soup.select_one(".PostsPageTitle-root") or soup.select_one("article h1, main h1")
-    byline = soup.select_one('[rel~="author"], [itemprop="author"], .PostsAuthors-root')
-    publication = clean(meta("og:site_name") or names(article.get("publisher")) or
-                        names(article.get("isPartOf")) or meta("application-name"), 80)
-    publication = publication or clean((urlparse(url).hostname or "").removeprefix("www."), 80)
-    title = clean(article.get("headline"), 160) or clean(heading.get_text(" ", strip=True) if heading else "", 160)
-    title = title or clean(meta("og:title", "twitter:title") or (soup.title.get_text(" ", strip=True) if soup.title else ""), 160)
-    for separator in (" — ", " - ", " | "):
-        suffix = separator + publication
-        if title.casefold().endswith(suffix.casefold()):
-            title = title[:-len(suffix)].strip()
-            break
-    author = clean(names(article.get("author")) or meta("author", "parsely-author") or
-                   (byline.get_text(" ", strip=True) if byline else "") or meta("article:author"), 100)
-    # Some sites put a profile URL in article:author; don't announce it as a name.
-    if author.startswith(("http://", "https://")):
-        author = ""
-    author = re.sub(r"^by\s+", "", author, flags=re.IGNORECASE)
-    return publication, title, author
+def stage_log(stage, status, started, error=None, attempt=None):
+    details = f" error_type={type(error).__name__}" if error is not None else ""
+    details += f" attempt={attempt}" if attempt is not None else ""
+    print(f"preview_stage stage={stage} status={status} elapsed={time.monotonic() - started:.1f}s"
+          + details, file=sys.stderr)
 
 
 def article_text(url):
@@ -160,38 +106,76 @@ def excerpt(text):
 
 async def narrate(text, voice, path):
     import edge_tts
+    from aiohttp import ClientConnectionError, ClientResponseError
     # edge-tts pins a certifi SSLContext. Add an explicitly configured CA bundle
     # for managed networks while retaining certificate and hostname validation.
     cafile = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
     if cafile:
         edge_tts.communicate._SSL_CTX.load_verify_locations(cafile=cafile)
-    count = 0
-    communication = edge_tts.Communicate(text, voice, proxy=os.environ.get("HTTPS_PROXY"))
-    with path.open("wb") as output:
-        async for item in communication.stream():
-            if item["type"] == "audio":
-                count += len(item["data"])
-                if count > MAX_AUDIO_BYTES:
-                    raise ValueError("Preview audio exceeded its size limit.")
-                output.write(item["data"])
-    if not count:
-        raise RuntimeError("No speech returned")
+    # Edge sometimes closes a successful connection without returning speech.
+    # Retry once within generate's existing 70-second total speech deadline.
+    # Start a fresh communicator and file so partial audio cannot be duplicated.
+    for attempt in (1, 2):
+        started = time.monotonic()
+        try:
+            count = 0
+            communication = edge_tts.Communicate(text, voice, proxy=os.environ.get("HTTPS_PROXY"))
+            with path.open("wb") as output:
+                async for item in communication.stream():
+                    if item["type"] == "audio":
+                        count += len(item["data"])
+                        if count > MAX_AUDIO_BYTES:
+                            raise ValueError("Preview audio exceeded its size limit.")
+                        output.write(item["data"])
+            if not count:
+                raise edge_tts.exceptions.NoAudioReceived("No speech returned")
+            stage_log('speech', 'completed', started, attempt=attempt)
+            return
+        except (edge_tts.exceptions.NoAudioReceived, ClientConnectionError, ClientResponseError) as error:
+            transient = not isinstance(error, ClientResponseError) or error.status == 429 or error.status >= 500
+            if attempt == 2 or not transient:
+                raise
+            stage_log('speech', 'retry', started, error, attempt)
+            await asyncio.sleep(1)
 
 
 def generate(payload, directory):
     payload = validate(payload)
-    text = excerpt(payload["text"] or article_text(payload["url"]))
+    started = time.monotonic()
+    try:
+        text = excerpt(payload["text"] or article_text(payload["url"]))
+    except Exception as error:
+        stage_log('extract', 'failed', started, error)
+        raise
+    stage_log('extract', 'completed', started)
     raw, output = directory / "speech.mp3", directory / "preview.mp3"
-    asyncio.run(asyncio.wait_for(narrate(text, payload["voice"], raw), timeout=70))
+    started = time.monotonic()
+    try:
+        asyncio.run(asyncio.wait_for(narrate(text, payload["voice"], raw), timeout=70))
+    except Exception as error:
+        stage_log('speech', 'failed', started, error)
+        raise SpeechUnavailableError from error
     # Edge already returns MP3. Copy its audio frames while trimming instead of
     # decoding, loudness-filtering and encoding again on the small free CPU.
-    subprocess.run(["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", str(raw),
-                    "-map", "0:a:0", "-t", str(MAX_SECONDS - 0.1), "-c:a", "copy", str(output)],
-                   check=True, timeout=40, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    from tts import duration
-    seconds = duration(output)
-    if not 0 < seconds <= MAX_SECONDS or output.stat().st_size > MAX_AUDIO_BYTES:
-        raise RuntimeError("Invalid preview audio")
+    started = time.monotonic()
+    try:
+        subprocess.run(["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", str(raw),
+                        "-map", "0:a:0", "-t", str(MAX_SECONDS - 0.1), "-c:a", "copy", str(output)],
+                       check=True, timeout=40, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as error:
+        stage_log('trim', 'failed', started, error)
+        raise
+    stage_log('trim', 'completed', started)
+    started = time.monotonic()
+    try:
+        from tts import duration
+        seconds = duration(output)
+        if not 0 < seconds <= MAX_SECONDS or output.stat().st_size > MAX_AUDIO_BYTES:
+            raise RuntimeError("Invalid preview audio")
+    except Exception as error:
+        stage_log('validate', 'failed', started, error)
+        raise
+    stage_log('validate', 'completed', started)
     return output
 
 
@@ -205,6 +189,9 @@ if __name__ == "__main__":
             sys.exit(3)
         print("We couldn't read that article. Try a direct public article link or paste its text.", file=sys.stderr)
         sys.exit(2)
+    except SpeechUnavailableError:
+        print(SPEECH_UNAVAILABLE_MESSAGE, file=sys.stderr)
+        sys.exit(4)
     except ValueError:
         print("We couldn't read that article. Try a direct public article link or paste its text.", file=sys.stderr)
         sys.exit(2)

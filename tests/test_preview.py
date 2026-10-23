@@ -177,6 +177,23 @@ class PreviewTests(unittest.TestCase):
             if exit_code == 3:
                 self.assertIn(preview.ARTICLE_BLOCKED_MESSAGE, stderr.getvalue())
 
+    def test_worker_distinguishes_speech_failure_from_article_access(self):
+        from edge_tts.exceptions import NoAudioReceived
+        class EmptySpeech:
+            async def stream(self):
+                raise NoAudioReceived('PRIVATE provider details')
+                yield  # Make this an asynchronous iterator.
+        stderr = io.StringIO()
+        payload = io.TextIOWrapper(io.BytesIO(json.dumps({'text': 'An original article.'}).encode()))
+        with tempfile.TemporaryDirectory() as tmp, patch('edge_tts.Communicate', return_value=EmptySpeech()), \
+                patch('asyncio.sleep', AsyncMock()), patch('sys.stdin', payload), patch('sys.stderr', stderr), \
+                patch('sys.argv', ['preview.py', tmp]), self.assertRaises(SystemExit) as error:
+            runpy.run_path(str(Path(preview.__file__)), run_name='__main__')
+        self.assertEqual(error.exception.code, 4)
+        self.assertIn(preview.SPEECH_UNAVAILABLE_MESSAGE, stderr.getvalue())
+        self.assertIn('stage=speech status=failed', stderr.getvalue())
+        self.assertNotIn('PRIVATE', stderr.getvalue())
+
     def test_rate_limits_and_expiry(self):
         limiter = preview_server.RateLimit()
         with patch("preview_server.time.monotonic", return_value=1000):
@@ -308,6 +325,42 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_transient_speech_failure_retries_once_with_fresh_audio_and_same_voice(self):
+        from aiohttp import ClientConnectionError
+        from edge_tts.exceptions import NoAudioReceived
+        for failure in (NoAudioReceived, ClientConnectionError):
+            attempts = []
+            class Speech:
+                def __init__(self, *args, **kwargs):
+                    attempts.append((args, kwargs))
+                    self.attempt = len(attempts)
+                async def stream(self):
+                    if self.attempt == 1:
+                        yield {'type': 'audio', 'data': b'PARTIAL'}
+                        raise failure('PRIVATE provider details')
+                    yield {'type': 'audio', 'data': b'COMPLETE'}
+            stderr = io.StringIO()
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp, \
+                    patch('edge_tts.Communicate', Speech), patch('preview.asyncio.sleep', AsyncMock()), \
+                    patch('sys.stderr', stderr):
+                audio = Path(tmp) / 'speech.mp3'
+                await preview.narrate('Original text', 'en-US-AndrewNeural', audio)
+                self.assertEqual(audio.read_bytes(), b'COMPLETE')
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(attempts[0], attempts[1])
+            self.assertIn('status=retry', stderr.getvalue())
+            self.assertIn('attempt=2', stderr.getvalue())
+            self.assertNotIn('PRIVATE', stderr.getvalue())
+
+    async def test_speech_retry_does_not_repeat_nontransient_failures(self):
+        class OversizedSpeech:
+            async def stream(self):
+                yield {'type': 'audio', 'data': b'a' * (preview.MAX_AUDIO_BYTES + 1)}
+        with tempfile.TemporaryDirectory() as tmp, patch('edge_tts.Communicate', return_value=OversizedSpeech()) as speak:
+            with self.assertRaises(ValueError):
+                await preview.narrate('Original text', 'en-US-AndrewNeural', Path(tmp) / 'speech.mp3')
+        self.assertEqual(speak.call_count, 1)
+
     async def test_worker_excludes_secrets_and_removes_temporary_audio(self):
         paths, environments = [], []
         process = type("Process", (), {"pid": 98765, "returncode": 0,
@@ -342,6 +395,21 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(preview_server.PreviewError):
                 await preview_server.generate_audio({"url": "https://fictional.example/story"})
         self.assertEqual(output.getvalue(), diagnostic.decode() + "\n")
+
+    async def test_speech_diagnostics_and_actionable_error_reach_server_without_private_output(self):
+        diagnostic = b'preview_stage stage=speech status=failed elapsed=12.0s error_type=NoAudioReceived'
+        process = type('Process', (), {'pid': 98765, 'returncode': 4,
+                       'communicate': AsyncMock(return_value=(None, diagnostic +
+                           b'\npreview_stage stage=PRIVATE status=failed elapsed=1.0s\nSECRET text and provider URL\n')),
+                       'wait': AsyncMock(return_value=0)})()
+        output = io.StringIO()
+        with patch('preview_server.asyncio.create_subprocess_exec', AsyncMock(return_value=process)), \
+                patch('preview_server.os.killpg'), patch('sys.stdout', output):
+            with self.assertRaises(preview_server.PreviewError) as error:
+                await preview_server.generate_audio({'text': 'Original article'})
+        self.assertEqual(error.exception.status, 503)
+        self.assertEqual(error.exception.message, preview.SPEECH_UNAVAILABLE_MESSAGE)
+        self.assertEqual(output.getvalue(), diagnostic.decode() + '\n')
 
     async def test_blocked_article_error_reaches_api_as_a_paste_text_prompt(self):
         process = type("Process", (), {"pid": 98765, "returncode": 3,

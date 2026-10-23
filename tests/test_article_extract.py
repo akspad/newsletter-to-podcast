@@ -84,6 +84,32 @@ class ArticleExtractionTests(unittest.TestCase):
                 '</nav><form>Sign in to continue</form>')
         self.assertEqual(extract(html), '')
 
+    def test_split_article_sections_are_read_once_in_order_without_related_articles(self):
+        html = ('<main><article><div class="post__content"><div class="post__content"><p>' +
+                PARAGRAPHS[0] + '</p></div></div><figure><img src="/photo"></figure>'
+                '<div class="post__content"><p>' + PARAGRAPHS[1] + '</p></div>'
+                '<div class="post__content"><p>' + PARAGRAPHS[2] + '</p></div></article>'
+                '<article><div class="post__content">An unrelated recommendation.</div></article></main>')
+        self.assertEqual(extract(html), ' '.join(PARAGRAPHS))
+
+    def test_audio_player_metadata_and_paywall_prompts_are_excluded(self):
+        html = ('<main><div><button title="Play"></button><div><p>Listen to this <!-- -->essay</p>'
+                '<p>27 minute listen</p></div></div><div class="entry-content"><p>' + PARAGRAPHS[0] +
+                '</p><div class="post-access-cta"><h2>Sign up for free access</h2>'
+                '<p>This post is for paid members only.</p></div></div></main>')
+        self.assertEqual(extract(html), PARAGRAPHS[0])
+
+    def test_short_post_omits_repeated_heading_date_and_comment_count(self):
+        html = ('<article><h2>A useful article</h2><p>' + PARAGRAPHS[0] + '</p>'
+                '<p class="posted">Posted on October 21, 2026 at 7:02 AM • 3 Comments</p></article>')
+        self.assertEqual(extract(html, 'A useful article'), PARAGRAPHS[0])
+
+    def test_author_bio_and_tag_footer_do_not_leak_after_explicit_body(self):
+        html = ('<section class="post__content"><p>' + PARAGRAPHS[0] + '</p><div><h2>Written by</h2>'
+                '<a class="author">Alex Writer</a><p>Senior Technical Advocate</p></div>'
+                '<div><h2>Tags:</h2><ul class="post-tags"><li>Testing</li></ul></div></section>')
+        self.assertEqual(extract(html), PARAGRAPHS[0])
+
 
 if __name__ == '__main__':
     unittest.main()

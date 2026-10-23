@@ -61,20 +61,25 @@ async def generate_audio(payload):
             env=environment, start_new_session=True)
         try:
             _, diagnostics = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), timeout=120)
-            # Forward only fixed download diagnostics, never source content,
+            # Forward only structured diagnostics, never source content,
             # URLs, raw headers, exception messages, or other provider output.
             for line in diagnostics.decode("utf-8", errors="replace").splitlines():
-                if re.fullmatch(r"article_download status=(completed|failed) elapsed=\d+\.\ds"
+                if (re.fullmatch(r"article_download status=(completed|failed) elapsed=\d+\.\ds"
                                 r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: http_status=[1-5]\d{2})?"
                                 r"(?: server=(?:vercel|cloudflare|cloudfront|fastly|nginx|other|unknown)"
                                 r" protection=(?:none|vercel_challenge|cloudflare_challenge)"
-                                r" retry_after=(?:[0-9]{1,6}|present|none))?", line):
+                                r" retry_after=(?:[0-9]{1,6}|present|none))?", line) or
+                        re.fullmatch(r"preview_stage stage=(extract|speech|trim|validate)"
+                                     r" status=(completed|failed|retry) elapsed=\d+\.\ds"
+                                     r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: attempt=[12])?", line)):
                     print(line, flush=True)
             if process.returncode:
                 if process.returncode == 3:
                     raise PreviewError(preview.ARTICLE_BLOCKED_MESSAGE, 422)
                 if process.returncode == 2:
                     raise PreviewError("We couldn't read that article. Try a direct public article link or paste its text.", 422)
+                if process.returncode == 4:
+                    raise PreviewError(preview.SPEECH_UNAVAILABLE_MESSAGE)
                 raise PreviewError("Audio generation is unavailable. Please try again shortly.")
             path = Path(tmp) / "preview.mp3"
             if not path.is_file() or not 0 < path.stat().st_size <= preview.MAX_AUDIO_BYTES:

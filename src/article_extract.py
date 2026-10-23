@@ -15,6 +15,10 @@ EXCLUDED = (
     '.byline, [data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '
     '.subscription-widget, .entryFooter, .mobile-date-eyebrow, .edit-page-link, '
+    '.posted, .publish-date-author, .basic-hero--blog-detail__description, '
+    '.author-bio, .post-author, .post-categories, .related-posts, .related-articles, '
+    '.comments, #comments, #Sidebar, #Footer, .linkedlist .smallprint, '
+    '.gh-post-upgrade-cta, .gh-post-upgrade-cta-content, .post-access-cta, '
     '.wp-block-image, .wp-caption, .wp-block-video, .caption, '
     'figure:has(img), figure:has(video), figure:has(audio)'
 )
@@ -26,15 +30,38 @@ DATE = re.compile(
 
 
 def clean_tree(root, title, author):
+    for heading in list(root.find_all(['h2', 'h3'])):
+        if (heading.get_text(' ', strip=True).casefold() == 'written by' and
+                heading.parent is not root and len(heading.parent.get_text(' ', strip=True)) < 600):
+            heading.parent.decompose()
+    # Remove an audio player's label and duration together. Removing only its
+    # button leaves labels such as "Listen to this essay / 27 minute listen".
+    for label in list(root.find_all(string=re.compile(r'^Listen to this\s*$', re.I))):
+        parent = label.parent
+        for _ in range(3):
+            if parent is None or parent is root:
+                break
+            value = parent.get_text(' ', strip=True)
+            if parent.find('button') and len(value) < 150:
+                parent.decompose()
+                break
+            parent = parent.parent
     for node in root.select(EXCLUDED):
         if node.parent is not None:
             node.decompose()
     # Attribute the article once, outside its narration body.
-    for node in root.select('h1, [rel~="author"], [itemprop="author"]'):
+    for node in root.select('h1, h2, h3, dt, [rel~="author"], [itemprop="author"]'):
         value = ' '.join(node.get_text(' ', strip=True).split())
         if ((title and value[:160].strip() == title) or
                 (author and re.sub(r'^by\s+', '', value, flags=re.I)[:100].strip() == author)):
             node.decompose()
+    for tags in list(root.select('.post-tags')):
+        parent = tags.parent
+        heading = parent.find(['h2', 'h3']) if parent else None
+        if heading and heading.get_text(' ', strip=True).rstrip(':').casefold() == 'tags':
+            parent.decompose()
+        else:
+            tags.decompose()
     for node in root.select('time'):
         if not node.find_parent(['p', 'li', 'blockquote', 'pre', 'code']):
             node.decompose()
@@ -66,10 +93,23 @@ def extract_text(soup, title='', author=''):
     if deferred is not None:
         deferred.extract()
     clean_tree(soup, title, author)
-    explicit = deferred or soup.select_one(BODY_SELECTORS)
-    if explicit is not None:
-        clean_tree(explicit, title, author)
-        return plain_text(explicit)
+    if deferred is not None:
+        clean_tree(deferred, title, author)
+        return plain_text(deferred)
+    candidates = soup.select(BODY_SELECTORS)
+    if candidates:
+        # Some publications split the article among sibling body containers.
+        # Read each outermost section once, inside the same semantic article.
+        first_article = candidates[0].find_parent('article')
+        if first_article is not None:
+            candidates = [node for node in candidates if node.find_parent('article') is first_article]
+        identities = {id(node) for node in candidates}
+        sections = [node for node in candidates if not any(id(parent) in identities for parent in node.parents)]
+        pieces = []
+        for section in sections:
+            clean_tree(section, title, author)
+            pieces.append(plain_text(section))
+        return ' '.join(filter(None, pieces))
 
     # Density-based extraction handles unmarked layouts and separates article
     # prose from metadata, related stories, controls and comments.
