@@ -75,7 +75,7 @@ footer p {{ margin: 6px 0; }}
 .input-modes {{ display: flex; flex-wrap: wrap; gap: 20px; border: 0; margin: 20px 0; padding: 0; }}
 .input-modes legend {{ font-weight: 650; margin-bottom: 10px; }}
 .input-modes label {{ font-weight: 400; margin: 0; cursor: pointer; }}
-.preview-options {{ display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 18px; margin-top: 20px; }}
+.preview-options {{ display: grid; grid-template-columns: minmax(0, 16rem) max-content; align-items: end; gap: 18px; margin-top: 20px; }}
 .preview .button {{ min-height: 53px; }}
 .button:disabled {{ opacity: .55; cursor: not-allowed; }}
 .hint, .notice, #preview-status {{ font-size: .9rem; color: var(--muted); }}
