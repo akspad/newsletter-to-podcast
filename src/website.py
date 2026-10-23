@@ -30,7 +30,7 @@ def render(sample=False, demo_url=None, preview_api_url=None):
         rss = escape(demo_url.rstrip("/") + "/feed.xml", quote=True)
         rss_metadata = f'<link rel="alternate" type="application/rss+xml" title="Original demo only" href="{rss}">'
         demo_link = f'<a class="button secondary" href="{rss}">Open original demo feed</a>'
-    sample_player = f'''<section class="sample"><div><p class="eyebrow">HEAR AN ORIGINAL SAMPLE</p><h2>A little room for curiosity</h2><p>An original article narrated with Edge TTS. <a href="{REPO}/blob/main/samples/transcript.txt">Read the transcript</a>. MIT licensed and free to share.</p></div><audio controls preload="none" aria-label="Listen to the original demo sample" src="demo/sample.mp3"></audio></section>''' if sample else ""
+    sample_player = f'''<section class="sample"><div><p class="eyebrow">HEAR AN ORIGINAL SAMPLE</p><h2>A little room for curiosity</h2><p>An original article narrated with Edge TTS. <a href="{REPO}/blob/main/samples/transcript.txt">Read the transcript</a>.<br>MIT licensed and free to share.</p></div><audio controls preload="none" aria-label="Listen to the original demo sample" src="demo/sample.mp3"></audio></section>''' if sample else ""
     return f'''<!doctype html>
 <html lang="en">
 <head>
