@@ -97,6 +97,20 @@ class PreviewTests(unittest.TestCase):
         self.assertTrue(text.startswith("Example Blog. A useful story. By Alex.\nActual article sentence."))
         self.assertNotIn("Author biography", text)
 
+    def test_lesswrong_post_container_excludes_comments_and_preserves_attribution(self):
+        body = 'An original sentence for the article. ' * 40
+        for wrapper in ('div', 'main'):
+            html = ('<title>An original story — LessWrong</title>'
+                    '<nav>DO NOT READ navigation</nav><' + wrapper + '><h1>635</h1>'
+                    '<h1 class="PostsPageTitle-root">An original story</h1>'
+                    '<span class="PostsAuthors-root">by Alex Writer</span>'
+                    '<div hidden id="S:4"><div class="PostsPage-postContent instapaper_body"><p>' + body + '</p>'
+                    '<script>DO NOT READ scripts</script><span hidden>DO NOT READ hidden text</span></div></div>'
+                    '<div class="Comment-body">DO NOT READ comments</div></' + wrapper + '>')
+            with self.subTest(wrapper=wrapper), patch("substack.Substack.get", return_value=html):
+                text = preview.article_text("https://www.lesswrong.com/posts/fictional/story")
+            self.assertEqual(text, "lesswrong.com. An original story. By Alex Writer.\n" + body.strip())
+
     def test_long_metadata_leaves_room_for_the_article(self):
         html = ('<meta property="og:site_name" content="' + 'Blog ' * 100 + '">'
                 '<meta name="author" content="' + 'Writer ' * 100 + '">'

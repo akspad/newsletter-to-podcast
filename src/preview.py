@@ -93,8 +93,8 @@ def article_metadata(soup, url):
         if article:
             break
 
-    heading = soup.select_one("article h1, main h1")
-    byline = soup.select_one('[rel~="author"], [itemprop="author"]')
+    heading = soup.select_one(".PostsPageTitle-root") or soup.select_one("article h1, main h1")
+    byline = soup.select_one('[rel~="author"], [itemprop="author"], .PostsAuthors-root')
     publication = clean(meta("og:site_name") or names(article.get("publisher")) or
                         names(article.get("isPartOf")) or meta("application-name"), 80)
     publication = publication or clean((urlparse(url).hostname or "").removeprefix("www."), 80)
@@ -128,12 +128,20 @@ def article_text(url):
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")
     publication, title, author = article_metadata(soup, url)
-    for node in soup.select("script, style, noscript, nav, header, footer, aside, form, [hidden]"):
+    excluded = "script, style, noscript, nav, header, footer, aside, form, [hidden]"
+    # LessWrong streams its post inside an initially hidden React container.
+    # Preserve the explicit article body before removing hidden page sections.
+    lesswrong_body = soup.select_one(".PostsPage-postContent")
+    if lesswrong_body is not None:
+        lesswrong_body.extract()
+    for node in soup.select(excluded):
         node.decompose()
-    body = (soup.select_one('[itemprop~="articleBody"], .entry-content, .post-content, .post__content')
+    body = (lesswrong_body or soup.select_one('[itemprop~="articleBody"], .entry-content, .post-content, .post__content')
             or soup.select_one("article") or soup.select_one("main"))
     if body is None:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
+    for node in body.select(excluded):
+        node.decompose()
     # The title and a recognized byline are already spoken in the introduction.
     for node in body.select('h1, [rel~="author"], [itemprop="author"]'):
         value = " ".join(node.get_text(" ", strip=True).split())
