@@ -72,7 +72,7 @@ footer p {{ margin: 6px 0; }}
 .preview input, .preview textarea, .preview select {{ width: 100%; border: 1px solid #b7c4b9; border-radius: 8px; padding: 13px; background: var(--paper); color: var(--ink); font: inherit; min-width: 0; }}
 .preview textarea {{ resize: vertical; min-height: 150px; }}
 .preview input[type="radio"] {{ width: auto; accent-color: var(--green); }}
-.article-options {{ display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 16rem); align-items: start; gap: 16px 32px; margin: 16px 0; }}
+.article-options {{ display: grid; grid-template-columns: max-content minmax(0, 16rem); justify-content: start; align-items: start; gap: 16px 32px; margin: 16px 0; }}
 .input-modes {{ display: flex; flex-wrap: wrap; gap: 20px; border: 0; min-width: 0; margin: 0; padding: 0; }}
 .input-modes legend {{ font-weight: 650; margin-bottom: 10px; }}
 .input-modes label {{ font-weight: 400; margin: 0; cursor: pointer; }}
