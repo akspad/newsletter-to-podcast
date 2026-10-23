@@ -62,8 +62,9 @@ h1 {{ font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -
 .sample p:last-child {{ color: var(--muted); font-size: .9rem; margin-bottom: 0; }}
 .grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; margin-bottom: 24px; }}
 audio {{ display: block; width: 100%; }}
-footer {{ margin-top: 32px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }}
+footer {{ display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 24px; margin-top: 32px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }}
 footer p {{ margin: 6px 0; }}
+.footer-credit {{ margin-left: auto; white-space: nowrap; text-align: right; }}
 [hidden] {{ display: none !important; }}
 .preview {{ border: 1px solid var(--line); border-radius: 16px; background: white; padding: 22px 30px; margin-bottom: 24px; box-shadow: 0 12px 32px #172a2506; }}
 .preview h2 {{ margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -.03em; }}
@@ -122,7 +123,7 @@ footer p {{ margin: 6px 0; }}
 </section>
 <section class="quick-start"><h2>Make it part of your listening routine</h2><p>Liked the preview? Turn your newsletters into a personal podcast feed. Narrate full articles or make spoken summaries, and listen in your usual podcast app.</p><div class="actions"><a class="button secondary" href="{REPO}#generate-full-articles-from-your-own-sources">Set up your own podcast ↗</a>{demo_link}</div></section>
 </main>
-<footer><p><a href="{REPO}">Newsletter to Podcast</a> · MIT-licensed Python tool &amp; demo · Convert and share only with permission.</p><p>Built by <a href="https://x.com/akspad">@akspad</a></p></footer>
+<footer><p><a href="{REPO}">Newsletter to Podcast</a> · MIT-licensed Python tool &amp; demo · Convert and share only with permission.</p><p class="footer-credit">Built by <a href="https://x.com/akspad">@akspad</a></p></footer>
 </div><script src="preview.js?v={script_version}" defer></script></body></html>
 '''
 
