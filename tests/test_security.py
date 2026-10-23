@@ -109,6 +109,21 @@ class DestinationTests(unittest.TestCase):
             self.assertEqual(error.exception.status_code, status)
             self.assertEqual(len(calls), 5 if status == 429 else 1)
 
+    def test_challenge_diagnostics_exclude_response_content_and_tokens(self):
+        cases = [({"Server": "Vercel", "X-Vercel-Mitigated": "challenge", "Set-Cookie": "SECRET"},
+                  b"SECRET", "server=vercel protection=vercel_challenge retry_after=none"),
+                 ({}, b"<title>Vercel Security Checkpoint</title>SECRET",
+                  "server=unknown protection=vercel_challenge retry_after=none"),
+                 ({"Server": "cloudflare", "Cf-Mitigated": "challenge", "Retry-After": "60"},
+                  b"SECRET", "server=cloudflare protection=cloudflare_challenge retry_after=60"),
+                 ({"Server": "SECRET", "Retry-After": "SECRET"}, b"SECRET",
+                  "server=other protection=none retry_after=present")]
+        for headers, body, expected in cases:
+            with self.subTest(expected=expected):
+                error = substack.SourceDownloadError("Source error", 429, headers=headers, body=body)
+                self.assertEqual(error.diagnostics, expected)
+                self.assertNotIn("SECRET", str(error.__dict__))
+
     def test_chunked_response_and_aggregate_downloads_abort_before_parsing(self):
         for response_limit, run_limit in [(5, 100), (100, 5)]:
             calls = []

@@ -21,9 +21,24 @@ AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceov
 
 
 class SourceDownloadError(RuntimeError):
-    def __init__(self, message, status_code):
+    def __init__(self, message, status_code, *, headers=None, body=b""):
         super().__init__(message)
         self.status_code = status_code
+        # Only fixed labels and numeric delays can leave the download worker.
+        # Never retain response bodies, cookies, challenge tokens, or URLs.
+        headers = {key.lower(): str(value) for key, value in (headers or {}).items()}
+        server = headers.get("server", "").lower()
+        server = next((name for name in ("vercel", "cloudflare", "cloudfront", "fastly", "nginx")
+                       if name in server), "other" if server else "unknown")
+        text = bytes(body[:128_000]).lower()
+        protection = "none"
+        if headers.get("x-vercel-mitigated", "").lower() == "challenge" or b"vercel security checkpoint" in text:
+            protection = "vercel_challenge"
+        elif headers.get("cf-mitigated", "").lower() == "challenge":
+            protection = "cloudflare_challenge"
+        delay = headers.get("retry-after", "")
+        delay = delay if re.fullmatch(r"[0-9]{1,6}", delay) else "present" if delay else "none"
+        self.diagnostics = f"server={server} protection={protection} retry_after={delay}"
 
 
 class Substack:
@@ -87,11 +102,13 @@ class Substack:
                 time.sleep(5)
                 continue
             if r.status_code >= 400:
-                raise SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code)
+                raise SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code,
+                                          headers=getattr(r, "headers", {}), body=body)
             # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
             text = body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace")
             return text if raw else json.loads(text)
-        raise SourceDownloadError("Source exceeded redirect/retry limit", r.status_code)
+        raise SourceDownloadError("Source exceeded redirect/retry limit", r.status_code,
+                                  headers=getattr(r, "headers", {}), body=body)
 
     def publications(self):
         # An explicit list prevents silently importing an account's subscriptions.

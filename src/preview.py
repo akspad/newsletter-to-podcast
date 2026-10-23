@@ -108,7 +108,7 @@ def article_metadata(soup, url):
 
 def article_text(url):
     from bs4 import BeautifulSoup
-    from substack import Substack
+    from substack import SourceDownloadError, Substack
 
     # Reuse the bounded downloader: public destinations only, DNS pinned, and
     # every redirect revalidated. No subscription cookies or private config.
@@ -118,8 +118,9 @@ def article_text(url):
     except Exception as error:
         status = getattr(error, "status_code", None)
         status_log = f" http_status={status}" if type(status) is int and 100 <= status <= 599 else ""
+        details = f" {error.diagnostics}" if isinstance(error, SourceDownloadError) else ""
         print(f"article_download status=failed elapsed={time.monotonic() - started:.1f}s "
-              f"error_type={type(error).__name__}{status_log}", file=sys.stderr)
+              f"error_type={type(error).__name__}{status_log}{details}", file=sys.stderr)
         raise
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")

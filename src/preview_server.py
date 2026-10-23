@@ -61,11 +61,14 @@ async def generate_audio(payload):
             env=environment, start_new_session=True)
         try:
             _, diagnostics = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), timeout=120)
-            # Forward only download timing and exception class, never source content,
-            # URLs, raw exception messages, or other provider output.
+            # Forward only fixed download diagnostics, never source content,
+            # URLs, raw headers, exception messages, or other provider output.
             for line in diagnostics.decode("utf-8", errors="replace").splitlines():
                 if re.fullmatch(r"article_download status=(completed|failed) elapsed=\d+\.\ds"
-                                r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: http_status=[1-5]\d{2})?", line):
+                                r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: http_status=[1-5]\d{2})?"
+                                r"(?: server=(?:vercel|cloudflare|cloudfront|fastly|nginx|other|unknown)"
+                                r" protection=(?:none|vercel_challenge|cloudflare_challenge)"
+                                r" retry_after=(?:[0-9]{1,6}|present|none))?", line):
                     print(line, flush=True)
             if process.returncode:
                 if process.returncode == 2:
