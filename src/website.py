@@ -50,10 +50,10 @@ header {{ display: flex; align-items: center; justify-content: space-between; ga
 .brand {{ font-weight: 750; letter-spacing: -.03em; text-decoration: none; color: var(--ink); }}
 .brand img {{ width: 28px; height: 28px; vertical-align: middle; margin-right: 7px; }}
 .code {{ font-size: .86rem; }}
-.hero {{ padding: 28px 0 20px; max-width: 800px; }}
+.hero {{ padding: 28px 0 20px; }}
 .eyebrow {{ font-size: .72rem; letter-spacing: .16em; font-weight: 750; color: var(--green); margin: 0 0 12px; }}
 h1 {{ font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -.055em; margin: 0 0 22px; overflow-wrap: anywhere; }}
-.intro {{ font-size: 1.1rem; max-width: 620px; color: var(--muted); margin-bottom: 0; }}
+.intro {{ font-size: 1.1rem; color: var(--muted); margin-bottom: 0; }}
 .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }}
 .button {{ display: inline-block; padding: 11px 19px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: white; font: inherit; font-weight: 650; text-decoration: none; cursor: pointer; }}
 .secondary {{ background: transparent; color: var(--green); }}
@@ -100,7 +100,7 @@ footer p {{ margin: 6px 0; }}
 <body><div class="wrap">
 <header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="{REPO}">Get the code ↗</a></header>
 <main>
-<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Bring an article from your favorite newsletter or blog. Turn it into an audio preview of up to one minute, free with Edge TTS. No login. No API key.</p></section>
+<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Turn newsletters and blogs into free audio previews with Edge TTS—up to one minute, no login or API key.</p></section>
 {sample_player}
 <section class="grid" aria-label="What the tool does">
 <article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
