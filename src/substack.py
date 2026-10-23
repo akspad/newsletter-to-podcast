@@ -20,6 +20,12 @@ HEADERS = {"Accept": "application/json, text/plain, */*", "Accept-Language": "en
 AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceover_upload_id", "audio_items")
 
 
+class SourceDownloadError(RuntimeError):
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class Substack:
     def __init__(self, sid: str, *, request_timeout=30):
         sid = sid.strip().strip('"')
@@ -81,11 +87,11 @@ class Substack:
                 time.sleep(5)
                 continue
             if r.status_code >= 400:
-                raise RuntimeError(f"Source returned HTTP {r.status_code}")
+                raise SourceDownloadError(f"Source returned HTTP {r.status_code}", r.status_code)
             # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
             text = body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace")
             return text if raw else json.loads(text)
-        raise RuntimeError("Source exceeded redirect/retry limit")
+        raise SourceDownloadError("Source exceeded redirect/retry limit", r.status_code)
 
     def publications(self):
         # An explicit list prevents silently importing an account's subscriptions.

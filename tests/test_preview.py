@@ -290,7 +290,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         terminate.assert_called_once()
 
     async def test_download_diagnostics_exclude_raw_provider_messages(self):
-        diagnostic = b"article_download status=failed elapsed=60.0s error_type=Timeout"
+        diagnostic = b"article_download status=failed elapsed=26.6s error_type=SourceDownloadError http_status=429"
         process = type("Process", (), {"pid": 98765, "returncode": 1,
                                        "communicate": AsyncMock(return_value=(None, diagnostic +
                                            b"\nhttps://private.example/token SECRET article text\n")),

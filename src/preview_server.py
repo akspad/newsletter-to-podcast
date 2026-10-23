@@ -65,7 +65,7 @@ async def generate_audio(payload):
             # URLs, raw exception messages, or other provider output.
             for line in diagnostics.decode("utf-8", errors="replace").splitlines():
                 if re.fullmatch(r"article_download status=(completed|failed) elapsed=\d+\.\ds"
-                                r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?", line):
+                                r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: http_status=[1-5]\d{2})?", line):
                     print(line, flush=True)
             if process.returncode:
                 if process.returncode == 2:

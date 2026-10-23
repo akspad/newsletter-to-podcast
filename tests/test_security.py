@@ -97,6 +97,18 @@ class DestinationTests(unittest.TestCase):
             self.assertEqual(calls[0][1]["curl_options"][1], [b"fictional.example:443:93.184.216.34"])
             self.assertEqual(calls[0][1]["curl_options"][3], security.MAX_RESPONSE_BYTES)
 
+    def test_http_status_is_preserved_when_source_rejects_or_exhausts_retries(self):
+        for status in (403, 429):
+            calls = []
+            response = types.SimpleNamespace(is_redirect=False, status_code=status)
+            fake = self.fake_transport([(response, [])] * 5, calls)
+            with patch.dict(sys.modules, {"curl_cffi": fake}), patch("security.public_destination", return_value=(
+                    "fictional.example", 443, "93.184.216.34")), patch("substack.time.sleep"), \
+                    self.assertRaises(substack.SourceDownloadError) as error:
+                substack.Substack("").get("https://fictional.example")
+            self.assertEqual(error.exception.status_code, status)
+            self.assertEqual(len(calls), 5 if status == 429 else 1)
+
     def test_chunked_response_and_aggregate_downloads_abort_before_parsing(self):
         for response_limit, run_limit in [(5, 100), (100, 5)]:
             calls = []

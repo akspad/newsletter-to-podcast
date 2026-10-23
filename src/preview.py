@@ -116,8 +116,10 @@ def article_text(url):
     try:
         html = Substack("", request_timeout=60).get(url, raw=True)
     except Exception as error:
+        status = getattr(error, "status_code", None)
+        status_log = f" http_status={status}" if type(status) is int and 100 <= status <= 599 else ""
         print(f"article_download status=failed elapsed={time.monotonic() - started:.1f}s "
-              f"error_type={type(error).__name__}", file=sys.stderr)
+              f"error_type={type(error).__name__}{status_log}", file=sys.stderr)
         raise
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")
