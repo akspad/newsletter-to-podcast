@@ -72,10 +72,11 @@ footer p {{ margin: 6px 0; }}
 .preview input, .preview textarea, .preview select {{ width: 100%; border: 1px solid #b7c4b9; border-radius: 8px; padding: 13px; background: var(--paper); color: var(--ink); font: inherit; min-width: 0; }}
 .preview textarea {{ resize: vertical; min-height: 150px; }}
 .preview input[type="radio"] {{ width: auto; accent-color: var(--green); }}
-.input-modes {{ display: flex; flex-wrap: wrap; gap: 20px; border: 0; margin: 20px 0; padding: 0; }}
+.article-options {{ display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 16rem); align-items: start; gap: 16px 32px; margin: 16px 0; }}
+.input-modes {{ display: flex; flex-wrap: wrap; gap: 20px; border: 0; min-width: 0; margin: 0; padding: 0; }}
 .input-modes legend {{ font-weight: 650; margin-bottom: 10px; }}
 .input-modes label {{ font-weight: 400; margin: 0; cursor: pointer; }}
-.preview-options {{ display: grid; grid-template-columns: minmax(0, 16rem) max-content; align-items: end; gap: 18px; margin-top: 20px; }}
+.preview-options {{ margin-top: 16px; }}
 .preview .button {{ min-height: 53px; }}
 .button:disabled {{ opacity: .55; cursor: not-allowed; }}
 .hint, .notice, #preview-status {{ font-size: .9rem; color: var(--muted); }}
@@ -89,7 +90,7 @@ footer p {{ margin: 6px 0; }}
 .preview-result {{ margin-top: 24px; border-top: 1px solid var(--line); padding-top: 24px; }}
 .preview-result h3 {{ margin-top: 0; }}
 .preview-result .actions {{ margin-top: 16px; }}
-@media(max-width: 640px) {{ .preview {{ padding: 18px 22px; }} .preview-options {{ grid-template-columns: 1fr; }} header .code {{ white-space: nowrap; }} }}
+@media(max-width: 640px) {{ .preview {{ padding: 18px 22px; }} .article-options {{ grid-template-columns: 1fr; }} .preview-options .button {{ width: 100%; }} header .code {{ white-space: nowrap; }} }}
 @media(max-width: 640px) {{ .wrap {{ padding: 0 18px; }} header {{ padding: 20px 0; }} .hero {{ padding-top: 42px; }} .sample, .grid {{ grid-template-columns: 1fr; }} .sample {{ padding: 18px 22px; gap: 16px; }} .section-head {{ align-items: stretch; }} input {{ width: 100%; }} }}
 </style>
 <style>.feature {{ background: white; border: 1px solid var(--line); border-radius: 12px; padding: 18px 24px; }} .feature h2 {{ margin: 0 0 8px; font-size: 1.15rem; }} .feature p {{ color: var(--muted); margin: 0; font-size: .95rem; }} .quick-start {{ margin-top: 24px; }} code {{ display: inline-block; padding: 10px 14px; background: #eef2e7; border-radius: 8px; overflow-wrap: anywhere; }} @media(max-width:640px) {{ .grid {{ grid-template-columns:1fr; }} }}</style>
@@ -108,10 +109,10 @@ footer p {{ margin: 6px 0; }}
 <h2 id="preview-heading">Try it with your own article</h2><p class="hint" id="article-help">Use a direct article link. If a site blocks access or needs a login, try pasting text you can access.</p>
 {unavailable}
 <form id="preview-form" data-endpoint="{endpoint}">
-<fieldset class="input-modes"><legend>Bring your article</legend><label><input type="radio" name="input-mode" value="url" checked> Article link</label><label><input type="radio" name="input-mode" value="text"> Paste text</label></fieldset>
+<div class="article-options"><fieldset class="input-modes"><legend>Bring your article</legend><label><input type="radio" name="input-mode" value="url" checked> Article link</label><label><input type="radio" name="input-mode" value="text"> Paste text</label></fieldset><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div></div>
 <div id="url-input"><label for="article-url">Public article URL</label><input id="article-url" name="url" type="url" placeholder="https://your-favorite-blog.com/an-article" maxlength="8192" aria-describedby="article-help" required></div>
 <div id="text-input" hidden><label for="article-text">Article text</label><textarea id="article-text" name="text" placeholder="Paste the article or an excerpt here…" maxlength="100000" disabled></textarea></div>
-<div class="preview-options"><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
+<div class="preview-options"><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
 <p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p>
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
 </form>
