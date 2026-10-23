@@ -76,7 +76,9 @@ footer p {{ margin: 6px 0; }}
 .input-modes {{ display: flex; flex-wrap: wrap; gap: 20px; border: 0; min-width: 0; margin: 0; padding: 0; }}
 .input-modes legend {{ font-weight: 650; margin-bottom: 10px; }}
 .input-modes label {{ font-weight: 400; margin: 0; cursor: pointer; }}
-.preview-options {{ margin-top: 16px; }}
+.preview-options {{ display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }}
+.preview-options .button {{ flex-shrink: 0; }}
+.preview-options .hint {{ flex: 1 1 16rem; margin: 0; }}
 .preview .button {{ min-height: 53px; }}
 .button:disabled {{ opacity: .55; cursor: not-allowed; }}
 .hint, .notice, #preview-status {{ font-size: .9rem; color: var(--muted); }}
@@ -112,8 +114,7 @@ footer p {{ margin: 6px 0; }}
 <div class="article-options"><fieldset class="input-modes"><legend>Bring your article</legend><label><input type="radio" name="input-mode" value="url" checked> Article link</label><label><input type="radio" name="input-mode" value="text"> Paste text</label></fieldset><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div></div>
 <div id="url-input"><label for="article-url">Public article URL</label><input id="article-url" name="url" type="url" placeholder="https://your-favorite-blog.com/an-article" maxlength="8192" aria-describedby="article-help" required></div>
 <div id="text-input" hidden><label for="article-text">Article text</label><textarea id="article-text" name="text" placeholder="Paste the article or an excerpt here…" maxlength="100000" disabled></textarea></div>
-<div class="preview-options"><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button></div>
-<p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p>
+<div class="preview-options"><button class="button" id="generate-preview" type="submit"{disabled}>Generate audio preview</button><p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p></div>
 <p class="hint">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
 </form>
 <p id="preview-status" role="status" aria-live="polite"></p>
