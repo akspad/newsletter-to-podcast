@@ -21,6 +21,26 @@ import tts
 
 
 class PreviewTests(unittest.TestCase):
+    def test_preview_uses_visible_author_when_only_an_unrelated_schema_article_exists(self):
+        data = {'@type': 'Article', 'url': 'https://fictional.example/other', 'headline': 'Other story',
+                'author': {'name': 'Unrelated Writer'}}
+        body = 'Actual article sentence with enough readable words to make an opening excerpt. ' * 3
+        html = ('<title>Requested article</title><script type="application/ld+json">' + json.dumps(data) +
+                '</script><main><article><h1>Requested article</h1><p class="byline">Correct Writer</p>'
+                '<div class="entry-content"><p>' + body + '</p></div></article></main>')
+        with patch('substack.Substack.get', return_value=html):
+            self.assertEqual(preview.article_text('https://fictional.example/story'),
+                             'fictional.example. Requested article. By Correct Writer.\n' + body.strip())
+
+    def test_structured_tables_and_definitions_keep_word_boundaries_without_paragraph_tags(self):
+        from article_extract import extract_structured_text
+        for body, expected in (
+                ('<table><tr><th>Model</th><th>Memory</th></tr><tr><td>Atlas</td><td>16 GB</td></tr></table>',
+                 'Model Memory Atlas 16 GB'),
+                ('<dl><dt>Processor</dt><dd>Four cores</dd></dl>', 'Processor Four cores')):
+            with self.subTest(body=body):
+                self.assertEqual(extract_structured_text(body), expected)
+
     def test_worker_json_input_limit_preserves_valid_unicode_and_escaped_text(self):
         for text in ('Café résumé naïve André. ' * 3000, '\x01' * preview.MAX_INPUT_BYTES):
             payload = preview.validate({'text': text})

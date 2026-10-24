@@ -75,6 +75,8 @@ Redirected links use the final validated destination for attribution and body se
 
 Empty article-body placeholders allow a fallback to readable page prose. If the page has no usable prose, previews can read an `articleBody` from a matching JSON-LD Article or BlogPosting without running JavaScript or fetching extra resources. Visible article text takes precedence; unrelated structured articles and structured bodies explicitly marked as containing paid sections are excluded. Pasted text keeps its 100,000-byte UTF-8 limit through the worker handoff, including accented characters; the worker separately bounds JSON's escaped representation.
 
+Attribution excludes structured metadata that identifies a different article. Streamed LessWrong bodies skip empty placeholders, and table cells and definition entries remain separated in narration.
+
 The server defaults to two simultaneous jobs (one in the Render Free blueprint), five attempts per client address per ten minutes, and sixty attempts total per hour. Limits are in memory and reset on restart. Behind a reverse proxy, clients share its address and therefore its five-attempt limit; forwarded IP headers are deliberately not trusted. For multiple instances or a larger public demo, put shared rate limiting at the gateway. The worker and its subprocesses are terminated after two minutes. Temporary audio files are removed after every job; audio returns only to the requesting browser and is never added to RSS or a public gallery. Access logs are disabled in the app; configure your host's logs separately. Text goes to Microsoft for speech generation.
 
 ## Quick start: hear a sample in under a minute

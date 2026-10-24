@@ -15,6 +15,30 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_unrelated_schema_cannot_supply_attribution_when_no_schema_matches(self):
+        for identity in ({'url': 'https://fictional.example/other'}, {},
+                         {'mainEntityOfPage': {'@id': 'https://fictional.example/other'}}):
+            data = {'@type': 'Article', 'headline': 'Other story', **identity,
+                    'author': {'name': 'Unrelated Writer'}, 'publisher': {'name': 'Other Publication'}}
+            for hint in ('<title>Requested article</title>', ''):
+                html = (hint + '<script type="application/ld+json">' + json.dumps(data) + '</script>'
+                        '<main><article><h1>Requested article</h1><p class="byline">Correct Writer</p></article></main>')
+                with self.subTest(identity=identity, hint=hint):
+                    self.assertEqual(metadata(html), ('fictional.example', 'Requested article', 'Correct Writer'))
+                    self.assertEqual(metadata(html.replace('<p class="byline">Correct Writer</p>', ''))[2], '')
+
+    def test_matching_headline_does_not_override_a_conflicting_schema_url(self):
+        data = {'@type': 'Article', 'url': 'https://fictional.example/other', 'headline': 'Requested article',
+                'author': {'name': 'Unrelated Writer'}, 'publisher': {'name': 'Other Publication'}}
+        html = ('<title>Requested article</title><script type="application/ld+json">' + json.dumps(data) +
+                '</script><main><h1>Requested article</h1><p class="byline">Correct Writer</p></main>')
+        self.assertEqual(metadata(html), ('fictional.example', 'Requested article', 'Correct Writer'))
+        data['url'] = 'https://fictional.example/story'
+        data['headline'] = 'An SEO headline'
+        data['author']['name'] = 'Matched Writer'
+        html = '<script type="application/ld+json">' + json.dumps(data) + '</script><main><h1>Requested article</h1></main>'
+        self.assertEqual(metadata(html), ('Other Publication', 'Requested article', 'Matched Writer'))
+
     def test_tracking_parameters_do_not_select_an_unrelated_schema_author(self):
         data = [{'@type': 'Article', 'url': 'https://fictional.example/other', 'headline': 'Other story',
                  'author': {'name': 'Other Writer'}},

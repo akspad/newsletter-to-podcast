@@ -98,7 +98,8 @@ def plain_text(root):
     # Add separators around blocks, without inserting spaces inside inline words
     # (for example, a drop cap's <span>A</span>s or an emphasized word ending).
     for node in root.find_all(['p', 'div', 'section', 'blockquote', 'li', 'h1', 'h2',
-                               'h3', 'h4', 'h5', 'h6', 'pre', 'tr', 'br']):
+                               'h3', 'h4', 'h5', 'h6', 'pre', 'table', 'thead', 'tbody',
+                               'tfoot', 'tr', 'th', 'td', 'caption', 'dl', 'dt', 'dd', 'br']):
         node.insert_before('\n')
         node.insert_after('\n')
     return ' '.join(root.get_text('', strip=False).split())
@@ -108,7 +109,7 @@ def extract_structured_text(body, title='', author=''):
     """Normalize an already-selected JSON-LD body; never execute or fetch it."""
     from bs4 import BeautifulSoup
     # Preserve plain-text comparisons and code such as C++'s <vector>.
-    if not re.search(r'</?(?:p|div|section|article|h[1-6]|br|ul|ol|li|blockquote|a|em|strong|span|script|style)\b[^>]*>', body, re.I):
+    if not re.search(r'</?(?:p|div|section|article|h[1-6]|br|ul|ol|li|blockquote|pre|table|thead|tbody|tfoot|tr|th|td|caption|dl|dt|dd|a|em|strong|span|script|style)\b[^>]*>', body, re.I):
         return ' '.join(unescape(body).split())
     fragment = BeautifulSoup(body, 'html.parser')
     clean_tree(fragment, title, author)
@@ -118,9 +119,16 @@ def extract_structured_text(body, title='', author=''):
 def extract_text(soup, title='', author='', url=''):
     # LessWrong streams its explicit post body inside an initially hidden React
     # container. Detach only that body before discarding hidden page sections.
-    deferred = soup.select_one('.PostsPage-postContent')
-    if deferred is not None:
-        deferred.extract()
+    candidates = soup.select('.PostsPage-postContent')
+    identities = {id(node) for node in candidates}
+    sections = [node for node in candidates if not any(id(parent) in identities for parent in node.parents)]
+    deferred = None
+    for node in sections:
+        node.extract()
+        clean_tree(node, title, author)
+        if speech_text(node.get_text('', strip=True)).strip():
+            deferred = node
+            break
     scope = article_scope(soup, title, url)
     # Select before cleanup removes the headline used to identify the article.
     for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
@@ -130,7 +138,6 @@ def extract_text(soup, title='', author='', url=''):
             node.decompose()
     clean_tree(soup, title, author)
     if deferred is not None:
-        clean_tree(deferred, title, author)
         return plain_text(deferred)
     candidates = scope.select(BODY_SELECTORS)
     if match(BODY_SELECTORS, scope):

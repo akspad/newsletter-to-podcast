@@ -24,6 +24,38 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_empty_streamed_placeholders_do_not_hide_a_later_lesswrong_body(self):
+        for empty in ('', ' \n ', '&#8203;', '&#173;', '<p class="byline">Alex Writer</p>',
+                      '<p hidden>Hidden words.</p>', '<script>Only a script.</script>',
+                      '<div hidden><div class="PostsPage-postContent">Hidden nested body.</div></div>'):
+            html = ('<main><h1>A useful article</h1><div hidden><div class="PostsPage-postContent">' + empty +
+                    '</div></div><div hidden><div class="PostsPage-postContent"><p>' + PARAGRAPHS[0] +
+                    '</p></div></div></main>')
+            with self.subTest(empty=empty):
+                self.assertEqual(extract(html, 'A useful article', 'Alex Writer'), PARAGRAPHS[0])
+
+    def test_empty_streamed_bodies_allow_normal_fallback_and_still_reject_empty_pages(self):
+        shell = ('<main><h1>A useful article</h1><div hidden><div class="PostsPage-postContent"></div></div>'
+                 '<div class="PostsPage-postContent">&#8203;</div>{}</main>')
+        self.assertEqual(extract(shell.format('<section><p>' + PARAGRAPHS[0] + '</p></section>'),
+                                 'A useful article'), PARAGRAPHS[0])
+        self.assertEqual(extract(shell.format(''), 'A useful article'), '')
+
+    def test_streamed_duplicates_and_nested_bodies_are_read_only_once(self):
+        body = '<div class="PostsPage-postContent"><p>' + PARAGRAPHS[0] + '</p></div>'
+        for html in (body + body, '<div class="PostsPage-postContent">' + body + '</div>'):
+            with self.subTest(html=html):
+                self.assertEqual(extract(html), PARAGRAPHS[0])
+
+    def test_table_cells_and_definition_entries_keep_word_boundaries(self):
+        html = ('<div class="entry-content"><p><span>A</span>n <em>example</em>s paragraph.</p>'
+                '<table><tr><th>Model</th><th>Memory</th></tr><tr><td><em>Atlas</em></td><td>16 GB</td></tr>'
+                '<tr><td>Beta</td><td>32 GB</td></tr></table>'
+                '<dl><dt>Processor</dt><dd>Four <strong>cores</strong></dd>'
+                '<dt>Storage</dt><dd>1 TB</dd></dl></div>')
+        self.assertEqual(extract(html),
+                         'An examples paragraph. Model Memory Atlas 16 GB Beta 32 GB Processor Four cores Storage 1 TB')
+
     def test_empty_or_cleaned_body_placeholders_do_not_suppress_readable_prose(self):
         for placeholder in ('', ' \n ', '&#8203;', '&#173;', '<span hidden>Hidden text.</span>',
                             '<p class="byline">Alex Writer</p>', '<div style="display:none">Hidden text.</div>'):

@@ -95,11 +95,25 @@ def article_details(soup, url):
     canonical_url = url_identity(canonical.get('href'), url) if canonical else None
     social_title = clean(meta('og:title', 'twitter:title'))
     page_label = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
+    identity_scope = article_scope(soup, social_title or page_label, url)
+    title_hints = [social_title, page_label] + [
+        clean(node.get_text(' ', strip=True)) for node in
+        identity_scope.select('.PostsPageTitle-root, h1, .entry-title')
+        if belongs_to_scope(node, identity_scope)]
+    title_hints = list(filter(None, title_hints))
     def article_score(node):
         identities = article_urls(node)
         return (requested in identities, canonical_url is not None and canonical_url in identities,
-                any(heading_matches(clean(node.get('headline')), hint) for hint in (social_title, page_label)))
-    article = max(articles, key=article_score) if articles else {}
+                any(heading_matches(clean(node.get('headline')), hint) for hint in title_hints))
+    def eligible_article(node):
+        score = article_score(node)
+        if article_urls(node):
+            return any(score[:2])  # A matching headline cannot excuse another article's URL.
+        # Identity-free singleton schemas are common. Retain them only when
+        # their headline does not conflict with the page's own title evidence.
+        return score[2] or len(articles) == 1 and (not clean(node.get('headline')) or not title_hints)
+    eligible = [node for node in articles if eligible_article(node)]
+    article = max(eligible, key=article_score) if eligible else {}
     site = next((node for node in nodes if 'WebSite' in kinds(node)), {})
 
     # A site's home link is an explicit identity fallback, not an inferred name
