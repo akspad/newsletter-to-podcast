@@ -4,7 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from article_scope import article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, url_identity
+from article_scope import article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
 
 
 def clean(value, limit=160):
@@ -127,7 +127,7 @@ def article_details(soup, url):
     page_label = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
     identity_scope = article_scope(soup, social_title or page_label, url)
     title_hints = [social_title, page_label] + [
-        clean(node.get_text(' ', strip=True)) for node in
+        clean(heading_text(node)) for node in
         identity_scope.select('.PostsPageTitle-root, h1, .entry-title')
         if belongs_to_scope(node, identity_scope)]
     title_hints = list(filter(None, title_hints))
@@ -169,9 +169,11 @@ def article_details(soup, url):
             break
     feed = soup.select_one('link[rel="alternate"][type="application/atom+xml"][title], '
                            'link[rel="alternate"][type="application/rss+xml"][title]')
+    feed_name = re.sub(r'\s+[-|–—]\s+(?:Atom|RSS)(?:\s+Feed)?$', '',
+                       feed.get('title', '').split(' » ')[0] if feed else '', flags=re.I)
     publication = clean(meta('og:site_name') or names(article.get('publisher')) or
                         names(site) or names(article.get('isPartOf')) or meta('application-name') or
-                        (feed.get('title', '').split(' » ')[0] if feed else '') or home_name, 80)
+                        feed_name or home_name, 80)
     publication = publication.split(' | ')[0].strip()
     publication = publication or clean((urlparse(url).hostname or '').removeprefix('www.'), 80)
 
@@ -188,14 +190,10 @@ def article_details(soup, url):
     headings = [node for node in soup.select('.PostsPageTitle-root, article h1, main h1, .entry-title')
                 if editorial(node)]
     def matches_heading(node):
-        value = clean(node.get_text(' ', strip=True))
+        value = clean(heading_text(node))
         # Some sites put Markdown emphasis into social/SEO metadata. Compare
         # without those markers, then read the visible heading as plain text.
-        comparable = lambda value: re.sub(r'[*_`]', '', value)
-        value = comparable(value)
-        return bool(value) and any(raw and (comparable(raw) == value or
-                    any(comparable(raw).startswith(value + sep) for sep in (' | ', ' - ', ' — ', ' – ')))
-                    for raw in (structured, social, page_title))
+        return any(heading_matches(value, raw) for raw in (structured, social, page_title))
     if not headings:
         # Nonsemantic collection layouts can place h1 outside article/main.
         # Require a metadata match so unrelated site branding cannot win.
@@ -207,7 +205,7 @@ def article_details(soup, url):
     preferred_headings = [node for node in headings if any(parent is preliminary_scope for parent in node.parents)]
     heading = next((node for node in headings if matches_heading(node)),
                    next(iter(preferred_headings or headings), None))
-    title = clean(heading.get_text(' ', strip=True) if heading else '') or structured or social or page_title
+    title = clean(heading_text(heading) if heading else '') or structured or social or page_title
     title = strip_suffix(title)
 
     scope = article_scope(soup, title, url)

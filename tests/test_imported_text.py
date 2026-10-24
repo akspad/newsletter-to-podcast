@@ -8,6 +8,19 @@ from substack import html_to_text
 
 
 class ImportedTextTests(unittest.TestCase):
+    def test_explicitly_hidden_nodes_and_their_children_are_not_narrated(self):
+        html = ('<p>A visible opening.</p><div hidden><p>Hidden draft.</p><span hidden>Nested draft.</span></div>'
+                '<p style="DISPLAY: /* layout */ none !important; display: block">Hidden copy.</p>'
+                '<p aria-hidden="TRUE">Hidden accessibility duplicate.</p><p>A visible ending.</p>')
+        self.assertEqual(html_to_text(html), 'A visible opening.\nA visible ending.')
+
+    def test_visibility_cleanup_keeps_visible_overrides_and_unresolved_classes(self):
+        html = ('<p style="display: none; display: block">Visible override.</p>'
+                '<p style="display: block !important; display: none">Visible priority.</p>'
+                '<p aria-hidden="false">Visible accessibility text.</p><p class="hidden">Class-only prose.</p>'
+                '<p>H<sub>2</sub>O and &lt;vector&gt; remain.</p>')
+        self.assertEqual(html_to_text(html), 'Visible override.\nVisible priority.\nVisible accessibility text.\nClass-only prose.\nH2O and <vector> remain.')
+
     def test_tables_code_and_direct_text_survive_beside_paragraphs(self):
         html = ('An introduction.<p>Available memory:</p><table><caption>Device details</caption>'
                 '<tr><th>Model</th><th>Memory</th></tr><tr><td>Atlas</td><td>16 GB</td></tr></table>'

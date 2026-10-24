@@ -57,11 +57,21 @@ def editorial(node, *, allow_hidden=False):
     return True
 
 
+def heading_text(node):
+    """Read a headline without nested dates, bylines or print-only metadata."""
+    ignored = {id(child) for child in node.select(
+        'time, .byline, .post-meta, .post-metadata, .whenprint, .when, '
+        '[itemprop~="datePublished"], [itemprop~="dateModified"]')}
+    return ' '.join(' '.join(str(text) for text in node.strings
+                            if not any(id(parent) in ignored for parent in text.parents)).split())
+
+
 def heading_matches(value, title):
     normalize = lambda text: ' '.join(re.sub(r'[*_`]', '', text).casefold().split())
     value, title = normalize(value), normalize(title)
     return bool(value and title) and (value == title or
-           any(title.startswith(value + sep) for sep in (' | ', ' - ', ' — ', ' – ')))
+           any(title.startswith(value + sep) for sep in (' | ', ' - ', ' — ', ' – ')) or
+           title.endswith(': ' + value))
 
 
 def article_scope(soup, title='', url=''):
@@ -76,7 +86,7 @@ def article_scope(soup, title='', url=''):
         headings = [h for h in node.select('h1, h2, .entry-title') if editorial(h)]
         linked = any(same_url(node.get(key)) for key in ('itemid', 'data-url')) or any(
             same_url(link.get('href')) for h in headings for link in h.select('a[href]'))
-        matched = any(heading_matches(h.get_text(' ', strip=True), title) for h in headings)
+        matched = any(heading_matches(heading_text(h), title) for h in headings)
         in_main = node.name == 'main' or node.get('role') == 'main' or node.find_parent(['main']) is not None
         prose = sum(len(p.get_text(' ', strip=True)) for p in node.select('p') if editorial(p))
         return linked, matched, in_main, prose
@@ -96,7 +106,7 @@ def article_scope(soup, title='', url=''):
     # A heading outside those cards is evidence to keep the wider main scope.
     for main in mains:
         own_prose = [p for p in main.select('p') if not p.find_parent('article') and editorial(p)]
-        matched = any(heading_matches(h.get_text(' ', strip=True), title) and not h.find_parent('article')
+        matched = any(heading_matches(heading_text(h), title) and not h.find_parent('article')
                       for h in main.select('h1') if editorial(h))
         own_body = any(not node.find_parent('article') and editorial(node)
                        for node in main.select(BODY_SELECTORS))

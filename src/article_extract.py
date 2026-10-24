@@ -2,7 +2,7 @@
 import re
 from html import unescape
 from soupsieve import match
-from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden, heading_matches
+from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden, heading_matches, heading_text
 from tts import speech_text
 
 
@@ -60,6 +60,16 @@ def clean_tree(root, title, author):
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
+    for node in root.select('p.date, p.mobile-date'):
+        if (DATE.fullmatch(node.get_text(' ', strip=True)) and
+                not node.find_parent(['blockquote', 'pre', 'code', 'li', 'table', 'figure'])):
+            node.decompose()
+    # Relative-age badges decorate a year; they are not mathematical subscripts.
+    for badge in root.select('sub.styled-sub'):
+        label = re.fullmatch(r'(\d{4}) was \d+ years? ago', badge.parent.get('title', ''))
+        if (label and re.fullmatch(r'\d+ya', badge.get_text(strip=True)) and
+                badge.parent.get_text('', strip=True) == label[1] + badge.get_text(strip=True)):
+            badge.decompose()
     for paragraph in list(root.find_all('p')):
         if paragraph.find_parent(['blockquote', 'pre', 'code']):
             continue
@@ -94,8 +104,8 @@ def clean_tree(root, title, author):
             node.decompose()
     # Attribute the article once, outside its narration body.
     for node in root.select('h1, h2, h3, dt, [rel~="author"], [itemprop="author"]'):
-        value = ' '.join(node.get_text(' ', strip=True).split())
-        if ((title and value[:160].strip() == title) or
+        value = heading_text(node) if node.name in ('h1', 'h2', 'h3') else ' '.join(node.get_text(' ', strip=True).split())
+        if ((title and heading_matches(value[:160].strip(), title)) or
                 (author and re.sub(r'^by\s+', '', value, flags=re.I)[:100].strip() == author)):
             node.decompose()
     for tags in list(root.select('.post-tags')):
@@ -155,7 +165,7 @@ def extract_text(soup, title='', author='', url=''):
             if scope.name == 'article':
                 continue
             headings = owner.select('h1, h2, .entry-title')
-            if title and headings and not any(heading_matches(h.get_text(' ', strip=True), title) for h in headings):
+            if title and headings and not any(heading_matches(heading_text(h), title) for h in headings):
                 continue
         candidates.append(node)
     identities = {id(node) for node in candidates}

@@ -24,6 +24,33 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_repeated_headline_with_nested_print_metadata_is_omitted(self):
+        heading = ('<h1>A discovery<div class="normal"><div class="whenprint">Alex Writer<br>'
+                   'December 1, 2009<br><i>fictional.example/story</i></div><div class="when">'
+                   'Posted on Tuesday, December 1, 2009.</div></div></h1>')
+        html = '<div class="entry-content">' + heading + '<p>' + PARAGRAPHS[0] + '</p></div>'
+        for title in ('A discovery', 'Science Notes: A discovery'):
+            with self.subTest(title=title):
+                self.assertEqual(extract(html, title, 'Alex Writer'), PARAGRAPHS[0])
+
+    def test_marked_publication_dates_are_omitted_without_removing_prose_dates(self):
+        body = ('<p class="mobile-date">17th June 2024</p><p class="date">29 May 2019</p>'
+                '<p>May 2024 was an eventful month.</p><blockquote><p class="date">29 May 2019</p></blockquote>'
+                '<ul><li><p class="date">17th June 2024</p></li></ul><p>29 May 2019</p>'
+                '<p class="date">May 2024 brought a discovery.</p>')
+        expected = ('May 2024 was an eventful month. 29 May 2019 17th June 2024 '
+                    '29 May 2019 May 2024 brought a discovery.')
+        self.assertEqual(extract('<div class="entry-content">' + body + '</div>'), expected)
+        self.assertEqual(extract_structured_text(body), expected)
+
+    def test_year_age_badges_are_omitted_but_years_and_subscripts_remain(self):
+        body = ('<p>Presented in May <span title="2024 was 2 years ago">2024'
+                '<sub class="styled-sub">2ya</sub></span>. H<sub>2</sub>O and x<sub>2ya</sub> remain.</p>'
+                '<p><span title="A real annotation">2024<sub class="styled-sub">2ya</sub></span> remains.</p>')
+        expected = 'Presented in May 2024. H2O and x2ya remain. 20242ya remains.'
+        self.assertEqual(extract('<div class="entry-content">' + body + '</div>'), expected)
+        self.assertEqual(extract_structured_text(body), expected)
+
     def test_opening_translation_byline_and_change_labels_are_not_narrated(self):
         labels = ('<p>By <a href="/">Alex Writer</a></p><p><em>February 6, 2009</em> '
                   '(<a href="#changes">Changes</a>)</p><p><em>Translations: '

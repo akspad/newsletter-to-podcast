@@ -8,13 +8,13 @@ import re
 import time
 from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
-from email.utils import parsedate_to_datetime
+from email.utils import parseaddr, parsedate_to_datetime
 from html import escape
 from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
 import security
-from article_scope import url_identity
+from article_scope import explicitly_hidden, url_identity
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -250,12 +250,30 @@ class Substack:
             prefix = 'rss:' if item.tag.startswith('{') else ''
             link = item.findtext(prefix + 'link', namespaces=ns) or ''
             guid = (item.get('{' + ns['rdf'] + '}about') if prefix else item.findtext('guid')) or link
+            guid_node = item.find('guid')
+            if not link and guid_node is not None and guid_node.get('isPermaLink', 'true').strip().casefold() == 'true':
+                try:
+                    permalink = urlparse(guid.strip())
+                    if (permalink.scheme in ('http', 'https') and permalink.hostname and permalink.port != 0 and
+                            permalink.username is None and permalink.password is None and
+                            not any(ord(char) <= 32 or ord(char) == 127 for char in guid.strip())):
+                        link = permalink.geturl()
+                except ValueError:
+                    pass  # An opaque or malformed GUID remains an identity, not a link.
             html = item.findtext("content:encoded", namespaces=ns) or item.findtext(prefix + 'description', namespaces=ns) or ""
             text = html_to_text(html)
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
             if published is None:
                 continue  # undated entries cannot be filtered reliably by lookback
             enclosure = item.find("enclosure")
+            bylines = [node.text.strip() for node in item.findall('dc:creator', ns) if node.text and node.text.strip()]
+            if not bylines:
+                for node in item.findall('author'):
+                    value = (node.text or '').strip()
+                    name, _ = parseaddr(value)
+                    name = name.strip() or (value if '@' not in value else '')
+                    if name and name not in bylines:
+                        bylines.append(name)
             posts.append({
                 "id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                 "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
@@ -266,7 +284,7 @@ class Substack:
                 "audience": "everyone",
                 "wordcount": len(text.split()),
                 "body_html": html,
-                "publishedBylines": [{"name": node.text.strip()} for node in item.findall('dc:creator', ns) if node.text and node.text.strip()],
+                "publishedBylines": [{"name": name} for name in bylines],
             })
         return posts[:limit]
 
@@ -390,6 +408,9 @@ def html_to_text(html: str) -> str:
     from bs4 import BeautifulSoup, CData, NavigableString
 
     soup = BeautifulSoup(html, "html.parser")
+    for node in soup.select('[style], [hidden], [aria-hidden]'):
+        if node.parent is not None and explicitly_hidden(node):
+            node.decompose()
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
     for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '
                           'svg, audio, video, iframe, .subscription-widget-wrap, .button-wrapper, '

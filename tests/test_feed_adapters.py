@@ -16,6 +16,68 @@ PUB = {'base': 'https://fictional.example/feed.xml', 'rss': True}
 
 
 class FeedAdapterTests(unittest.TestCase):
+    def test_rss2_authors_use_display_names_with_creator_precedence(self):
+        source = Substack('')
+        for author, expected in (
+                ('<author>alice@example.com (Alice Writer)</author>', ['Alice Writer']),
+                ('<author>Alice Writer &lt;alice@example.com&gt;</author>', ['Alice Writer']),
+                ('<author>Alice Writer</author>', ['Alice Writer']),
+                ('<author>alice@example.com</author>', []),
+                ('<author>alice@example.com (Alice Writer)</author><dc:creator>Sam Author</dc:creator>'
+                 '<dc:creator>Other Writer</dc:creator>', ['Sam Author', 'Other Writer'])):
+            xml = ('<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item><guid>one</guid>'
+                   '<pubDate>Fri, 23 Oct 2026 12:00:00 GMT</pubDate>' + author + '</item></channel></rss>')
+            with self.subTest(author=author), patch.object(source, 'get', return_value=xml):
+                self.assertEqual([b['name'] for b in source.recent_posts(PUB)[0]['publishedBylines']], expected)
+
+    def test_rss2_permalink_guid_supplies_missing_link_without_changing_identity(self):
+        source = Substack('')
+        for attribute in ('', ' isPermaLink="true"'):
+            xml = ('<rss><channel><item><guid' + attribute + '>https://fictional.example/one</guid>'
+                   '<pubDate>Fri, 23 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>')
+            with self.subTest(attribute=attribute), patch.object(source, 'get', return_value=xml):
+                post = source.recent_posts(PUB)[0]
+            self.assertEqual(post['canonical_url'], 'https://fictional.example/one')
+            self.assertEqual(post['slug'], 'one')
+            with patch.object(source, 'get', return_value=xml.replace('</guid>', '</guid><link>https://fictional.example/new-path</link>')):
+                control = source.recent_posts(PUB)[0]
+            self.assertEqual(post['id'], control['id'])
+            self.assertEqual(control['canonical_url'], 'https://fictional.example/new-path')
+
+    def test_rss2_opaque_or_unsafe_guids_are_not_used_as_links(self):
+        source = Substack('')
+        for guid in ('<guid isPermaLink="false">https://fictional.example/one</guid>', '<guid>opaque-id</guid>',
+                     '<guid>javascript:alert(1)</guid>', '<guid>https://[bad</guid>',
+                     '<guid>https://fictional.example:bad/one</guid>', '<guid>https://fictional.example:0/one</guid>',
+                     '<guid>https://user@fictional.example/one</guid>'):
+            xml = '<rss><channel><item>' + guid + '<pubDate>Fri, 23 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>'
+            with self.subTest(guid=guid), patch.object(source, 'get', return_value=xml):
+                self.assertEqual(source.recent_posts(PUB)[0]['canonical_url'], '')
+
+    def test_rss2_author_permalink_and_visible_body_reach_episode_output(self):
+        xml = ('<rss><channel><item><guid>https://fictional.example/one</guid><title>A discovery</title>'
+               '<author>alice@example.com (Alice Writer)</author><pubDate>Fri, 23 Oct 2026 12:00:00 GMT</pubDate>'
+               '<description>&lt;p&gt;A visible opening.&lt;/p&gt;&lt;p hidden&gt;Hidden draft.&lt;/p&gt;'
+               '&lt;p&gt;A visible ending.&lt;/p&gt;</description></item></channel></rss>')
+        source = Substack('')
+        with patch.object(source, 'get', return_value=xml):
+            post = source.recent_posts(PUB)[0]
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+                'SITE_DIR': str(Path(tmp) / 'site'), 'STATE_DIR': str(Path(tmp) / 'state'), 'EPISODE_MODE': 'full'}, clear=True):
+            spoken = []
+            def narrate(text, path, limit, intro):
+                spoken.append((text, intro))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'ID3-provider-fixture')
+                return [path]
+            state = {'episodes': []}
+            with patch('tts.synthesize_full', side_effect=narrate), patch('tts.duration', return_value=10):
+                main.make_episode(source, {**PUB, 'name': 'Science Notes', 'mode': 'full'}, post,
+                                  datetime.now(timezone.utc), state, Settings.from_env())
+            self.assertEqual(spoken, [('A visible opening.\nA visible ending.', 'Science Notes. A discovery. By Alice Writer.')])
+            self.assertEqual(state['episodes'][0]['description'], 'A visible opening.\nA visible ending.')
+            self.assertEqual(state['episodes'][0]['link'], 'https://fictional.example/one')
+
     def test_atom_titles_normalize_html_xhtml_and_literal_text(self):
         source = Substack('')
         cases = (

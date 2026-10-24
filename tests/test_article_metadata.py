@@ -15,6 +15,21 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_nested_print_metadata_does_not_become_part_of_the_headline(self):
+        html = ('<title>Science Notes: A discovery</title><meta name="author" content="Alex Writer">'
+                '<link rel="alternate" type="application/atom+xml" title="Science Notes - Atom">'
+                '<div class="article"><h1>A discovery<div class="normal"><div class="whenprint">'
+                'Alex Writer<br>December 1, 2009<br><i>fictional.example/story</i></div>'
+                '<div class="when">Posted on Tuesday, December 1, 2009.</div></div></h1>'
+                '<p>Actual article prose.</p></div>')
+        self.assertEqual(metadata(html), ('Science Notes', 'A discovery', 'Alex Writer'))
+
+    def test_heading_prose_and_explicit_publication_names_keep_their_words(self):
+        html = ('<title>May 2024 observations | Science Notes</title><meta property="og:site_name" content="Science Notes - Atom">'
+                '<link rel="alternate" type="application/atom+xml" title="Other Notes - Atom">'
+                '<main><h1><span>May 2024</span> <em>observations</em></h1></main>')
+        self.assertEqual(metadata(html)[:2], ('Science Notes - Atom', 'May 2024 observations'))
+
     def test_lamer_news_attribution_uses_the_selected_post_and_ignores_hidden_names(self):
         html = ('<title>A discovery</title><article data-news-id="42"><h2><a href="/story">A discovery</a></h2></article>'
                 '<topcomment><article class="comment" data-comment-id="42-"><span class="info">'
