@@ -1,7 +1,9 @@
 """Find narration text in already-downloaded HTML; never fetch extra resources."""
 import re
+from html import unescape
 from soupsieve import match
 from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden
+from tts import speech_text
 
 
 EXCLUDED = (
@@ -102,6 +104,17 @@ def plain_text(root):
     return ' '.join(root.get_text('', strip=False).split())
 
 
+def extract_structured_text(body, title='', author=''):
+    """Normalize an already-selected JSON-LD body; never execute or fetch it."""
+    from bs4 import BeautifulSoup
+    # Preserve plain-text comparisons and code such as C++'s <vector>.
+    if not re.search(r'</?(?:p|div|section|article|h[1-6]|br|ul|ol|li|blockquote|a|em|strong|span|script|style)\b[^>]*>', body, re.I):
+        return ' '.join(unescape(body).split())
+    fragment = BeautifulSoup(body, 'html.parser')
+    clean_tree(fragment, title, author)
+    return plain_text(fragment)
+
+
 def extract_text(soup, title='', author='', url=''):
     # LessWrong streams its explicit post body inside an initially hidden React
     # container. Detach only that body before discarding hidden page sections.
@@ -130,8 +143,14 @@ def extract_text(soup, title='', author='', url=''):
         pieces = []
         for section in sections:
             clean_tree(section, title, author)
-            pieces.append(plain_text(section))
-        return ' '.join(filter(None, pieces))
+            # Empty placeholders must not suppress the density-based fallback.
+            if speech_text(section.get_text('', strip=True)).strip():
+                pieces.append(plain_text(section))
+            elif section is not scope:
+                section.decompose()
+        selected = ' '.join(filter(None, pieces))
+        if selected:
+            return selected
 
     # Density-based extraction handles unmarked layouts and separates article
     # prose from metadata, related stories, controls and comments.

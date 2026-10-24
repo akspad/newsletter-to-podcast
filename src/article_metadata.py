@@ -11,7 +11,27 @@ def clean(value, limit=160):
     return ' '.join(speech_text(value).split())[:limit].strip() if isinstance(value, str) else ''
 
 
-def article_metadata(soup, url):
+def public_structured_article(node, references, depth=0):
+    """Do not use schema bodies explicitly marked as containing paid sections."""
+    if depth > 3:
+        return False
+    if isinstance(node, str):
+        node = references.get(node)
+    if not isinstance(node, dict):
+        return True
+    access = node.get('isAccessibleForFree')
+    if access is False or isinstance(access, str) and access.strip().casefold() == 'false':
+        return False
+    ref = references.get(node.get('@id')) if isinstance(node.get('@id'), str) else None
+    if ref is not None and ref is not node and not public_structured_article(ref, references, depth + 1):
+        return False
+    parts = node.get('hasPart', [])
+    parts = parts if isinstance(parts, list) else [parts]
+    return len(parts) <= 100 and all(public_structured_article(part, references, depth + 1) for part in parts)
+
+
+def article_details(soup, url):
+    """Return attribution and an eligible structured-body fallback for this page."""
     def meta(*keys):
         for key in keys:
             node = soup.find('meta', attrs={'property': key}) or soup.find('meta', attrs={'name': key})
@@ -74,10 +94,11 @@ def article_metadata(soup, url):
     canonical = soup.select_one('link[rel~="canonical"][href]')
     canonical_url = url_identity(canonical.get('href'), url) if canonical else None
     social_title = clean(meta('og:title', 'twitter:title'))
+    page_label = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
     def article_score(node):
         identities = article_urls(node)
         return (requested in identities, canonical_url is not None and canonical_url in identities,
-                heading_matches(clean(node.get('headline')), social_title))
+                any(heading_matches(clean(node.get('headline')), hint) for hint in (social_title, page_label)))
     article = max(articles, key=article_score) if articles else {}
     site = next((node for node in nodes if 'WebSite' in kinds(node)), {})
 
@@ -197,4 +218,13 @@ def article_metadata(soup, url):
     if author.startswith(('http://', 'https://')):
         author = ''
     author = re.sub(r'^by(?:\s*:\s*|\s+)', '', author, flags=re.I)
-    return publication, title, author
+    body = article.get('articleBody')
+    identified = (any(article_score(article)[:2]) or not article_urls(article) and
+                  heading_matches(title, clean(article.get('headline'))))
+    if not isinstance(body, str) or not identified or not public_structured_article(article, references):
+        body = ''
+    return publication, title, author, body
+
+
+def article_metadata(soup, url):
+    return article_details(soup, url)[:3]

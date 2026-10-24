@@ -73,7 +73,8 @@ async def generate_audio(payload):
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
             env=environment, start_new_session=True)
         try:
-            _, diagnostics = await asyncio.wait_for(process.communicate(json.dumps(payload).encode()), timeout=120)
+            data = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+            _, diagnostics = await asyncio.wait_for(process.communicate(data), timeout=120)
             # Forward only structured diagnostics, never source content,
             # URLs, raw headers, exception messages, or other provider output.
             for line in diagnostics.decode("utf-8", errors="replace").splitlines():

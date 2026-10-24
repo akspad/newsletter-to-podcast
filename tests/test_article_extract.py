@@ -24,6 +24,18 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_empty_or_cleaned_body_placeholders_do_not_suppress_readable_prose(self):
+        for placeholder in ('', ' \n ', '&#8203;', '&#173;', '<span hidden>Hidden text.</span>',
+                            '<p class="byline">Alex Writer</p>', '<div style="display:none">Hidden text.</div>'):
+            html = ('<article><h1>A useful article</h1><div class="entry-content">' + placeholder +
+                    '</div><section><p>' + PARAGRAPHS[0] + '</p></section></article>')
+            with self.subTest(placeholder=placeholder):
+                self.assertEqual(extract(html, 'A useful article', 'Alex Writer'), PARAGRAPHS[0])
+
+    def test_empty_placeholder_without_article_prose_still_returns_nothing(self):
+        self.assertEqual(extract('<main><h1>A useful article</h1><div class="entry-content"></div>'
+                                 '<nav>Subscribe and browse</nav></main>', 'A useful article'), '')
+
     def test_unwrapped_main_story_excludes_recommendation_articles_before_and_after_it(self):
         card = '<article><h2>Another story</h2><div class="entry-content"><p>Unrelated recommendation.</p></div></article>'
         for marked in (True, False):

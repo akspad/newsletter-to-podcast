@@ -21,6 +21,105 @@ import tts
 
 
 class PreviewTests(unittest.TestCase):
+    def test_worker_json_input_limit_preserves_valid_unicode_and_escaped_text(self):
+        for text in ('Café résumé naïve André. ' * 3000, '\x01' * preview.MAX_INPUT_BYTES):
+            payload = preview.validate({'text': text})
+            for ascii_only in (False, True):
+                wire = json.dumps(payload, ensure_ascii=ascii_only).encode('utf-8')
+                with self.subTest(ascii_only=ascii_only, bytes=len(wire)):
+                    self.assertLessEqual(len(wire), preview.MAX_WORKER_INPUT_BYTES)
+                    self.assertEqual(preview.read_payload(io.BytesIO(wire)), payload)
+        with self.assertRaises(ValueError):
+            preview.read_payload(io.BytesIO(b' ' * (preview.MAX_WORKER_INPUT_BYTES + 1)))
+        with self.assertRaises(ValueError):
+            preview.validate({'text': 'é' * (preview.MAX_INPUT_BYTES // 2 + 1)})
+
+    @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg required')
+    def test_real_worker_accepts_large_unicode_paste_and_only_narrates_the_excerpt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            audio = Path(tmp) / 'fixture.mp3'
+            subprocess.run(['ffmpeg', '-nostdin', '-y', '-v', 'error', '-f', 'lavfi', '-i',
+                            'sine=frequency=440:sample_rate=24000', '-t', '30', str(audio)], check=True)
+            audio_data = audio.read_bytes()
+            spoken = []
+            class Speech:
+                def __init__(self, text, voice, **kwargs):
+                    spoken.append(text)
+                async def stream(self):
+                    yield {'type': 'audio', 'data': audio_data}
+            text = 'Café résumé naïve André. ' * 3000
+            payload = io.TextIOWrapper(io.BytesIO(json.dumps({'text': text}, ensure_ascii=False).encode('utf-8')))
+            with patch('edge_tts.Communicate', Speech), patch('sys.stdin', payload), patch('sys.argv', ['preview.py', tmp]):
+                runpy.run_path(preview.__file__, run_name='__main__')
+            self.assertEqual(spoken, [preview.excerpt(text)])
+            self.assertTrue((Path(tmp) / 'preview.mp3').is_file())
+            self.assertLessEqual(len(spoken[0].split()), preview.MAX_WORDS)
+
+    def test_structured_article_body_is_read_when_the_dom_has_only_a_shell(self):
+        body = ('A useful article explains how chemistry helps people understand the world. Researchers compare observations, '
+                'test their ideas, and share results so others can learn from the same evidence.')
+        schema = {'@type': 'Article', 'headline': 'A useful article', 'articleBody': body,
+                  'author': {'name': 'Alex Writer'}, 'publisher': {'name': 'Science Notes'}}
+        html = ('<script type="application/ld+json">' + json.dumps(schema) + '</script>'
+                '<main><h1>A useful article</h1><div id="app"></div></main>')
+        with patch('substack.Substack.get', return_value=html) as fetch:
+            text = preview.article_text('https://fictional.example/story')
+        self.assertEqual(text, 'Science Notes. A useful article. By Alex Writer.\n' + body)
+        fetch.assert_called_once()
+
+    def test_structured_fallback_selects_the_requested_article_instead_of_a_recommendation(self):
+        body = 'Actual article sentence. ' * 30
+        schema = {'@graph': [
+            {'@type': 'Article', 'url': 'https://fictional.example/other', 'headline': 'Other article',
+             'articleBody': 'Unrelated recommendation. ' * 30, 'author': {'name': 'Other Writer'}},
+            {'@type': 'Article', 'url': 'https://fictional.example/story', 'headline': 'A useful article',
+             'articleBody': body, 'author': {'name': 'Correct Writer'}}]}
+        for urls in (True, False):
+            if not urls:
+                for node in schema['@graph']:
+                    node.pop('url', None)
+            html = ('<title>A useful article</title><script type="application/ld+json">' + json.dumps(schema) +
+                    '</script><main><h1>A useful article</h1></main>')
+            with self.subTest(urls=urls), patch('substack.Substack.get', return_value=html):
+                text = preview.article_text('https://fictional.example/story?utm_source=email')
+            self.assertIn('By Correct Writer.', text)
+            self.assertIn(body.strip(), text)
+            self.assertNotIn('Unrelated recommendation', text)
+
+    def test_unmatched_and_paid_structured_bodies_are_not_used(self):
+        body = 'Restricted article sentence. ' * 30
+        variants = [
+            {'url': 'https://fictional.example/other', 'headline': 'Other article'},
+            {'isAccessibleForFree': False}, {'isAccessibleForFree': 'false'},
+            {'hasPart': {'isAccessibleForFree': False}},
+            {'hasPart': {'@id': '#paid'}}, {'hasPart': '#paid'}, {'articleBody': {'text': body}}]
+        for variant in variants:
+            schema = {'@graph': [dict({'@type': 'Article', 'headline': 'A useful article', 'articleBody': body}, **variant),
+                                 {'@id': '#paid', '@type': 'WebPageElement', 'isAccessibleForFree': False}]}
+            html = '<script type="application/ld+json">' + json.dumps(schema) + '</script><main><h1>A useful article</h1></main>'
+            with self.subTest(variant=variant), patch('substack.Substack.get', return_value=html), self.assertRaises(ValueError):
+                preview.article_text('https://fictional.example/story')
+
+    def test_visible_article_prose_is_preferred_over_a_stale_structured_body(self):
+        schema = {'@type': 'Article', 'headline': 'A useful article', 'articleBody': 'Stale structured sentence. ' * 30}
+        html = ('<script type="application/ld+json">' + json.dumps(schema) + '</script>'
+                '<article><h1>A useful article</h1><p>' + 'Current article sentence. ' * 30 + '</p></article>')
+        with patch('substack.Substack.get', return_value=html):
+            text = preview.article_text('https://fictional.example/story')
+        self.assertIn('Current article sentence.', text)
+        self.assertNotIn('Stale structured', text)
+
+    def test_structured_html_is_cleaned_and_plain_text_comparisons_are_preserved(self):
+        from article_extract import extract_structured_text
+        self.assertEqual(extract_structured_text('Compare a < b and c > d with C++ <vector> &amp; maps.'),
+                         'Compare a < b and c > d with C++ <vector> & maps.')
+        body = ('<h1>A useful article</h1><nav>Ignore navigation</nav><p><span>A</span>n original '
+                '<em>sentence</em> &amp; another idea.</p><script>Ignore script</script>'
+                '<span style="display:none">Ignore hidden</span>')
+        self.assertEqual(extract_structured_text(body, 'A useful article'), 'An original sentence & another idea.')
+        self.assertEqual(extract_structured_text('<p>Use &lt;vector&gt; and compare a &lt; b.</p>'),
+                         'Use <vector> and compare a < b.')
+
     def test_redirect_destination_is_used_for_publication_and_article_selection(self):
         from curl_cffi.requests import Response
         from urllib.parse import urlparse
@@ -465,6 +564,23 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_handoff_keeps_unicode_within_the_worker_wire_limit(self):
+        payload = preview.validate({'text': 'Café résumé naïve André. ' * 3000})
+        captured = []
+        async def communicate(data):
+            captured.append(data)
+            self.assertEqual(preview.read_payload(io.BytesIO(data)), payload)
+            return None, b''
+        process = type('Process', (), {'pid': 98765, 'returncode': 0,
+                       'communicate': AsyncMock(side_effect=communicate), 'wait': AsyncMock(return_value=0)})()
+        async def start(*args, **kwargs):
+            (Path(args[-1]) / 'preview.mp3').write_bytes(b'ID3-test-audio')
+            return process
+        with patch('preview_server.asyncio.create_subprocess_exec', side_effect=start), patch('preview_server.os.killpg'):
+            self.assertEqual(await preview_server.generate_audio(payload), b'ID3-test-audio')
+        self.assertEqual(len(captured), 1)
+        self.assertLess(len(captured[0]), 100_000)
+
     async def test_transient_speech_failures_retry_with_fresh_audio_and_same_voice(self):
         from aiohttp import ClientConnectionError
         from edge_tts.exceptions import NoAudioReceived, WebSocketError

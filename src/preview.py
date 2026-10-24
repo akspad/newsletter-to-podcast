@@ -9,12 +9,15 @@ import subprocess
 import sys
 import time
 from substack import SourceDownloadError
-from article_metadata import article_metadata
+from article_metadata import article_details
 
 MAX_SECONDS = 60
 MAX_WORDS = 130
 MAX_EXCERPT_CHARS = 1000
 MAX_INPUT_BYTES = 100_000
+# JSON may escape each input byte as six ASCII bytes, such as a control
+# character. Bound the wire representation separately from validated text.
+MAX_WORKER_INPUT_BYTES = 6 * MAX_INPUT_BYTES + 20_000
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
 ARTICLE_BLOCKED_MESSAGE = ("This site blocked access to the article. Choose “Paste text” "
                            "and paste the article text you can access.")
@@ -100,9 +103,11 @@ def article_text(url):
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")
     resolved_url = source.last_url or url
-    publication, title, author = article_metadata(soup, resolved_url)
-    from article_extract import extract_text
+    publication, title, author, structured_body = article_details(soup, resolved_url)
+    from article_extract import extract_text, extract_structured_text
     text = extract_text(soup, title, author, resolved_url)
+    if len(text.split()) < 20 and structured_body:
+        text = extract_structured_text(structured_body, title, author)
     if not text:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
     if len(text.split()) < 20:
@@ -209,10 +214,17 @@ def generate(payload, directory):
     return output
 
 
+def read_payload(stream):
+    data = stream.read(MAX_WORKER_INPUT_BYTES + 1)
+    if len(data) > MAX_WORKER_INPUT_BYTES:
+        raise ValueError("Preview request exceeds its byte limit.")
+    return json.loads(data)
+
+
 if __name__ == "__main__":
     # Worker errors intentionally exclude URLs, pasted text and provider details.
     try:
-        generate(json.loads(sys.stdin.buffer.read(MAX_INPUT_BYTES + 20_000)), Path(sys.argv[1]))
+        generate(read_payload(sys.stdin.buffer), Path(sys.argv[1]))
     except SourceDownloadError as error:
         if error.protection != "none" or error.status_code in (401, 403, 429):
             print(ARTICLE_BLOCKED_MESSAGE, file=sys.stderr)
