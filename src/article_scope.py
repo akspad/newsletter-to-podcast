@@ -5,7 +5,8 @@ from urllib.parse import parse_qsl, urljoin, urlsplit
 
 BODY_SELECTORS = (
     '[itemprop~="articleBody"], .entry-content, .post-content, .post__content, '
-    '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text'
+    '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text, '
+    'topcomment > article.comment > pre'
 )
 
 
@@ -44,14 +45,14 @@ def explicitly_hidden(node):
     return display == 'none'
 
 
-def editorial(node):
+def editorial(node, *, allow_hidden=False):
     for parent in (node, *node.parents):
         if not hasattr(parent, 'attrs'):
             continue
         classes = set(parent.get('class', []))
-        if (explicitly_hidden(parent) or
+        if (not allow_hidden and explicitly_hidden(parent) or
                 parent.name in ('nav', 'aside', 'footer') or
-                classes & {'related-posts', 'related-articles', 'recommendations', 'comments', 'author-bio'}):
+                classes & {'related-posts', 'related-articles', 'recommendations', 'comments', 'Comment-body', 'author-bio'}):
             return False
     return True
 
@@ -79,6 +80,17 @@ def article_scope(soup, title='', url=''):
         in_main = node.name == 'main' or node.get('role') == 'main' or node.find_parent(['main']) is not None
         prose = sum(len(p.get_text(' ', strip=True)) for p in node.select('p') if editorial(p))
         return linked, matched, in_main, prose
+
+    # Lamer News layouts (including Antirez) put the permalink headline in
+    # one article and its body in a topcomment. Require their shared news ID
+    # and a matching permalink, rather than treating ordinary comments as posts.
+    top_comments = {node.get('data-comment-id'): node for node in articles
+                    if node.parent.name == 'topcomment' and 'comment' in node.get('class', [])}
+    for node in articles:
+        news_id = node.get('data-news-id')
+        body = top_comments.get(f'{news_id}-') if news_id else None
+        if body is not None and score(node)[0]:
+            return body
 
     # Main may contain recommendation <article>s beside an unmarked main story.
     # A heading outside those cards is evidence to keep the wider main scope.

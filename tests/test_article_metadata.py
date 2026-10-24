@@ -15,6 +15,35 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_lamer_news_attribution_uses_the_selected_post_and_ignores_hidden_names(self):
+        html = ('<title>A discovery</title><article data-news-id="42"><h2><a href="/story">A discovery</a></h2></article>'
+                '<topcomment><article class="comment" data-comment-id="42-"><span class="info">'
+                '<span hidden class="username"><a>Hidden Writer</a></span>'
+                '<span class="username"><a href="/user/alex">Alex Writer</a></span></span>'
+                '<pre>Actual article prose.</pre></article></topcomment>')
+        self.assertEqual(metadata(html), ('fictional.example', 'A discovery', 'Alex Writer'))
+
+    def test_prose_home_links_and_generic_archive_labels_are_not_publication_names(self):
+        for href in ('/', '/#support', '/?topic=notes'):
+            html = ('<title>A discovery</title><main><h1>A discovery</h1><p>Read '
+                    '<a href="' + href + '">my own index of earlier notes</a>.</p></main>'
+                    '<a href="/">Archive</a>')
+            with self.subTest(href=href):
+                self.assertEqual(metadata(html)[0], 'fictional.example')
+        html = ('<nav><a hidden href="/">Hidden Blog</a><a href="/">Science Notes logo</a></nav>'
+                '<main><p><a href="/">Some prose</a></p></main>')
+        self.assertEqual(metadata(html)[0], 'Science Notes')
+
+    def test_label_only_byline_uses_adjacent_authors_or_omits_the_author(self):
+        for label in ('by', 'By:', ' BY '):
+            html = ('<article><header><h1>A discovery</h1><span class="byline">' + label + '</span> '
+                    '<span class="author vcard"><a href="/author/alex">Alex Writer</a></span>'
+                    '<span class="author vcard"><a href="/author/sam">Sam Author</a></span>'
+                    '<span hidden class="author vcard"><a>Hidden Writer</a></span></header></article>')
+            with self.subTest(label=label):
+                self.assertEqual(metadata(html)[2], 'Alex Writer, Sam Author')
+                self.assertEqual(metadata('<article><h1>A discovery</h1><span class="byline">' + label + '</span></article>')[2], '')
+
     def test_ordinary_bylines_keep_coauthors_and_override_an_incomplete_schema_list(self):
         for wrapper in ('<p class="byline">{}</p>', '<p class="author">{}</p>', '<header>{}</header>'):
             links = ('By <a href="/authors/alex" rel="author"><span itemprop="name">Alex Writer</span></a> and '

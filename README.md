@@ -12,7 +12,7 @@ The demo leads with your own reading: paste a public article URL or its text, ch
 
 While preparing audio, the page shows an approximate remaining-time range and an elapsed timer. Estimates distinguish service wake-up, a busy service (including time to generate audio), and generation. Short pasted excerpts use a shorter initial range; unknown article lengths use a conservative two-minute range. These are rough estimates, not progress reported by Edge TTS. If a range is exceeded, the page says it is still working.
 
-- Reads Substack publications, RSS and Atom feeds, and simple article listing pages.
+- Reads Substack publications, RSS and Atom feeds, and simple article listing pages. Malformed feed dates are skipped per entry, and Atom links honor inherited XML bases, including after feed redirects.
 - Generates summaries with Gemini and audio with Edge TTS.
 - Produces MP3s with podcast loudness normalization and an RSS feed.
 - Runs locally or on a configurable schedule in your own GitHub repository: four times a day by default.
@@ -75,7 +75,7 @@ Redirected links use the final validated destination for attribution and body se
 
 Empty article-body placeholders allow a fallback to readable page prose. If the page has no usable prose, previews can read an `articleBody` from a matching JSON-LD Article or BlogPosting without running JavaScript or fetching extra resources. Visible article text takes precedence; unrelated structured articles and structured bodies explicitly marked as containing paid sections are excluded. Pasted text keeps its 100,000-byte UTF-8 limit through the worker handoff, including accented characters; the worker separately bounds JSON's escaped representation.
 
-Attribution excludes structured metadata that identifies a different article. Streamed LessWrong bodies skip empty placeholders, and table cells and definition entries remain separated in narration.
+Attribution excludes structured metadata that identifies a different article, prose homepage-link labels, and empty “by” labels. Streamed LessWrong bodies respect article selection and skip empty placeholders. Antirez/Lamer News pages link headline listings to their bodies using matching post IDs and permalinks. Table cells and definition entries remain separated in narration.
 
 Linked coauthors in a byline are announced together. Footnote reference and return links are omitted while citation text and mathematical exponents are preserved. The demo checks pasted text against the 100,000-byte UTF-8 limit before contacting the service; oversized API requests also suggest a shorter excerpt.
 

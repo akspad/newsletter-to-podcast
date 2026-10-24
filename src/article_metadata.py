@@ -4,7 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from article_scope import article_scope, belongs_to_scope, editorial, heading_matches, url_identity
+from article_scope import article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, url_identity
 
 
 def clean(value, limit=160):
@@ -16,8 +16,9 @@ def linked_byline_names(byline):
     members = byline.select('[rel~="author"], [itemprop~="author"], [itemprop~="name"], '
                             'a[href*="/authors/"], a[href*="/author/"]')
     explicit = bool(members)
-    if ('author' in byline.get('rel', []) or 'author' in byline.get('itemprop', '').split()) and byline.parent:
-        siblings = byline.parent.select(':scope > [rel~="author"], :scope > [itemprop~="author"]')
+    if ('author' in byline.get('rel', []) or 'author' in byline.get('itemprop', '').split()
+            or 'author' in byline.get('class', [])) and byline.parent:
+        siblings = byline.parent.select(':scope > [rel~="author"], :scope > [itemprop~="author"], :scope > .author')
         if len(siblings) > 1:
             members, explicit = siblings, True
     if not members:
@@ -154,14 +155,16 @@ def article_details(soup, url):
             same_host = parsed.hostname == urlparse(url).hostname
         except ValueError:
             continue  # A malformed navigation link must not spoil an article.
-        if not same_host or parsed.path not in ('', '/'):
+        if (not same_host or parsed.path not in ('', '/') or parsed.query or parsed.fragment or
+                link.find_parent(['p', 'li', 'blockquote', 'pre', 'code']) or
+                any(explicitly_hidden(parent) for parent in (link, *link.parents))):
             continue
         label = clean(link.get('title') or link.get_text(' ', strip=True), 80)
         if not label:
             image = link.find('img', alt=True)
             label = clean(image.get('alt') if image else '', 80)
         label = re.sub(r'(?:\s+logo|:\s*Home)$', '', label, flags=re.I)
-        if label and label.casefold() not in ('home', 'homepage', 'go', 'skip to content'):
+        if label and label.casefold() not in ('home', 'homepage', 'go', 'skip to content', 'archive', 'archives', 'index'):
             home_name = label
             break
     feed = soup.select_one('link[rel="alternate"][type="application/atom+xml"][title], '
@@ -219,6 +222,12 @@ def article_details(soup, url):
     if byline is None:
         byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by')
                        if belongs_to_scope(node, scope)), None)
+    if byline is not None and re.fullmatch(r'by\s*:?', clean(byline.get_text(' ', strip=True)), re.I):
+        byline = next((node for node in byline.parent.select(
+            ':scope > .author, :scope > [rel~="author"], :scope > [itemprop~="author"]')
+            if belongs_to_scope(node, scope)), None)
+    if byline is None and scope.parent is not None and scope.parent.name == 'topcomment':
+        byline = next((node for node in scope.select('.info > .username') if belongs_to_scope(node, scope)), None)
     byline_name = byline_authors = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.
@@ -265,7 +274,7 @@ def article_details(soup, url):
     author = clean(author or meta('article:author'), 100)
     if author.startswith(('http://', 'https://')):
         author = ''
-    author = re.sub(r'^by(?:\s*:\s*|\s+)', '', author, flags=re.I)
+    author = re.sub(r'^by(?:\s*:\s*|\s+|$)', '', author, flags=re.I)
     body = article.get('articleBody')
     identified = (any(article_score(article)[:2]) or not article_urls(article) and
                   heading_matches(title, clean(article.get('headline'))))

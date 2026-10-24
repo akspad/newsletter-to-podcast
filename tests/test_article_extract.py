@@ -24,6 +24,50 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_lamer_news_body_is_selected_by_matching_permalink_and_news_id(self):
+        html = ('<div id="content"><section id="newslist"><article data-news-id="42">'
+                '<h2><a href="/news/42">A useful article</a></h2></article></section>'
+                '<topcomment><article class="comment" data-comment-id="42-">'
+                '<span class="info">Alex Writer 50 days ago 123 views</span><pre>' + PARAGRAPHS[0] +
+                '</pre></article></topcomment><article class="comment" data-comment-id="42-1">'
+                '<pre>Unrelated reader comment.</pre></article></div>')
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertEqual(extract_text(soup, 'A useful article', url='https://fictional.example/news/42?utm_source=email'),
+                         PARAGRAPHS[0])
+
+    def test_lamer_news_body_cannot_borrow_another_post_id(self):
+        html = ('<article data-news-id="42"><h2><a href="/news/42">A useful article</a></h2></article>'
+                '<topcomment><article class="comment" data-comment-id="99-"><pre>' +
+                PARAGRAPHS[0] + '</pre></article></topcomment>')
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertNotIn(PARAGRAPHS[0], extract_text(soup, 'A useful article', url='https://fictional.example/news/42'))
+
+    def test_streamed_post_body_follows_the_selected_article_even_when_hidden(self):
+        card = '<article><h2>Another article</h2><div class="PostsPage-postContent"><p>Unrelated recommendation.</p></div></article>'
+        for hidden in ('', ' hidden'):
+            html = ('<main>' + card + '<article><h1>Requested article</h1><div' + hidden +
+                    '><div class="PostsPage-postContent"><p>' + PARAGRAPHS[0] + '</p></div></div></article>' + card + '</main>')
+            with self.subTest(hidden=hidden):
+                self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+        html = ('<article itemid="https://fictional.example/other"><h1>A discovery</h1>'
+                '<div class="PostsPage-postContent"><p>Unrelated recommendation.</p></div></article>'
+                '<article itemid="https://fictional.example/story"><h1>A discovery</h1>'
+                '<div class="PostsPage-postContent"><p>' + PARAGRAPHS[0] + '</p></div></article>')
+        self.assertEqual(extract_text(BeautifulSoup(html, 'html.parser'), 'A discovery',
+                                     url='https://fictional.example/story'), PARAGRAPHS[0])
+        html = ('<article class="PostsPage-postContent"><h2>Other story</h2><p>Unrelated recommendation.</p></article>'
+                '<article class="PostsPage-postContent"><h1>Requested article</h1><p>' + PARAGRAPHS[0] + '</p></article>')
+        self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
+    def test_streamed_classes_in_navigation_and_recommendations_are_not_article_bodies(self):
+        for wrapper in ('aside', 'nav', 'div class="recommendations"', 'div class="Comment-body"'):
+            close = wrapper.split()[0]
+            html = ('<' + wrapper + '><div class="PostsPage-postContent"><p>Unrelated recommendation.</p></div></' + close + '>'
+                    '<main><h1>Requested article</h1><div hidden><div class="PostsPage-postContent"><p>' +
+                    PARAGRAPHS[0] + '</p></div></div></main>')
+            with self.subTest(wrapper=wrapper):
+                self.assertEqual(extract(html, 'Requested article'), PARAGRAPHS[0])
+
     def test_footnote_navigation_is_excluded_but_citations_and_exponents_are_preserved(self):
         body = ('<p>Careful observations<sup><a href="#fn1" role="doc-noteref">1</a></sup> help researchers.'
                 ' The formula is x<sup>2</sup> and <a href="#methods">methods</a> explain it.</p>'

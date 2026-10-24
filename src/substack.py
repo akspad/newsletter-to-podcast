@@ -21,6 +21,23 @@ HEADERS = {"Accept": "application/json, text/plain, */*", "Accept-Language": "en
 AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceover_upload_id", "audio_items")
 
 
+def feed_date(value, *, rss=False):
+    """Return a usable timestamp, or skip an entry whose date cannot be parsed."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        if rss:
+            try:
+                published = parsedate_to_datetime(value)
+            except (ValueError, TypeError, OverflowError):
+                published = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        else:
+            published = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return published.replace(tzinfo=timezone.utc) if published.tzinfo is None else published
+
+
 def decode_source(body, headers):
     """Decode bounded raw HTML/XML using a BOM, HTTP charset or page declaration."""
     from bs4 import UnicodeDammit
@@ -202,7 +219,7 @@ class Substack:
         posts = []
         root = ET.fromstring(self.get(pub["base"], raw=True))
         if root.tag == "{http://www.w3.org/2005/Atom}feed":
-            return self.atom_posts(pub, root, limit)
+            return self.atom_posts(pub, root, limit, base_url=self.last_url or pub['base'])
         for index, item in enumerate(root.iter("item")):
             if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
                 break
@@ -210,14 +227,9 @@ class Substack:
             guid = item.findtext("guid") or link
             html = item.findtext("content:encoded", namespaces=ns) or item.findtext("description") or ""
             text = html_to_text(html)
-            date = item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns)
-            if not date:
+            published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
+            if published is None:
                 continue  # undated entries cannot be filtered reliably by lookback
-            try:
-                published = parsedate_to_datetime(date)
-            except (ValueError, TypeError):
-                published = datetime.fromisoformat(date.replace("Z", "+00:00"))
-            published = published.replace(tzinfo=timezone.utc) if published.tzinfo is None else published
             enclosure = item.find("enclosure")
             posts.append({
                 "id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
@@ -234,32 +246,34 @@ class Substack:
         return posts[:limit]
 
     @staticmethod
-    def atom_posts(pub, root, limit):
+    def atom_posts(pub, root, limit, *, base_url=None):
         ns = {"a": "http://www.w3.org/2005/Atom"}
+        xml_base = '{http://www.w3.org/XML/1998/namespace}base'
+        root_base = urljoin(base_url or pub['base'], root.get(xml_base, ''))
         posts = []
         for index, entry in enumerate(root.findall("a:entry", ns)):
             if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
                 break
-            date = entry.findtext("a:published", namespaces=ns) or entry.findtext("a:updated", namespaces=ns)
-            if not date:
+            published = feed_date(entry.findtext("a:published", namespaces=ns) or entry.findtext("a:updated", namespaces=ns))
+            if published is None:
                 continue
             links = entry.findall("a:link", ns)
-            link = next((urljoin(pub["base"], e.get("href", "")) for e in links if e.get("rel", "alternate") == "alternate"), "")
+            entry_base = urljoin(root_base, entry.get(xml_base, ''))
+            def link_url(node):
+                return urljoin(urljoin(entry_base, node.get(xml_base, '')), node.get('href', ''))
+            link = next((link_url(e) for e in links if e.get('href') and e.get("rel", "alternate") == "alternate"), "")
             content = entry.find("a:content", ns)
             if content is None:
                 content = entry.find("a:summary", ns)
             body = "" if content is None else (content.text or "") + "".join(ET.tostring(c, encoding="unicode") for c in content)
             guid = entry.findtext("a:id", namespaces=ns) or link
-            published = datetime.fromisoformat(date.replace("Z", "+00:00"))
-            if published.tzinfo is None:
-                published = published.replace(tzinfo=timezone.utc)
             posts.append({"id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                           "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
                           "title": entry.findtext("a:title", namespaces=ns) or "Untitled",
                           "post_date": published.isoformat(), "canonical_url": link, "audience": "everyone",
                           "wordcount": len(html_to_text(body).split()), "body_html": body,
                           "publishedBylines": [{"name": e.text or ""} for e in entry.findall("a:author/a:name", ns)],
-                          "podcast_url": next((e.get("href") for e in links if e.get("rel") == "enclosure" and e.get("type", "").startswith("audio/")), None)})
+                          "podcast_url": next((link_url(e) for e in links if e.get('href') and e.get("rel") == "enclosure" and e.get("type", "").startswith("audio/")), None)})
         return posts[:limit]
 
     def page_posts(self, pub, limit):

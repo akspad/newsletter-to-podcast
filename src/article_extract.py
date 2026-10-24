@@ -2,7 +2,7 @@
 import re
 from html import unescape
 from soupsieve import match
-from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden
+from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden, heading_matches
 from tts import speech_text
 
 
@@ -119,9 +119,21 @@ def extract_structured_text(body, title='', author=''):
 
 
 def extract_text(soup, title='', author='', url=''):
+    scope = article_scope(soup, title, url)
     # LessWrong streams its explicit post body inside an initially hidden React
     # container. Detach only that body before discarding hidden page sections.
-    candidates = soup.select('.PostsPage-postContent')
+    candidates = []
+    for node in soup.select('.PostsPage-postContent'):
+        if not editorial(node, allow_hidden=True):
+            continue
+        owner = node if node.name == 'article' else node.find_parent('article')
+        if owner is not None and owner is not scope:
+            if scope.name == 'article':
+                continue
+            headings = owner.select('h1, h2, .entry-title')
+            if title and headings and not any(heading_matches(h.get_text(' ', strip=True), title) for h in headings):
+                continue
+        candidates.append(node)
     identities = {id(node) for node in candidates}
     sections = [node for node in candidates if not any(id(parent) in identities for parent in node.parents)]
     deferred = None
@@ -131,7 +143,6 @@ def extract_text(soup, title='', author='', url=''):
         if speech_text(node.get_text('', strip=True)).strip():
             deferred = node
             break
-    scope = article_scope(soup, title, url)
     # Select before cleanup removes the headline used to identify the article.
     for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
         if node.parent is not None and (not editorial(node) or
