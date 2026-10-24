@@ -10,10 +10,11 @@ from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from html import escape
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
 import security
+from article_scope import url_identity
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -292,9 +293,10 @@ class Substack:
             authors = entry.findall('a:author', ns) or entry.findall('a:source/a:author', ns) or root.findall('a:author', ns)
             bylines = [name.strip() for author in authors if (name := author.findtext('a:name', namespaces=ns)) and name.strip()]
             guid = entry.findtext("a:id", namespaces=ns) or link
+            title = ' '.join(html_to_text(atom_content(entry.find('a:title', ns))).split()) or 'Untitled'
             posts.append({"id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                           "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
-                          "title": entry.findtext("a:title", namespaces=ns) or "Untitled",
+                          "title": title,
                           "post_date": published.isoformat(), "canonical_url": link, "audience": "everyone",
                           "wordcount": len(html_to_text(body).split()), "body_html": body,
                           "publishedBylines": [{"name": name} for name in bylines],
@@ -307,35 +309,69 @@ class Substack:
         from bs4 import BeautifulSoup
 
         listing = self.get(pub["base"], raw=True)
-        links = []
-        for path in re.findall(r'href="(%s[^"#?]+)"' % re.escape(pub["page"]), listing):
-            if path not in links:
-                links.append(path)
+        base = self.last_url or pub['base']
+        parsed_base = urlparse(base)
+        origin = (parsed_base.scheme, parsed_base.hostname,
+                  parsed_base.port if parsed_base.port is not None else (443 if parsed_base.scheme == 'https' else 80))
+        prefix = urlparse(urljoin(base, pub['page'])).path
+        links, seen = [], set()
+        for anchor in BeautifulSoup(listing, 'html.parser').select('a[href]'):
+            href = anchor.get('href', '').strip()
+            if not href or href.startswith('#') or any(ord(char) <= 32 or ord(char) == 127 for char in href):
+                continue
+            try:
+                parsed = urlparse(urljoin(base, href))
+                target = (parsed.scheme, parsed.hostname,
+                          parsed.port if parsed.port is not None else (443 if parsed.scheme == 'https' else 80))
+                if (target != origin or parsed.username is not None or parsed.password is not None or
+                        not parsed.path.startswith(prefix) or parsed.path.rstrip('/') == prefix.rstrip('/')):
+                    continue
+                identity = url_identity(parsed.geturl())
+                if identity is None or identity == url_identity(base) or identity in seen:
+                    continue
+                parsed = parsed._replace(query=urlencode(identity[3]), fragment='')
+                url = parsed.geturl()
+            except ValueError:
+                continue
+            seen.add(identity)
+            links.append(url)
+            if len(links) >= min(limit, security.MAX_SOURCE_ENTRIES):
+                break
         posts, titles = [], set()
-        for path in links[:limit]:
-            url = urljoin(pub["base"], path)
+        for url in links[:limit]:
+            parsed = urlparse(url)
+            path = parsed.path
             try:
                 soup = BeautifulSoup(self.get(url, raw=True), "html.parser")
-            except RuntimeError:
+            except (security.BudgetExceeded, security.RunBudgetExceeded):
+                raise
+            except (RuntimeError, OSError):
                 print("An article page was unavailable; skipping it.")
                 continue
             og = soup.find("meta", property="og:title")
-            title = (og and og.get("content")) or (soup.title.string if soup.title else path)
+            title = (og and og.get("content")) or (soup.title.get_text(' ', strip=True) if soup.title else path)
             date = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", soup.get_text(" "))
             body = soup.select_one(".w-richtext, article, main")
             title = title.strip()
             # Undated pages aren't articles; Webflow's duplicated drafts ("... Copy") repeat one that is.
             if not date or not body or title in titles or re.search(r"\bcopy$", title, re.I) or path.endswith("-copy"):
                 continue
+            try:
+                published = datetime.strptime(date.group(1), '%B %d, %Y').replace(hour=12, tzinfo=timezone.utc)
+            except ValueError:
+                continue
             titles.add(title)
             html = str(body)
             desc = soup.find("meta", attrs={"name": "description"})
             posts.append({
                 "subtitle": (desc and desc.get("content")) or "",
-                "id": int(hashlib.sha1(url.encode()).hexdigest()[:10], 16),
+                # Keep existing IDs based on the configured publication origin,
+                # even when a listing redirects to a different canonical origin.
+                "id": int(hashlib.sha1(urlparse(pub['base'])._replace(path=path, params=parsed.params,
+                          query=parsed.query, fragment='').geturl().encode()).hexdigest()[:10], 16),
                 "slug": path.strip("/").split("/")[-1] or "post",
                 "title": title,
-                "post_date": datetime.strptime(date.group(1), "%B %d, %Y").replace(hour=12, tzinfo=timezone.utc).isoformat(),
+                "post_date": published.isoformat(),
                 "canonical_url": url,
                 "audience": "everyone",
                 "wordcount": len(html_to_text(html).split()),

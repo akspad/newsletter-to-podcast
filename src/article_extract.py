@@ -33,6 +33,29 @@ DATE = re.compile(
     rf'\d{{1,2}}(?:st|nd|rd|th)?\s+{MONTH}\s+\d{{4}}|\d{{4}}-\d{{2}}-\d{{2}})', re.I)
 
 
+def remove_opening_metadata(root, author):
+    """Remove consecutive opening labels, preserving dates and credits in prose."""
+    for paragraph in list(root.find_all('p')):
+        value = ' '.join(speech_text(paragraph.get_text(' ', strip=True)).split())
+        if not value:
+            continue
+        if paragraph.find_parent(['blockquote', 'pre', 'code', 'li', 'table', 'figure', 'figcaption']):
+            break
+        links = paragraph.find_all('a')
+        outside = ' '.join(' '.join(str(node) for node in paragraph.find_all(string=True)
+                                   if node.find_parent('a') is None).split())
+        translation = (bool(links) and all(link.get('href') for link in links) and
+                       re.fullmatch(r'Translations?\s*:[\s,;|/·•()\[\]]*',
+                                    re.sub(r'\band\b', '', outside, flags=re.I), re.I))
+        byline = author and re.fullmatch(r'by\s*:?\s*' + re.escape(author) + r'\.?', value, re.I)
+        history = (len(links) == 1 and links[0].get('href', '').startswith('#') and
+                   links[0].get_text(' ', strip=True).casefold() in ('changes', 'updates', 'changelog') and
+                   DATE.fullmatch(outside.strip('()[] ')))
+        if not (translation or byline or history):
+            break
+        paragraph.decompose()
+
+
 def clean_tree(root, title, author):
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
@@ -94,6 +117,7 @@ def clean_tree(root, title, author):
         quoted = node.find_parent(['blockquote', 'pre', 'code'])
         if DATE.fullmatch(str(node).strip()) and not quoted and (not prose or before_break):
             node.extract()
+    remove_opening_metadata(root, author)
 
 
 def plain_text(root):

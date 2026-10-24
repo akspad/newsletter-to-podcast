@@ -16,6 +16,19 @@ PUB = {'base': 'https://fictional.example/feed.xml', 'rss': True}
 
 
 class FeedAdapterTests(unittest.TestCase):
+    def test_atom_titles_normalize_html_xhtml_and_literal_text(self):
+        source = Substack('')
+        cases = (
+            ('<title type="html">Working with &lt;em&gt;vectors&lt;/em&gt;</title>', 'Working with vectors'),
+            ('<title type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">Working with <em>vectors</em></div></title>', 'Working with vectors'),
+            ('<title type="text">Use &lt;vector&gt; &amp; maps</title>', 'Use <vector> & maps'),
+            ('<title>Use &lt;vector&gt; &amp; maps</title>', 'Use <vector> & maps'))
+        for title, expected in cases:
+            xml = ('<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>one</id>' + title +
+                   '<updated>2026-10-23T12:00:00Z</updated><content>Body.</content></entry></feed>')
+            with self.subTest(title=title), patch.object(source, 'get', return_value=xml):
+                self.assertEqual(source.recent_posts(PUB)[0]['title'], expected)
+
     def test_imported_facts_and_inherited_author_reach_full_narration(self):
         from html import escape
         article = '<p><span>A</span>n original sentence.</p><table><tr><td>Atlas</td><td>16 GB</td></tr></table><pre>limit = 16</pre>'

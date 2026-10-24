@@ -12,7 +12,7 @@ The demo leads with your own reading: paste a public article URL or its text, ch
 
 While preparing audio, the page shows an approximate remaining-time range and an elapsed timer. Estimates distinguish service wake-up, a busy service (including time to generate audio), and generation. Short pasted excerpts use a shorter initial range; unknown article lengths use a conservative two-minute range. These are rough estimates, not progress reported by Edge TTS. If a range is exceeded, the page says it is still working.
 
-- Reads Substack publications, RSS 1.0/2.0 and Atom feeds, and simple article listing pages. Malformed feed dates are skipped per entry, and Atom links honor inherited XML bases, including after feed redirects. Atom entries inherit feed authors when needed and preserve plain text, HTML and XHTML content.
+- Reads Substack publications, RSS 1.0/2.0 and Atom feeds, and simple article listing pages. Malformed feed dates are skipped per entry, and Atom links honor inherited XML bases, including after feed redirects. Atom entries inherit feed authors when needed and preserve plain text, HTML and XHTML content; formatted titles are read as plain words.
 - Preserves table values, code blocks and inline word boundaries in imported text.
 - Generates summaries with Gemini and audio with Edge TTS.
 - Produces MP3s with podcast loudness normalization and an RSS feed.
@@ -76,7 +76,7 @@ Redirected links use the final validated destination for attribution and body se
 
 Empty article-body placeholders allow a fallback to readable page prose. If the page has no usable prose, previews can read an `articleBody` from a matching JSON-LD Article or BlogPosting without running JavaScript or fetching extra resources. Visible article text takes precedence; unrelated structured articles and structured bodies explicitly marked as containing paid sections are excluded. Pasted text keeps its 100,000-byte UTF-8 limit through the worker handoff, including accented characters; the worker separately bounds JSON's escaped representation.
 
-Attribution excludes structured metadata that identifies a different article, prose homepage-link labels, and empty “by” labels. Streamed LessWrong bodies respect article selection and skip empty placeholders. Antirez/Lamer News pages link headline listings to their bodies using matching post IDs and permalinks. Table cells and definition entries remain separated in narration.
+Attribution excludes structured metadata that identifies a different article, prose homepage-link labels, and empty “by” labels. Opening translation menus, repeated bylines, and date/change navigation are omitted while quoted credits and prose dates are preserved. Streamed LessWrong bodies respect article selection and skip empty placeholders. Antirez/Lamer News pages link headline listings to their bodies using matching post IDs and permalinks. Table cells and definition entries remain separated in narration.
 
 Linked coauthors in a byline are announced together. Footnote reference and return links are omitted while citation text and mathematical exponents are preserved. The demo checks pasted text against the 100,000-byte UTF-8 limit before contacting the service; oversized API requests also suggest a shorter excerpt.
 
@@ -189,7 +189,7 @@ https://example.com Example Site | page: /stories/ | full
 | `only: Weekly` | Match titles containing this text, ignoring case. Explicit matches bypass length/audio filtering. |
 | `any length` | Allow short articles in summary mode. |
 | `rss` | Read RSS or Atom. Feed URLs ending in `/feed`, `/rss`, or `.xml` are also detected automatically. |
-| `page: /stories/` | Read a simple HTML listing with article paths and dated article bodies. This is a heuristic, not a general crawler. |
+| `page: /stories/` | Read a simple HTML listing with article paths and dated article bodies. Relative and absolute links on the same origin are supported; tracking parameters are removed and unavailable articles are skipped. This is a heuristic, not a general crawler. |
 
 By default, summary mode selects posts with at least 1,500 words and no playable attached audio. Full mode takes every recent post, including ones that already have audio.
 

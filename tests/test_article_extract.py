@@ -24,6 +24,28 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_opening_translation_byline_and_change_labels_are_not_narrated(self):
+        labels = ('<p>By <a href="/">Alex Writer</a></p><p><em>February 6, 2009</em> '
+                  '(<a href="#changes">Changes</a>)</p><p><em>Translations: '
+                  '<a href="fr/">French</a>, and <a href="de/">German</a></em></p>')
+        html = '<article><h1>A discovery</h1><div class="entry-content">' + labels + '<p>' + PARAGRAPHS[0] + '</p></div></article>'
+        self.assertEqual(extract(html, 'A discovery', 'Alex Writer'), PARAGRAPHS[0])
+        self.assertEqual(extract_structured_text(labels + '<p>' + PARAGRAPHS[0] + '</p>', 'A discovery', 'Alex Writer'), PARAGRAPHS[0])
+
+    def test_metadata_cleanup_preserves_quoted_credits_dates_and_translation_prose(self):
+        examples = (
+            ('<blockquote><p>By Alex Writer</p><p>Translations: <a href="fr/">French</a></p></blockquote>',
+             'By Alex Writer Translations: French'),
+            ('<p>July 2013 began with an important discovery.</p>', 'July 2013 began with an important discovery.'),
+            ('<p>Translations: <a href="fr/">French</a> examples explain the original argument.</p>',
+             'Translations: French examples explain the original argument.'),
+            ('<p>A real opening sentence.</p><p>By Alex Writer</p>', 'A real opening sentence. By Alex Writer'),
+            ('<p>By Alex Writer</p>', 'By Alex Writer'))
+        for html, expected in examples:
+            with self.subTest(html=html):
+                author = '' if html == '<p>By Alex Writer</p>' else 'Alex Writer'
+                self.assertEqual(extract('<div class="entry-content">' + html + '</div>', author=author), expected)
+
     def test_lamer_news_body_is_selected_by_matching_permalink_and_news_id(self):
         html = ('<div id="content"><section id="newslist"><article data-news-id="42">'
                 '<h2><a href="/news/42">A useful article</a></h2></article></section>'
