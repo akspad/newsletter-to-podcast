@@ -117,6 +117,24 @@
     document.querySelector('input[name="input-mode"][value="text"]').click();
     if (document.querySelector('#text-input').hidden || document.querySelector('#article-text').disabled) throw new Error('Paste text was not available after a blocked article');
 
+    let sizeChecks = 0;
+    const limitMessage = 'That input is too long. Paste a shorter article excerpt.';
+    window.fetch = async (input, init = {}) => {
+      sizeChecks++;
+      if (new URL(input, window.location.href).pathname === '/health') return Response.json({status: 'ok'});
+      if (new TextEncoder().encode(JSON.parse(init.body).text).length !== 100000) throw new Error('Boundary paste was changed');
+      return new Response(sample, {headers: {'Content-Type': 'audio/mpeg'}});
+    };
+    document.querySelector('#article-text').value = 'é'.repeat(50001);
+    form.requestSubmit();
+    await waitFor(() => !errorMessage.hidden);
+    if (sizeChecks !== 0 || errorMessage.textContent !== limitMessage || button.disabled || !timing.hidden) throw new Error('Oversized UTF-8 paste started a request or showed the wrong error');
+    document.querySelector('#article-text').value = 'é'.repeat(50000);
+    form.requestSubmit();
+    await waitFor(() => !result.hidden);
+    if (sizeChecks !== 2 || !errorMessage.hidden) throw new Error('Boundary paste failed to recover after size validation');
+    document.querySelector('#article-text').value = 'A short excerpt to test the remaining error paths.';
+
     window.fetch = async () => new Response('', {status: 404});
     form.requestSubmit();
     await waitFor(() => !errorMessage.hidden);

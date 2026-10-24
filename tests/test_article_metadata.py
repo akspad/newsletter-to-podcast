@@ -15,6 +15,27 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_ordinary_bylines_keep_coauthors_and_override_an_incomplete_schema_list(self):
+        for wrapper in ('<p class="byline">{}</p>', '<p class="author">{}</p>', '<header>{}</header>'):
+            links = ('By <a href="/authors/alex" rel="author"><span itemprop="name">Alex Writer</span></a> and '
+                     '<a href="/authors/sam" rel="author"><span itemprop="name">Sam Author</span></a>')
+            html = ('<script type="application/ld+json">'
+                    '{"@type":"Article","author":{"name":"The Editors"}}</script>'
+                    '<main><article><h1>A discovery</h1>' + wrapper.format(links) + '</article></main>')
+            with self.subTest(wrapper=wrapper):
+                self.assertEqual(metadata(html)[2], 'Alex Writer, Sam Author')
+
+    def test_byline_members_deduplicate_names_and_exclude_dates_hidden_names_and_controls(self):
+        for prefix in ('/authors/', '/people/'):
+            html = ('<article><h1>A discovery</h1><p class="byline">By '
+                    f'<a href="{prefix}alex">Alex Writer</a> and <a href="{prefix}sam">Sam Author</a>'
+                    f'<a href="{prefix}alex">Alex Writer</a><a hidden href="{prefix}hidden">Hidden Writer</a>'
+                    '<time><a href="/archive/date">October 23, 2026</a></time>'
+                    '<a href="#comments">15 comments</a><a href="/subscribe">Subscribe</a>'
+                    '<a rel="tag" href="/category/science">Science</a></p></article>')
+            with self.subTest(prefix=prefix):
+                self.assertEqual(metadata(html)[2], 'Alex Writer, Sam Author')
+
     def test_unrelated_schema_cannot_supply_attribution_when_no_schema_matches(self):
         for identity in ({'url': 'https://fictional.example/other'}, {},
                          {'mainEntityOfPage': {'@id': 'https://fictional.example/other'}}):

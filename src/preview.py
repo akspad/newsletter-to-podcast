@@ -15,6 +15,7 @@ MAX_SECONDS = 60
 MAX_WORDS = 130
 MAX_EXCERPT_CHARS = 1000
 MAX_INPUT_BYTES = 100_000
+INPUT_TOO_LONG_MESSAGE = "That input is too long. Paste a shorter article excerpt."
 # JSON may escape each input byte as six ASCII bytes, such as a control
 # character. Bound the wire representation separately from validated text.
 MAX_WORKER_INPUT_BYTES = 6 * MAX_INPUT_BYTES + 20_000
@@ -32,6 +33,10 @@ VOICES = {
 }
 
 
+class InputTooLongError(ValueError):
+    """The input is well formed but exceeds a public preview size limit."""
+
+
 def validate(payload):
     if not isinstance(payload, dict):
         raise ValueError("Send an article URL or pasted text.")
@@ -43,7 +48,7 @@ def validate(payload):
     if bool(url) == bool(text):
         raise ValueError("Provide either one public article URL or pasted text.")
     if len(url) > 8192 or len(text.encode("utf-8")) > MAX_INPUT_BYTES:
-        raise ValueError("That input is too long. Paste a shorter article excerpt.")
+        raise InputTooLongError(INPUT_TOO_LONG_MESSAGE)
     if voice not in VOICES:
         raise ValueError("Choose one of the available voices.")
     if url:

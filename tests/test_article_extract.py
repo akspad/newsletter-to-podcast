@@ -6,7 +6,7 @@ import unittest
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from article_extract import extract_text
+from article_extract import extract_text, extract_structured_text
 
 
 PARAGRAPHS = (
@@ -24,6 +24,24 @@ def extract(html, title='', author=''):
 
 
 class ArticleExtractionTests(unittest.TestCase):
+    def test_footnote_navigation_is_excluded_but_citations_and_exponents_are_preserved(self):
+        body = ('<p>Careful observations<sup><a href="#fn1" role="doc-noteref">1</a></sup> help researchers.'
+                ' The formula is x<sup>2</sup> and <a href="#methods">methods</a> explain it.</p>'
+                '<section role="doc-endnotes"><ol><li id="fn1">A research citation.'
+                '<a href="#ref1" role="doc-backlink">Back to text</a></li></ol></section>')
+        expected = 'Careful observations help researchers. The formula is x2 and methods explain it. A research citation.'
+        self.assertEqual(extract('<div class="entry-content">' + body + '</div>'), expected)
+        self.assertEqual(extract_structured_text(body), expected)
+
+    def test_common_markdown_footnote_controls_do_not_become_speech(self):
+        for marker, backlink in (
+                ('<a class="footnote-ref" href="#note-1">[1]</a>', '<a class="footnote-backref" href="#ref-1">↩</a>'),
+                ('<a rel="footnote" href="#note-1">1</a>', '<a rel="footnote-backref" href="#ref-1">Return</a>'),
+                ('<sup><a href="#fn:1">1</a></sup>', '<a class="reversefootnote" href="#fnref:1">Back to text</a>')):
+            html = '<div class="entry-content"><p>Original' + marker + ' prose.</p><p>A citation.' + backlink + '</p></div>'
+            with self.subTest(marker=marker):
+                self.assertEqual(extract(html), 'Original prose. A citation.')
+
     def test_empty_streamed_placeholders_do_not_hide_a_later_lesswrong_body(self):
         for empty in ('', ' \n ', '&#8203;', '&#173;', '<p class="byline">Alex Writer</p>',
                       '<p hidden>Hidden words.</p>', '<script>Only a script.</script>',

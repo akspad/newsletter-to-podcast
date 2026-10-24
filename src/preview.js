@@ -146,6 +146,11 @@
     if (!form.dataset.endpoint || pending || !form.reportValidity()) return;
     const paste = form.elements['input-mode'].value === 'text';
     const articleUrl = paste ? '' : url.value.trim();
+    const articleText = paste ? text.value.trim() : '';
+    if (new TextEncoder().encode(articleText).length > 100000) {
+      showError('That input is too long. Paste a shorter article excerpt.');
+      return;
+    }
     if (articleUrl && !['https:', 'http:'].includes(new URL(articleUrl).protocol)) {
       showError('Use a public article link starting with https:// or http://.');
       return;
@@ -160,7 +165,7 @@
     audio.pause();
     result.hidden = true;
     const controller = new AbortController();
-    const payload = JSON.stringify({url: articleUrl, text: paste ? text.value.trim() : '', voice: form.elements.voice.value});
+    const payload = JSON.stringify({url: articleUrl, text: articleText, voice: form.elements.voice.value});
     // Coarse estimates, not provider-reported progress. Unknown article lengths
     // and longer excerpts use the service's full two-minute generation budget.
     const inputSize = Math.max(text.value.trim().split(/\s+/u).length, Math.ceil(text.value.length / 6));

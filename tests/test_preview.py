@@ -21,6 +21,18 @@ import tts
 
 
 class PreviewTests(unittest.TestCase):
+    def test_article_preview_keeps_coauthors_and_omits_footnote_controls(self):
+        body = ('Careful observations<sup><a role="doc-noteref" href="#fn1">1</a></sup> help researchers '
+                'compare results and test their ideas. They share their evidence so readers can understand '
+                'what changed and how future experiments might help.')
+        html = ('<article><header><h1>A discovery</h1><p class="byline">By '
+                '<a href="/authors/alex">Alex Writer</a> and <a href="/authors/sam">Sam Author</a>'
+                '</p></header><div class="entry-content"><p>' + body + '</p></div></article>')
+        with patch('substack.Substack.get', return_value=html):
+            text = preview.article_text('https://fictional.example/story')
+        self.assertTrue(text.startswith('fictional.example. A discovery. By Alex Writer, Sam Author.\nCareful observations help'))
+        self.assertNotIn('observations1', preview.excerpt(text))
+
     def test_preview_uses_visible_author_when_only_an_unrelated_schema_article_exists(self):
         data = {'@type': 'Article', 'url': 'https://fictional.example/other', 'headline': 'Other story',
                 'author': {'name': 'Unrelated Writer'}}
@@ -429,6 +441,22 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.client.close()
+
+    async def test_oversized_text_gets_a_shorter_excerpt_prompt_before_generation(self):
+        for text, expected_status in (('é' * 50001, 400), ('a' * 100001, 400), ('a' * 130000, 413)):
+            data = json.dumps({'text': text}, ensure_ascii=False).encode('utf-8')
+            response = await self.client.post('/api/preview', data=data,
+                                              headers={'Content-Type': 'application/json', 'Origin': 'https://demo.example'})
+            with self.subTest(bytes=len(data)):
+                self.assertEqual(response.status, expected_status)
+                self.assertEqual((await response.json())['error'], preview.INPUT_TOO_LONG_MESSAGE)
+                self.assertEqual(response.headers['Access-Control-Allow-Origin'], 'https://demo.example')
+        self.assertEqual(self.calls, [])
+        for _ in range(5):
+            response = await self.client.post('/api/preview', data=json.dumps({'text': 'é' * 50000}, ensure_ascii=False).encode(),
+                                              headers={'Content-Type': 'application/json'})
+            self.assertEqual(response.status, 200)
+        self.assertEqual(len(self.calls), 5)  # Invalid inputs spent no generation allowance.
 
     async def test_form_to_mp3_response_and_cors(self):
         page = await self.client.get("/")

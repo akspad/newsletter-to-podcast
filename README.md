@@ -77,6 +77,8 @@ Empty article-body placeholders allow a fallback to readable page prose. If the 
 
 Attribution excludes structured metadata that identifies a different article. Streamed LessWrong bodies skip empty placeholders, and table cells and definition entries remain separated in narration.
 
+Linked coauthors in a byline are announced together. Footnote reference and return links are omitted while citation text and mathematical exponents are preserved. The demo checks pasted text against the 100,000-byte UTF-8 limit before contacting the service; oversized API requests also suggest a shorter excerpt.
+
 The server defaults to two simultaneous jobs (one in the Render Free blueprint), five attempts per client address per ten minutes, and sixty attempts total per hour. Limits are in memory and reset on restart. Behind a reverse proxy, clients share its address and therefore its five-attempt limit; forwarded IP headers are deliberately not trusted. For multiple instances or a larger public demo, put shared rate limiting at the gateway. The worker and its subprocesses are terminated after two minutes. Temporary audio files are removed after every job; audio returns only to the requesting browser and is never added to RSS or a public gallery. Access logs are disabled in the app; configure your host's logs separately. Text goes to Microsoft for speech generation.
 
 ## Quick start: hear a sample in under a minute

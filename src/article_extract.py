@@ -11,6 +11,8 @@ EXCLUDED = (
     'button, input, select, textarea, svg, video, audio, figcaption, '
     '[hidden], [aria-hidden="true"], [role="button"], [role="navigation"], '
     '[role="complementary"], [role="dialog"], .visually-hidden, .sr-only, '
+    '[role~="doc-noteref"], [role~="doc-backlink"], a.footnote-ref, a.footnote-backref, '
+    'a.reversefootnote, a[rel~="footnote"], a[rel~="footnote-backref"], sup a[href^="#fn"], '
     '.post-header, .post-footer, .post-meta, .post-metadata, .share-buttons, '
     '.byline, [data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '

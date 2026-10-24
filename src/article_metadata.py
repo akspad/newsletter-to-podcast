@@ -11,6 +11,35 @@ def clean(value, limit=160):
     return ' '.join(speech_text(value).split())[:limit].strip() if isinstance(value, str) else ''
 
 
+def linked_byline_names(byline):
+    """Read distinct author names inside attribution, excluding its controls."""
+    members = byline.select('[rel~="author"], [itemprop~="author"], [itemprop~="name"], '
+                            'a[href*="/authors/"], a[href*="/author/"]')
+    explicit = bool(members)
+    if ('author' in byline.get('rel', []) or 'author' in byline.get('itemprop', '').split()) and byline.parent:
+        siblings = byline.parent.select(':scope > [rel~="author"], :scope > [itemprop~="author"]')
+        if len(siblings) > 1:
+            members, explicit = siblings, True
+    if not members:
+        members = byline.select('a')
+    identities = {id(node) for node in members}
+    values = []
+    for node in members[:100]:
+        if (not editorial(node) or node.find_parent('time') or
+                any(id(parent) in identities for parent in node.parents)):
+            continue
+        value = node.select_one('[itemprop~="name"]') or node
+        name = re.sub(r'^by(?:\s*:\s*|\s+)', '', clean(value.get_text(' ', strip=True), 100), flags=re.I)
+        if not explicit and (node.get('href', '').startswith('#') or 'tag' in node.get('rel', []) or
+                             name.casefold() in {'follow', 'subscribe', 'share', 'email', 'comments'}):
+            continue
+        if name and name not in values:
+            values.append(name)
+            if len(values) == 5:
+                break
+    return values
+
+
 def public_structured_article(node, references, depth=0):
     """Do not use schema bodies explicitly marked as containing paid sections."""
     if depth > 3:
@@ -190,7 +219,7 @@ def article_details(soup, url):
     if byline is None:
         byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by')
                        if belongs_to_scope(node, scope)), None)
-    byline_name = ''
+    byline_name = byline_authors = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.
         name_node = byline.select_one('[itemprop="name"], a') or byline
@@ -203,6 +232,11 @@ def article_details(soup, url):
                 pieces.append(child.get_text(' ', strip=True) if hasattr(child, 'get_text') else str(child))
             byline_name = ' '.join(pieces)
         byline_name = re.split(r',\s+(?:Chief|Senior|Staff|Principal|Contributing)\b', byline_name)[0]
+        members = linked_byline_names(byline)
+        if members:
+            byline_name = ', '.join(members)
+            if len(members) > 1:
+                byline_authors = byline_name
     # An explicit visible author list is stronger evidence than a generic
     # publisher account in JSON-LD (for example "The Editors"). Read the whole
     # group so a multi-author byline isn't reduced to its first link.
@@ -214,7 +248,7 @@ def article_details(soup, url):
         members = group.select('a, [itemprop="name"]')
         values = [clean(node.get_text(' ', strip=True), 100) for node in members[:5]]
         visible_authors = ', '.join(dict.fromkeys(filter(None, values))) or clean(group.get_text(' ', strip=True), 100)
-    author = visible_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     if not author:
         rust_byline = soup.select_one('.publish-date-author')
         google_byline = soup.select_one('.basic-hero--blog-detail__description')

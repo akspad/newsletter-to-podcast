@@ -161,7 +161,7 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
         try:
             response = await handler(request)
         except web.HTTPException as error:
-            response = web.json_response({"error": "Request too large." if error.status == 413 else "Request unavailable."}, status=error.status)
+            response = web.json_response({"error": preview.INPUT_TOO_LONG_MESSAGE if error.status == 413 else "Request unavailable."}, status=error.status)
         response.headers.update({"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                                  "Referrer-Policy": "no-referrer"})
         if origin and permitted:
@@ -179,6 +179,8 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
             return web.json_response({"error": "Send JSON containing an article URL or text."}, status=415)
         try:
             payload = preview.validate(await request.json())
+        except preview.InputTooLongError:
+            return web.json_response({"error": preview.INPUT_TOO_LONG_MESSAGE}, status=400)
         except (ValueError, TypeError):
             return web.json_response({"error": "Provide one public HTTP(S) article URL or pasted text and an available voice."}, status=400)
         if slots.locked():
