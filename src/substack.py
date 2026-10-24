@@ -1,6 +1,7 @@
 """Reads posts from Substack publications (their unofficial web API), plain RSS feeds and plain web pages."""
 import json
 import codecs
+from copy import deepcopy
 import hashlib
 import os
 import re
@@ -8,6 +9,7 @@ import time
 from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
+from html import escape
 from urllib.parse import urljoin, urlparse
 
 from pathlib import Path
@@ -36,6 +38,25 @@ def feed_date(value, *, rss=False):
     except (ValueError, TypeError, OverflowError):
         return None
     return published.replace(tzinfo=timezone.utc) if published.tzinfo is None else published
+
+
+def atom_content(node):
+    """Normalize inline Atom text constructs to HTML without fetching src URLs."""
+    if node is None or node.get('src'):
+        return ''
+    kind = node.get('type', 'text').split(';', 1)[0].strip().lower()
+    if kind in ('html', 'text/html'):
+        return node.text or ''
+    if kind in ('xhtml', 'application/xhtml+xml'):
+        fragment = deepcopy(node)
+        namespace = '{http://www.w3.org/1999/xhtml}'
+        for element in fragment.iter():
+            if isinstance(element.tag, str) and element.tag.startswith(namespace):
+                element.tag = element.tag[len(namespace):]
+        return (fragment.text or '') + ''.join(ET.tostring(child, encoding='unicode') for child in fragment)
+    if kind == 'text' or kind.startswith('text/'):
+        return escape(node.text or '', quote=False)
+    return ''
 
 
 def decode_source(body, headers):
@@ -215,17 +236,20 @@ class Substack:
 
     def rss_posts(self, pub, limit):
         """Reads an RSS feed into the same shape as Substack's archive entries."""
-        ns = {"content": "http://purl.org/rss/1.0/modules/content/", "dc": "http://purl.org/dc/elements/1.1/"}
+        ns = {"content": "http://purl.org/rss/1.0/modules/content/", "dc": "http://purl.org/dc/elements/1.1/",
+              "rss": "http://purl.org/rss/1.0/", "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"}
         posts = []
         root = ET.fromstring(self.get(pub["base"], raw=True))
         if root.tag == "{http://www.w3.org/2005/Atom}feed":
             return self.atom_posts(pub, root, limit, base_url=self.last_url or pub['base'])
-        for index, item in enumerate(root.iter("item")):
+        items = (node for node in root.iter() if node.tag in ('item', '{' + ns['rss'] + '}item'))
+        for index, item in enumerate(items):
             if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
                 break
-            link = item.findtext("link") or ""
-            guid = item.findtext("guid") or link
-            html = item.findtext("content:encoded", namespaces=ns) or item.findtext("description") or ""
+            prefix = 'rss:' if item.tag.startswith('{') else ''
+            link = item.findtext(prefix + 'link', namespaces=ns) or ''
+            guid = (item.get('{' + ns['rdf'] + '}about') if prefix else item.findtext('guid')) or link
+            html = item.findtext("content:encoded", namespaces=ns) or item.findtext(prefix + 'description', namespaces=ns) or ""
             text = html_to_text(html)
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
             if published is None:
@@ -234,14 +258,14 @@ class Substack:
             posts.append({
                 "id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                 "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
-                "title": item.findtext("title") or "",
+                "title": item.findtext(prefix + 'title', namespaces=ns) or "",
                 "post_date": published.isoformat(),
                 "podcast_url": enclosure.get("url") if enclosure is not None and enclosure.get("type", "").startswith("audio/") else None,
                 "canonical_url": link,
                 "audience": "everyone",
                 "wordcount": len(text.split()),
                 "body_html": html,
-                "publishedBylines": [{"name": n} for n in [item.findtext("dc:creator", namespaces=ns)] if n],
+                "publishedBylines": [{"name": node.text.strip()} for node in item.findall('dc:creator', ns) if node.text and node.text.strip()],
             })
         return posts[:limit]
 
@@ -262,17 +286,18 @@ class Substack:
             def link_url(node):
                 return urljoin(urljoin(entry_base, node.get(xml_base, '')), node.get('href', ''))
             link = next((link_url(e) for e in links if e.get('href') and e.get("rel", "alternate") == "alternate"), "")
-            content = entry.find("a:content", ns)
-            if content is None:
-                content = entry.find("a:summary", ns)
-            body = "" if content is None else (content.text or "") + "".join(ET.tostring(c, encoding="unicode") for c in content)
+            body = atom_content(entry.find('a:content', ns))
+            if not body.strip():
+                body = atom_content(entry.find('a:summary', ns))
+            authors = entry.findall('a:author', ns) or entry.findall('a:source/a:author', ns) or root.findall('a:author', ns)
+            bylines = [name.strip() for author in authors if (name := author.findtext('a:name', namespaces=ns)) and name.strip()]
             guid = entry.findtext("a:id", namespaces=ns) or link
             posts.append({"id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                           "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
                           "title": entry.findtext("a:title", namespaces=ns) or "Untitled",
                           "post_date": published.isoformat(), "canonical_url": link, "audience": "everyone",
                           "wordcount": len(html_to_text(body).split()), "body_html": body,
-                          "publishedBylines": [{"name": e.text or ""} for e in entry.findall("a:author/a:name", ns)],
+                          "publishedBylines": [{"name": name} for name in bylines],
                           "podcast_url": next((link_url(e) for e in links if e.get('href') and e.get("rel") == "enclosure" and e.get("type", "").startswith("audio/")), None)})
         return posts[:limit]
 
@@ -326,17 +351,31 @@ class Substack:
 
 
 def html_to_text(html: str) -> str:
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, CData, NavigableString
 
     soup = BeautifulSoup(html, "html.parser")
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
-    for el in soup.select("script, style, nav, .subscription-widget-wrap, .button-wrapper, .captioned-button-wrap, .share-dialog"):
-        el.decompose()
-    # One line per block element, so link text stays inside its sentence.
-    blocks = soup.find_all(["p", "h1", "h2", "h3", "h4", "li", "blockquote", "figcaption"])
-    lines = [re.sub(r"\s+([,.;:!?)])", r"\1", b.get_text(" ", strip=True))
-             for b in blocks if not b.find_parent(["li", "blockquote"])]
-    return "\n".join(l for l in lines if l) or soup.get_text("\n", strip=True)
+    for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '
+                          'svg, audio, video, iframe, .subscription-widget-wrap, .button-wrapper, '
+                          '.captioned-button-wrap, .share-dialog'):
+        if el.parent is not None:
+            el.decompose()
+    # Collapse source formatting whitespace without inserting gaps between
+    # inline word parts. Comments and doctypes must keep their non-text types.
+    for node in list(soup.find_all(string=True)):
+        if type(node) in (NavigableString, CData) and node.find_parent('pre') is None:
+            node.replace_with(re.sub(r'\s+', ' ', str(node)))
+    for node in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'figcaption',
+                               'div', 'section', 'article', 'ul', 'ol', 'pre', 'table', 'thead', 'tbody',
+                               'tfoot', 'tr', 'caption', 'dl', 'dt', 'dd', 'br', 'hr']):
+        node.insert_before('\n')
+        node.insert_after('\n')
+    for node in soup.find_all(['th', 'td']):
+        node.insert_before(' ')
+        node.insert_after(' ')
+    lines = [re.sub(r'\s+([,.;:!?)])', r'\1', ' '.join(line.split()))
+             for line in soup.get_text('', strip=False).splitlines()]
+    return '\n'.join(line for line in lines if line)
 
 
 def has_audio(post) -> bool:

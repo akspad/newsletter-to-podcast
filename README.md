@@ -12,7 +12,8 @@ The demo leads with your own reading: paste a public article URL or its text, ch
 
 While preparing audio, the page shows an approximate remaining-time range and an elapsed timer. Estimates distinguish service wake-up, a busy service (including time to generate audio), and generation. Short pasted excerpts use a shorter initial range; unknown article lengths use a conservative two-minute range. These are rough estimates, not progress reported by Edge TTS. If a range is exceeded, the page says it is still working.
 
-- Reads Substack publications, RSS and Atom feeds, and simple article listing pages. Malformed feed dates are skipped per entry, and Atom links honor inherited XML bases, including after feed redirects.
+- Reads Substack publications, RSS 1.0/2.0 and Atom feeds, and simple article listing pages. Malformed feed dates are skipped per entry, and Atom links honor inherited XML bases, including after feed redirects. Atom entries inherit feed authors when needed and preserve plain text, HTML and XHTML content.
+- Preserves table values, code blocks and inline word boundaries in imported text.
 - Generates summaries with Gemini and audio with Edge TTS.
 - Produces MP3s with podcast loudness normalization and an RSS feed.
 - Runs locally or on a configurable schedule in your own GitHub repository: four times a day by default.
