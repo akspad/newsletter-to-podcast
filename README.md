@@ -191,7 +191,7 @@ https://example.com Example Site | page: /stories/ | full
 | `only: Weekly` | Match titles containing this text, ignoring case. Explicit matches bypass length/audio filtering. |
 | `any length` | Allow short articles in summary mode. |
 | `rss` | Read RSS or Atom. Feed URLs ending in `/feed`, `/rss`, or `.xml` are also detected automatically. |
-| `page: /stories/` | Read a simple HTML listing with article paths and dated article bodies. Relative and absolute links on the same origin are supported; tracking parameters are removed and unavailable articles are skipped. This is a heuristic, not a general crawler. |
+| `page: /stories/` | Read a simple HTML listing with article paths and dated article bodies. Relative and absolute links on the same origin are supported; tracking parameters are removed, and distinct article URLs can share a headline. Publication metadata takes priority over dates in article text; site headers, footers and hidden dates are excluded. Unavailable articles leave the scan incomplete so catch-up and scheduled retry windows stay open while available articles can still publish. This is a heuristic, not a general crawler. |
 
 By default, summary mode selects posts with at least 1,500 words and no playable attached audio. Full mode takes every recent post, including ones that already have audio.
 
@@ -262,7 +262,7 @@ The workflow checks hourly at minute 17. Python divides each UTC day into `RUNS_
 
 Each due run adds eligible missing articles available from its configured sources, while completed IDs prevent duplicate episodes. Automatic catch-up scans at least the past seven days and reaches back further after longer gaps. Failed episodes and articles beyond `MAX_EPISODES_PER_RUN` remain queued for later runs, even after they leave the source's current feed. Existing episodes stay in place unless you deliberately set a retention limit.
 
-To request a longer backfill immediately, open **Actions → Newsletter podcast → Run workflow** and enter `lookback_hours`, for example `720` for 30 days. Manual runs bypass the scheduling window and still deduplicate completed articles. After the backfill, leave this input blank for automatic catch-up. Recovery is limited to articles still exposed by the source or already saved in the private retry queue; an older article absent from both cannot be recovered by increasing lookback alone.
+To request a longer backfill immediately, open **Actions → Newsletter podcast → Run workflow** and enter `lookback_hours`, for example `720` for 30 days. Manual runs bypass the scheduling window and still deduplicate completed articles. After the backfill, leave this input blank for automatic catch-up. A partially completed scan preserves its earliest requested date in private state until discovery succeeds, including when the next run uses the default lookback. Recovery is limited to articles still exposed by the source or already saved in the private retry queue; an older article absent from both cannot be recovered by increasing lookback alone.
 
 Changes to `.github/workflows/daily.yml` or `src/tts.py` on `main` also start a catch-up run when automation is enabled, so scheduling and speech-provider fixes apply to queued articles immediately. Manual and workflow-update runs bypass the cadence check; scheduled runs remain limited to one complete source scan per window.
 

@@ -14,7 +14,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
 import security
-from article_scope import FOOTNOTE_NAV, explicitly_hidden, url_identity
+from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -39,6 +39,41 @@ def feed_date(value, *, rss=False):
     except (ValueError, TypeError, OverflowError):
         return None
     return published.replace(tzinfo=timezone.utc) if published.tzinfo is None else published
+
+
+class SourcePosts(list):
+    """Usable discoveries, with a signal that some source work needs retrying."""
+    def __init__(self, posts, *, complete=True):
+        super().__init__(posts)
+        self.complete = complete
+
+
+def page_date(soup, title, url):
+    """Prefer publication metadata, then dates inside the selected article."""
+    scope = article_scope(soup, title, url)
+    def in_article(node):
+        if not editorial(node):
+            return False
+        header = (node if node.name == 'header' else node.find_parent('header')) if scope is soup else None
+        return header is None or any(heading_matches(heading_text(h), title) for h in header.select('h1'))
+    for node in soup.select('meta[property="article:published_time"], meta[itemprop~="datePublished"]'):
+        if belongs_to_scope(node, scope) and (published := feed_date(node.get('content'))):
+            return published
+    for node in scope.select('[itemprop~="datePublished"], time[datetime]'):
+        if not in_article(node) or 'dateModified' in node.get('itemprop', '').split():
+            continue
+        if published := feed_date(node.get('datetime') or node.get('content') or node.get_text(' ', strip=True)):
+            return published
+    # Keep legacy English-date layouts, excluding site chrome and hidden text.
+    # An unmarked layout's header needs a matching headline to be article evidence.
+    text = ' '.join(str(value) for value in scope.strings if in_article(value.parent) and
+                    not value.find_parent(['head', 'script', 'style', 'template', 'noscript']))
+    for date in re.finditer(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", text):
+        try:
+            return datetime.strptime(date.group(1), '%B %d, %Y').replace(hour=12, tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
 
 
 def atom_content(node):
@@ -379,7 +414,7 @@ class Substack:
             links.append(url)
             if len(links) >= min(limit, security.MAX_SOURCE_ENTRIES):
                 break
-        posts, titles = [], set()
+        posts, complete = [], True
         for url in links[:limit]:
             parsed = urlparse(url)
             path = parsed.path
@@ -389,20 +424,19 @@ class Substack:
                 raise
             except (RuntimeError, OSError):
                 print("An article page was unavailable; skipping it.")
+                complete = False
                 continue
             og = soup.find("meta", property="og:title")
             title = (og and og.get("content")) or (soup.title.get_text(' ', strip=True) if soup.title else path)
-            date = re.search(r"\b([A-Z][a-z]+ \d{1,2}, \d{4})\b", soup.get_text(" "))
             body = soup.select_one(".w-richtext, article, main")
             title = title.strip()
-            # Undated pages aren't articles; Webflow's duplicated drafts ("... Copy") repeat one that is.
-            if not date or not body or title in titles or re.search(r"\bcopy$", title, re.I) or path.endswith("-copy"):
+            # Keep distinct URLs even when recurring headlines are identical.
+            # Explicit Webflow copy drafts remain excluded.
+            if not body or re.search(r"\bcopy$", title, re.I) or path.endswith("-copy"):
                 continue
-            try:
-                published = datetime.strptime(date.group(1), '%B %d, %Y').replace(hour=12, tzinfo=timezone.utc)
-            except ValueError:
+            published = page_date(soup, title, self.last_url or url)
+            if published is None:
                 continue
-            titles.add(title)
             html = str(body)
             desc = soup.find("meta", attrs={"name": "description"})
             posts.append({
@@ -419,7 +453,7 @@ class Substack:
                 "wordcount": len(html_to_text(html).split()),
                 "body_html": html,
             })
-        return sorted(posts, key=lambda p: p["post_date"], reverse=True)
+        return SourcePosts(sorted(posts, key=lambda p: p["post_date"], reverse=True), complete=complete)
 
     def post_text(self, pub, post):
         if pub.get("rss") or pub.get("page"):

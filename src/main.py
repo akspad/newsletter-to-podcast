@@ -217,6 +217,8 @@ def _run(settings, publications, sub):
     since = now - timedelta(hours=settings.lookback_hours)
     if state.get("last_run") and not settings.explicit_lookback:
         since = min(datetime.fromisoformat(state["last_run"]) - timedelta(hours=48), since)
+    if state.get("catchup_since"):
+        since = min(datetime.fromisoformat(state["catchup_since"]), since)
     seen = set(state.get("seen", []))
     configured = {pub["base"]: pub for pub in publications}
     # Drop queued posts from removed sources and use current mode/filter settings on retries.
@@ -238,7 +240,12 @@ def _run(settings, publications, sub):
     for index, pub in enumerate(publications, 1):
         try:
             posts = []
-            for post in islice(sub.recent_posts(pub), security.MAX_SOURCE_ENTRIES):
+            discovered = sub.recent_posts(pub)
+            complete = getattr(discovered, 'complete', True)
+            if not complete:
+                source_failed = True
+                print(f"Source {index} scan incomplete; keeping its catch-up window open for retry.", file=sys.stderr)
+            for post in islice(discovered, security.MAX_SOURCE_ENTRIES):
                 try:
                     entry = bounded_post(post)
                     if 'post_date' not in entry:
@@ -254,7 +261,8 @@ def _run(settings, publications, sub):
                         break
                     candidates.append((pub, post))
                     queued.add(post_key(pub, post))
-            sources_available += 1
+            if complete or posts:
+                sources_available += 1
         except Exception as error:
             source_failed = True
             print(f"Source {index} unavailable ({type(error).__name__}); will retry.", file=sys.stderr)
@@ -317,6 +325,11 @@ def _run(settings, publications, sub):
     state["seen"] = list(dict.fromkeys(state.get("seen", []) + completed))
     if not source_failed:
         state["last_run"] = now.isoformat()
+        state.pop("catchup_since", None)
+    else:
+        # Preserve explicit backfills as well as automatic catch-up, even if
+        # the next run uses the default lookback instead of the manual input.
+        state["catchup_since"] = since.isoformat()
     if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and not source_failed:
         state["last_scheduled_run"] = now.isoformat()
     title = os.environ.get("FEED_TITLE") or state.get("feed_title") or "Newsletter Podcast"
