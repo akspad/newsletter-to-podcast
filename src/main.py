@@ -167,6 +167,10 @@ def bounded_post(post):
         value = result.get(key)
         if value is not None and (not isinstance(value, str) or len(value.encode("utf-8")) > 8192):
             raise security.BudgetExceeded("Article metadata exceeds the field limit")
+    if 'post_date' in result:
+        if not isinstance(result['post_date'], str):
+            raise ValueError("Article publication date is missing")
+        datetime.fromisoformat(result['post_date'].replace('Z', '+00:00'))
     if len(json.dumps(result).encode("utf-8")) > 256_000:
         raise security.BudgetExceeded("Article metadata exceeds the payload limit")
     return result
@@ -235,7 +239,10 @@ def _run(settings, publications, sub):
             posts = []
             for post in islice(sub.recent_posts(pub), security.MAX_SOURCE_ENTRIES):
                 try:
-                    posts.append(bounded_post(post))
+                    entry = bounded_post(post)
+                    if 'post_date' not in entry:
+                        raise ValueError("Article publication date is missing")
+                    posts.append(entry)
                 except (ValueError, TypeError, KeyError):
                     print("An article entry exceeded its limits or had invalid metadata; skipping it.", file=sys.stderr)
             refresh_descriptions(sub, pub, posts, state)

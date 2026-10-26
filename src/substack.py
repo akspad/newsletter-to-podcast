@@ -14,7 +14,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
 import security
-from article_scope import explicitly_hidden, url_identity
+from article_scope import FOOTNOTE_NAV, explicitly_hidden, url_identity
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -438,7 +438,7 @@ def html_to_text(html: str) -> str:
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
     for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '
                           'svg, audio, video, iframe, .subscription-widget-wrap, .button-wrapper, '
-                          '.captioned-button-wrap, .share-dialog'):
+                          '.captioned-button-wrap, .share-dialog, ' + FOOTNOTE_NAV):
         if el.parent is not None:
             el.decompose()
     # Collapse source formatting whitespace without inserting gaps between

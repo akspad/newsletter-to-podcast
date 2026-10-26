@@ -8,6 +8,11 @@ BODY_SELECTORS = (
     '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text, '
     'topcomment > article.comment > pre'
 )
+FOOTNOTE_NAV = (
+    '[role~="doc-noteref"], [role~="doc-backlink"], a.footnote-ref, a.footnote-backref, '
+    'a.reversefootnote, a.footnote-return, a[rel~="footnote"], a[rel~="footnote-backref"], '
+    'sup a[href^="#fn"]'
+)
 MONTH = (r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|'
          r'Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)')
 DATE = re.compile(

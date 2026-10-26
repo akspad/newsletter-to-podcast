@@ -2,7 +2,7 @@
 import re
 from html import unescape
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose
 from tts import speech_text
 
 
@@ -11,8 +11,7 @@ EXCLUDED = (
     'button, input, select, textarea, svg, video, audio, figcaption, '
     '[hidden], [aria-hidden="true"], [role="button"], [role="navigation"], '
     '[role="complementary"], [role="dialog"], .visually-hidden, .sr-only, '
-    '[role~="doc-noteref"], [role~="doc-backlink"], a.footnote-ref, a.footnote-backref, '
-    'a.reversefootnote, a[rel~="footnote"], a[rel~="footnote-backref"], sup a[href^="#fn"], '
+    f'{FOOTNOTE_NAV}, '
     '.post-header, .post-footer, .post-meta, .post-metadata, .share-buttons, '
     '.byline, [data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '
@@ -79,9 +78,19 @@ def clean_tree(root, title, author):
         if related or newsletter or credit:
             paragraph.decompose()
     for heading in list(root.find_all(['h2', 'h3'])):
-        if (heading.get_text(' ', strip=True).casefold() == 'written by' and
-                heading.parent is not root and len(heading.parent.get_text(' ', strip=True)) < 600):
-            heading.parent.decompose()
+        if heading.parent is None or heading.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        if heading.get_text(' ', strip=True).casefold() == 'written by':
+            parent = heading.parent
+            # Anonymous short author cards may contain a name and job title.
+            # A readable body or semantic article container must survive cleanup.
+            value = parent.get_text(' ', strip=True)
+            if (parent is not root and parent.name in ('div', 'section') and
+                    not match(BODY_SELECTORS, parent) and not parent.find(['h1', 'article', 'main']) and
+                    len(value) < 600 and not readable_prose(value)):
+                parent.decompose()
+            else:
+                heading.decompose()
     # Remove an audio player's label and duration together. Removing only its
     # button leaves labels such as "Listen to this essay / 27 minute listen".
     for label in list(root.find_all(string=re.compile(r'^Listen to this\s*$', re.I))):
@@ -104,12 +113,13 @@ def clean_tree(root, title, author):
                 (author and re.sub(r'^by\s+', '', value, flags=re.I)[:100].strip() == author)):
             node.decompose()
     for tags in list(root.select('.post-tags')):
-        parent = tags.parent
-        heading = parent.find(['h2', 'h3']) if parent else None
-        if heading and heading.get_text(' ', strip=True).rstrip(':').casefold() == 'tags':
-            parent.decompose()
-        else:
-            tags.decompose()
+        if tags.parent is None:
+            continue
+        heading = tags.find_previous_sibling()
+        if (heading and heading.name in ('h2', 'h3') and
+                heading.get_text(' ', strip=True).rstrip(':').casefold() == 'tags'):
+            heading.decompose()
+        tags.decompose()
     for node in root.select('time'):
         if not node.find_parent(['p', 'li', 'blockquote', 'pre', 'code']):
             node.decompose()
@@ -165,13 +175,16 @@ def extract_text(soup, title='', author='', url=''):
         candidates.append(node)
     identities = {id(node) for node in candidates}
     sections = [node for node in candidates if not any(id(parent) in identities for parent in node.parents)]
-    deferred = None
+    deferred = []
     for node in sections:
         node.extract()
         clean_tree(node, title, author)
         if speech_text(node.get_text('', strip=True)).strip():
-            deferred = node
-            break
+            text = plain_text(node)
+            # Streaming can repeat the same body for another layout. Keep
+            # distinct sections and intentional repetition later in the story.
+            if not deferred or text != deferred[-1]:
+                deferred.append(text)
     # Select before cleanup removes the headline used to identify the article.
     for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
         if node.parent is not None and (not editorial(node) or
@@ -179,8 +192,8 @@ def extract_text(soup, title='', author='', url=''):
                  and node.name == 'article' and (scope.name in ('article', 'main') or scope.get('role') == 'main'))):
             node.decompose()
     clean_tree(soup, title, author)
-    if deferred is not None:
-        return plain_text(deferred)
+    if deferred:
+        return ' '.join(deferred)
     candidates = scope.select(BODY_SELECTORS)
     if match(BODY_SELECTORS, scope):
         candidates = [scope]
