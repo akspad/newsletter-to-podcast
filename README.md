@@ -191,7 +191,7 @@ https://example.com Example Site | page: /stories/ | full
 | `only: Weekly` | Match titles containing this text, ignoring case. Explicit matches bypass length/audio filtering. |
 | `any length` | Allow short articles in summary mode. |
 | `rss` | Read RSS or Atom. Feed URLs ending in `/feed`, `/rss`, or `.xml` are also detected automatically. |
-| `page: /stories/` | Read a simple HTML listing with article paths and dated article bodies. Relative and absolute links on the same origin are supported; tracking parameters are removed, and distinct article URLs can share a headline. Publication metadata takes priority over dates in article text; site headers, footers and hidden dates are excluded. Unavailable articles leave the scan incomplete so catch-up and scheduled retry windows stay open while available articles can still publish. This is a heuristic, not a general crawler. |
+| `page: /stories/` | Read a simple HTML listing with article paths and dated article bodies. Relative and absolute links on the same origin are supported; tracking parameters are removed, and distinct article URLs can share a headline. Body sections and publication dates use the same article scope, excluding unrelated recommendation cards. Split rich-text sections stay in order. Publication metadata takes priority over dates in article text; site headers, footers and hidden dates are excluded. Unavailable articles leave the scan incomplete so catch-up and scheduled retry windows stay open while available articles can still publish. This is a heuristic, not a general crawler. |
 
 By default, summary mode selects posts with at least 1,500 words and no playable attached audio. Full mode takes every recent post, including ones that already have audio.
 
@@ -361,7 +361,7 @@ Hard ceilings apply independently of episode length and retention settings:
 | Run provider work | 1 MiB article text, 200,000 conservative Gemini input/output tokens, 600 TTS attempts |
 | Generated feed / plaintext state | 32 MiB / 64 MiB |
 
-Gemini output allowances are derived from the requested summary word budget. Empty unblocked responses and temporary HTTP 429, 500, 502, 503 and 504 errors use bounded retries and model fallback. Explicit provider block signals fail the article without an immediate model retry.
+Gemini output allowances are derived from the requested summary word budget. Empty unblocked responses, responses marked `MAX_TOKENS` (even with nonempty text), and temporary HTTP 429, 500, 502, 503 and 504 errors use bounded retries and model fallback. If every attempt is truncated, no partial summary audio is published and the article stays queued for a later run. Explicit provider block signals fail the article without an immediate model retry.
 Over-budget articles are skipped without saving their payload for repeated narration.
 Transient generation failures still retry within the bounded queue. Excess queue entries
 can be rediscovered while they remain at their sources; these limits may constrain large

@@ -76,6 +76,28 @@ def page_date(soup, title, url):
     return None
 
 
+def page_body(soup, title, url):
+    """Read body sections from the selected article, excluding other cards."""
+    scope = article_scope(soup, title, url)
+    sections = [node for node in scope.select('.w-richtext') if belongs_to_scope(node, scope)]
+    if not sections:
+        if scope is soup:
+            return None
+        sections = [scope]
+    identities = {id(node) for node in sections}
+    output = []
+    for section in sections:
+        if any(id(parent) in identities for parent in section.parents):
+            continue
+        fragment = deepcopy(section)
+        for node in list(fragment.find_all(True)):
+            if node.parent is not None and (not editorial(node) or node.name == 'article'):
+                node.decompose()
+        if fragment.get_text(strip=True):
+            output.append(str(fragment))
+    return ''.join(output) or None
+
+
 def atom_content(node):
     """Normalize inline Atom text constructs to HTML without fetching src URLs."""
     if node is None or node.get('src'):
@@ -428,16 +450,16 @@ class Substack:
                 continue
             og = soup.find("meta", property="og:title")
             title = (og and og.get("content")) or (soup.title.get_text(' ', strip=True) if soup.title else path)
-            body = soup.select_one(".w-richtext, article, main")
             title = title.strip()
+            resolved_url = self.last_url or url
+            html = page_body(soup, title, resolved_url)
             # Keep distinct URLs even when recurring headlines are identical.
             # Explicit Webflow copy drafts remain excluded.
-            if not body or re.search(r"\bcopy$", title, re.I) or path.endswith("-copy"):
+            if not html or re.search(r"\bcopy$", title, re.I) or path.endswith("-copy"):
                 continue
-            published = page_date(soup, title, self.last_url or url)
+            published = page_date(soup, title, resolved_url)
             if published is None:
                 continue
-            html = str(body)
             desc = soup.find("meta", attrs={"name": "description"})
             posts.append({
                 "subtitle": (desc and desc.get("content")) or "",

@@ -19,9 +19,11 @@ def limit_words(script, maximum):
     return clipped[:ends[-1].end()] if ends else clipped
 
 
+def label(value):
+    return str(getattr(value, 'value', value) or '').split('.')[-1]
+
+
 def blocked_response(response):
-    def label(value):
-        return str(getattr(value, 'value', value) or '').split('.')[-1]
     feedback = getattr(response, 'prompt_feedback', None)
     if label(getattr(feedback, 'block_reason', None)) not in ('', '0', 'BLOCK_REASON_UNSPECIFIED', 'BLOCKED_REASON_UNSPECIFIED'):
         return True
@@ -61,10 +63,14 @@ Hard limit: {budget} words, including the introduction. End with a complete sent
             else:
                 if blocked_response(response):
                     raise RuntimeError("Summary service declined to return a script")
-                script = (response.text or '').strip()
-                if script:
-                    return limit_words(script, budget)
-                print("Summary service returned no script; retrying.")
+                if any(label(getattr(candidate, 'finish_reason', None)) == 'MAX_TOKENS'
+                       for candidate in (getattr(response, 'candidates', None) or [])):
+                    print("Summary service returned a truncated script; retrying.")
+                else:
+                    script = (response.text or '').strip()
+                    if script:
+                        return limit_words(script, budget)
+                    print("Summary service returned no script; retrying.")
             time.sleep(min(20 * (attempt + 1), 60))
     raise RuntimeError("Summary service returned no script")
 
