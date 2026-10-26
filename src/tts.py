@@ -214,7 +214,8 @@ def join_audio(parts, out_path, max_seconds=None):
     with tempfile.TemporaryDirectory() as tmp:
         listing = Path(tmp) / "list.txt"
         # All clip paths are generated internally, not from article metadata.
-        listing.write_text("".join(f"file '{p.resolve()}'\n" for p in parts))
+        names = [str(p.resolve()).replace("'", "'\\''") for p in parts]
+        listing.write_text("".join(f"file '{name}'\n" for name in names), encoding='utf-8')
         limit = ["-t", str(max(0.01, max_seconds - 0.08))] if max_seconds else []
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
                         *limit, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "44100", "-ac", "1", "-b:a", "64k",

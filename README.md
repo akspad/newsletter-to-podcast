@@ -216,7 +216,7 @@ Use `.env` with `--env-file`, exported environment variables, or the Actions var
 | `SITE_DIR` / `STATE_DIR` | `site` / `.state` | Feed/audio output and separate private processing state. |
 | `SITE_URL` | `http://localhost:8000` | URL prefix used for RSS enclosure links. |
 | `FEED_TITLE` | `Newsletter Podcast` | Name shown in your podcast app. |
-| `SUMMARY_MODEL` | `gemini-flash-latest` | Gemini model, with a lighter fallback for transient failures. |
+| `SUMMARY_MODEL` | `gemini-flash-latest` | Gemini model, with bounded retries and a lighter fallback for transient failures or empty unblocked output. |
 | `TTS_VOICE` / `TTS_RATE` | `en-US-AndrewNeural` / `+0%` | Edge voice and speaking rate; list voices with `edge-tts --list-voices`. |
 | `VERBOSE` | `false` | Log created episode titles. Avoid enabling it in public workflows. |
 | `STATE_ENCRYPTION_KEY` | unset | Random Fernet key used to encrypt processing state for public publishing. Store it as a secret. |
@@ -234,7 +234,7 @@ Each full-narration episode opens with the newsletter name, article title, and a
 
 Completed TTS passages are checkpointed atomically under `STATE_DIR` (outside the served site). If a passage fails or the process is interrupted, the next attempt reuses validated speech with matching text, voice, and rate, including completed children of a split passage. Only missing or invalid speech is requested again; local audio assembly is repeated. All parts of an article must still finish before any of them enter the feed. Checkpoints expire after seven days without use and are bounded to 512 MiB, so evicted speech may need to be generated again.
 
-For public publishing, checkpoints are encrypted with `STATE_ENCRYPTION_KEY` and restored/saved in a separate GitHub Actions cache, including after generation failures. They are never included in the public site bundle. Private workflows retain them in their existing private state cache. A runner loss or cancellation that prevents the cache-save step from running can still lose that run's new checkpoints; local runs retain checkpoints already written to disk. Retry scheduling is unchanged: queued article failures normally wait for the next configured window, or a manual run. Source text must still be available to reconstruct the narration; summary mode can reuse only passages whose newly generated script matches. Retain the original encryption key to reuse public-workflow checkpoints.
+For public publishing, checkpoints are encrypted with `STATE_ENCRYPTION_KEY` and restored/saved in a separate GitHub Actions cache, including after generation failures. They are never included in the public site bundle. Private workflows retain them in their existing private state cache. A runner loss or cancellation that prevents the cache-save step from running can still lose that run's new checkpoints; local runs retain checkpoints already written to disk. Queued article failures normally wait for the next configured window, or a manual run. Attempted failures move behind work still awaiting a turn. Saved retries retain priority when queue limits require omitting excess new payloads; run-budget deferrals keep their place. Source text must still be available to reconstruct the narration; summary mode can reuse only passages whose newly generated script matches. Retain the original encryption key to reuse public-workflow checkpoints.
 
 Before narration, invisible word-breaking artifacts (zero-width spaces, word joiners, byte-order marks, soft hyphens, and joiners adjacent to ASCII) are removed from the spoken script and introduction. This keeps obfuscated English words intact while preserving joiners within scripts that need them. Cleanup happens before speech splitting and checkpoint lookup; source descriptions keep their original text. It applies to new generation and retries, without replacing existing published audio.
 
@@ -322,7 +322,7 @@ The hashed dependency lock now uses [`edge-tts==7.3.1`](https://github.com/rany2
 
 `src/tts.py` now calls the official SDK directly without changing its endpoint or authentication. The dependency input requires at least 7.3.1; audio budgets, bounded streaming, timeouts and retries remain in place.
 
-Live validation on GitHub runners covers short synthetic speech and a full original RSS article, including complete descriptions, bounded audio splits, valid RSS and a rerun with stable episode identities and unchanged MP3 bytes. Both summary and full narration use the same TTS path. The service remains unofficial and may change again; the prerecorded `--demo` works independently of it.
+Live validation on GitHub runners covers short synthetic speech and a full original RSS article, including complete descriptions, bounded audio splits, valid RSS and a rerun with stable episode identities and unchanged MP3 bytes. Both summary and full narration use the same TTS path. Audio assembly supports temporary directories and clip names containing spaces, apostrophes, Unicode characters, and backslashes. The service remains unofficial and may change again; the prerecorded `--demo` works independently of it.
 
 Episode-generation failures stay in the bounded retry queue, and the build can still save/publish its retained feed even when it creates no new audio. The final health job marks unrecovered generation failures red. Check the run summary and final `Feed ready` message for counts; a healthy run with no eligible articles can create no audio. Keep your processing state and, for public publishing, the original `STATE_ENCRYPTION_KEY` so queued work can resume when service access is restored.
 
@@ -361,7 +361,7 @@ Hard ceilings apply independently of episode length and retention settings:
 | Run provider work | 1 MiB article text, 200,000 conservative Gemini input/output tokens, 600 TTS attempts |
 | Generated feed / plaintext state | 32 MiB / 64 MiB |
 
-Gemini output allowances are derived from the requested summary word budget.
+Gemini output allowances are derived from the requested summary word budget. Empty unblocked responses use the existing bounded retries and model fallback. Explicit provider block signals fail the article without an immediate model retry.
 Over-budget articles are skipped without saving their payload for repeated narration.
 Transient generation failures still retry within the bounded queue. Excess queue entries
 can be rediscovered while they remain at their sources; these limits may constrain large

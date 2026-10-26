@@ -232,6 +232,7 @@ def _run(settings, publications, sub):
                 continue
             candidates.append((pub, post))
             queued.add(post_key(pub, post))
+    previous_retries = queued.copy()
     source_failed = False
     sources_available = 0
     for index, pub in enumerate(publications, 1):
@@ -264,6 +265,7 @@ def _run(settings, publications, sub):
         return 1
     print(f"Found {len(candidates)} article(s) to process from {len(publications)} source(s).")
     state["retry"] = []
+    failed_retries = []
     (settings.site / "episodes").mkdir(parents=True, exist_ok=True)
     completed = []
     report = GenerationReport()
@@ -288,10 +290,17 @@ def _run(settings, publications, sub):
             report.failed_articles += 1
             # Exception messages may contain source text, URLs or credentials: don't print them.
             print(f"Episode failed ({type(error).__name__}); queued for retry.", file=sys.stderr)
-            state["retry"].append({"pub": pub, "post": post})
+            failed_retries.append({"pub": pub, "post": post})
     state["retry"].extend({"pub": pub, "post": post} for pub, post in candidates[settings.max_episodes:])
     report.deferred_articles += len(candidates[settings.max_episodes:])
-    state["retry"] = bounded_retries(state["retry"])
+    # Preserve saved work and newly failed payloads when selecting a bounded
+    # queue, then move attempted failures behind work still awaiting a turn.
+    pending = failed_retries + state["retry"]
+    pending.sort(key=lambda row: post_key(row['pub'], row['post']) not in previous_retries)
+    retained_retries = bounded_retries(pending)
+    failed_keys = {post_key(row['pub'], row['post']) for row in failed_retries}
+    retained_retries.sort(key=lambda row: post_key(row['pub'], row['post']) in failed_keys)
+    state["retry"] = retained_retries
 
     # Retain whole articles together, including every part of a long narration.
     state["episodes"].sort(key=feed.published_time)

@@ -19,6 +19,18 @@ def limit_words(script, maximum):
     return clipped[:ends[-1].end()] if ends else clipped
 
 
+def blocked_response(response):
+    def label(value):
+        return str(getattr(value, 'value', value) or '').split('.')[-1]
+    feedback = getattr(response, 'prompt_feedback', None)
+    if label(getattr(feedback, 'block_reason', None)) not in ('', '0', 'BLOCK_REASON_UNSPECIFIED', 'BLOCKED_REASON_UNSPECIFIED'):
+        return True
+    blocked = {'SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII',
+               'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION'}
+    return any(label(getattr(candidate, 'finish_reason', None)) in blocked
+               for candidate in (getattr(response, 'candidates', None) or []))
+
+
 def write_script(pub_name, author, title, text, max_seconds=600, max_words=700, preview=False):
     security.check_text(text, security.MAX_MODEL_INPUT_BYTES)
     from google import genai
@@ -37,21 +49,22 @@ Hard limit: {budget} words, including the introduction. End with a complete sent
     security.check_text(prompt, security.MAX_MODEL_INPUT_BYTES)
     config = types.GenerateContentConfig(system_instruction=system, max_output_tokens=min(8192, max(256, budget * 3 + 512)))
     models = list(dict.fromkeys([os.environ.get("SUMMARY_MODEL") or "gemini-flash-latest", "gemini-flash-lite-latest"]))
-    response = None
     for model in models:
         for attempt in range(3):
             try:
                 security.charge("model_tokens", len(prompt.encode("utf-8")) + config.max_output_tokens)
                 response = client.models.generate_content(model=model, contents=prompt, config=config)
-                break
             except errors.APIError as error:
                 if error.code not in (429, 500, 503):
                     raise
                 print(f"Summary service temporarily unavailable ({error.code}); retrying.")
-                time.sleep(min(20 * (attempt + 1), 60))
-        if response is not None:
-            break
-    if response is None or not (response.text or "").strip():
-        raise RuntimeError("Summary service returned no script")
-    return limit_words(response.text.strip(), budget)
+            else:
+                if blocked_response(response):
+                    raise RuntimeError("Summary service declined to return a script")
+                script = (response.text or '').strip()
+                if script:
+                    return limit_words(script, budget)
+                print("Summary service returned no script; retrying.")
+            time.sleep(min(20 * (attempt + 1), 60))
+    raise RuntimeError("Summary service returned no script")
 
