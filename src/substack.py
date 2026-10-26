@@ -179,6 +179,24 @@ class Substack:
             # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
             if raw:
                 result = decode_source(body, getattr(r, "headers", {}))
+                # Follow immediate HTML navigation through this same bounded,
+                # pinned redirect loop. Never execute scripts or follow canonical links.
+                if '<meta' in result.lower():
+                    from bs4 import BeautifulSoup
+                    page = BeautifulSoup(result, 'html.parser')
+                    refresh = page.find('meta', attrs={'http-equiv': re.compile(r'^refresh$', re.I)})
+                    match = re.fullmatch(r'\s*0(?:\.0+)?\s*;\s*url\s*=\s*(.+?)\s*',
+                                         refresh.get('content', '') if refresh else '', re.I)
+                    if match and not refresh.find_parent(['template', 'noscript']):
+                        destination = match[1]
+                        if destination[:1] in ('"', "'") and destination[-1:] == destination[:1]:
+                            destination = destination[1:-1]
+                        base = page.find('base', href=True)
+                        destination = urljoin(urljoin(url, base['href']) if base else url, destination)
+                        if urlparse(url).scheme == 'https' and urlparse(destination).scheme != 'https':
+                            raise ValueError("Source redirect cannot downgrade HTTPS")
+                        url, params = destination, None
+                        continue
             else:
                 result = json.loads(body.decode(getattr(r, "encoding", None) or "utf-8", errors="replace"))
             self.last_url = url
@@ -265,6 +283,12 @@ class Substack:
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
             if published is None:
                 continue  # undated entries cannot be filtered reliably by lookback
+            if not guid:
+                # No optional GUID/link: fingerprint the content, independent of
+                # feed order and HTML layout, rather than hashing the empty string.
+                guid = 'rss-fallback:' + json.dumps([
+                    item.findtext(prefix + 'title', namespaces=ns) or '',
+                    published.astimezone(timezone.utc).isoformat(), ' '.join(text.split())], ensure_ascii=False)
             enclosure = item.find("enclosure")
             bylines = [node.text.strip() for node in item.findall('dc:creator', ns) if node.text and node.text.strip()]
             if not bylines:

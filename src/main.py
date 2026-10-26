@@ -132,7 +132,8 @@ def make_episode(sub, pub, post, now, state, settings):
                 "source_key": key,
                 "title": f"{pub['name']}: {post['title']}{suffix}",
                 "description": description,
-                "link": post.get("canonical_url") or f"{pub['base']}/p/{post['slug']}",
+                "link": post.get("canonical_url") or (pub['base'] if pub.get('rss') or pub.get('page')
+                                                      else f"{pub['base']}/p/{post['slug']}"),
                 # Keep split parts ordered in podcast apps that sort by date.
                 "published": (now + timedelta(seconds=index - 1)).isoformat(),
                 "file": part.name,
@@ -231,7 +232,12 @@ def _run(settings, publications, sub):
     sources_available = 0
     for index, pub in enumerate(publications, 1):
         try:
-            posts = [bounded_post(post) for post in islice(sub.recent_posts(pub), security.MAX_SOURCE_ENTRIES)]
+            posts = []
+            for post in islice(sub.recent_posts(pub), security.MAX_SOURCE_ENTRIES):
+                try:
+                    posts.append(bounded_post(post))
+                except (ValueError, TypeError, KeyError):
+                    print("An article entry exceeded its limits or had invalid metadata; skipping it.", file=sys.stderr)
             refresh_descriptions(sub, pub, posts, state)
             for post in posts:
                 if eligible(pub, post, since, seen, settings) and post_key(pub, post) not in queued:
@@ -281,7 +287,7 @@ def _run(settings, publications, sub):
     state["retry"] = bounded_retries(state["retry"])
 
     # Retain whole articles together, including every part of a long narration.
-    state["episodes"].sort(key=lambda e: e["published"])
+    state["episodes"].sort(key=feed.published_time)
     groups = list(dict.fromkeys(e.get("source_key", e["guid"]) for e in state["episodes"]))
     keep = set(groups[-settings.keep_episodes:] if settings.keep_episodes else groups)
     retained = []

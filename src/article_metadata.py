@@ -4,11 +4,15 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from article_scope import article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
+from article_scope import DATE, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
 
 
 def clean(value, limit=160):
     return ' '.join(speech_text(value).split())[:limit].strip() if isinstance(value, str) else ''
+
+
+def visible_text(node):
+    return ' '.join(str(value) for value in node.strings if editorial(value.parent))
 
 
 def linked_byline_names(byline):
@@ -30,7 +34,7 @@ def linked_byline_names(byline):
                 any(id(parent) in identities for parent in node.parents)):
             continue
         value = node.select_one('[itemprop~="name"]') or node
-        name = re.sub(r'^by(?:\s*:\s*|\s+)', '', clean(value.get_text(' ', strip=True), 100), flags=re.I)
+        name = re.sub(r'^by(?:\s*:\s*|\s+)', '', clean(visible_text(value), 100), flags=re.I)
         if not explicit and (node.get('href', '').startswith('#') or 'tag' in node.get('rel', []) or
                              name.casefold() in {'follow', 'subscribe', 'share', 'email', 'comments'}):
             continue
@@ -41,23 +45,23 @@ def linked_byline_names(byline):
     return values
 
 
-def public_structured_article(node, references, depth=0):
+def public_structured_article(node, references, depth=0, base_url=''):
     """Do not use schema bodies explicitly marked as containing paid sections."""
     if depth > 3:
         return False
     if isinstance(node, str):
-        node = references.get(node)
+        node = references.get(urljoin(base_url, node))
     if not isinstance(node, dict):
         return True
     access = node.get('isAccessibleForFree')
     if access is False or isinstance(access, str) and access.strip().casefold() == 'false':
         return False
-    ref = references.get(node.get('@id')) if isinstance(node.get('@id'), str) else None
-    if ref is not None and ref is not node and not public_structured_article(ref, references, depth + 1):
+    ref = references.get(urljoin(base_url, node['@id'])) if isinstance(node.get('@id'), str) else None
+    if ref is not None and ref is not node and not public_structured_article(ref, references, depth + 1, base_url):
         return False
     parts = node.get('hasPart', [])
     parts = parts if isinstance(parts, list) else [parts]
-    return len(parts) <= 100 and all(public_structured_article(part, references, depth + 1) for part in parts)
+    return len(parts) <= 100 and all(public_structured_article(part, references, depth + 1, base_url) for part in parts)
 
 
 def article_details(soup, url):
@@ -86,7 +90,7 @@ def article_details(soup, url):
             for key in ('@graph', 'mainEntity'):
                 child = node.get(key, [])
                 pending.extend(child[:100] if isinstance(child, list) else [child])
-    references = {node['@id']: node for node in nodes if isinstance(node.get('@id'), str)}
+    references = {urljoin(url, node['@id']): node for node in nodes if isinstance(node.get('@id'), str)}
 
     def names(value, depth=0):
         if depth > 3:
@@ -97,7 +101,7 @@ def article_details(soup, url):
             if isinstance(item, dict):
                 name = clean(item.get('name'), 100)
                 if not name and isinstance(item.get('@id'), str):
-                    name = names(references.get(item['@id']), depth + 1)
+                    name = names(references.get(urljoin(url, item['@id'])), depth + 1)
             else:
                 name = clean(item, 100)
             if name and not name.startswith(('http://', 'https://')) and name not in found:
@@ -171,6 +175,9 @@ def article_details(soup, url):
                            'link[rel="alternate"][type="application/rss+xml"][title]')
     feed_name = re.sub(r'\s+[-|–—]\s+(?:Atom|RSS)(?:\s+Feed)?$', '',
                        feed.get('title', '').split(' » ')[0] if feed else '', flags=re.I)
+    if clean(feed_name).casefold() in {'rss', 'atom', 'feed', 'rss feed', 'atom feed',
+                                      'recent entries', 'recent posts', 'latest posts'}:
+        feed_name = ''
     publication = clean(meta('og:site_name') or names(article.get('publisher')) or
                         names(site) or names(article.get('isPartOf')) or meta('application-name') or
                         feed_name or home_name, 80)
@@ -209,7 +216,7 @@ def article_details(soup, url):
     title = strip_suffix(title)
 
     scope = article_scope(soup, title, url)
-    byline = next((node for node in scope.select('[rel~="author"], [itemprop="author"], '
+    byline = next((node for node in scope.select('[rel~="author"], [itemprop~="author"], '
                   '.PostsAuthors-root, .byline, .news-article--authored-by, p.author')
                    if belongs_to_scope(node, scope)), None)
     if byline is None:
@@ -229,8 +236,8 @@ def article_details(soup, url):
     byline_name = byline_authors = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.
-        name_node = byline.select_one('[itemprop="name"], a') or byline
-        byline_name = name_node.get_text(' ', strip=True).split(' | ')[0]
+        name_node = next((node for node in byline.select('[itemprop~="name"], a') if editorial(node)), byline)
+        byline_name = visible_text(name_node).split(' | ')[0]
         if name_node is byline and byline.find('br'):
             pieces = []
             for child in byline.children:
@@ -252,9 +259,9 @@ def article_details(soup, url):
                  next(iter(groups), None))
     visible_authors = ''
     if group is not None:
-        members = group.select('a, [itemprop="name"]')
-        values = [clean(node.get_text(' ', strip=True), 100) for node in members[:5]]
-        visible_authors = ', '.join(dict.fromkeys(filter(None, values))) or clean(group.get_text(' ', strip=True), 100)
+        visible_authors = ', '.join(linked_byline_names(group))
+        if not visible_authors and not group.select('a, [itemprop~="name"]'):
+            visible_authors = clean(visible_text(group), 100)
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     if not author:
         rust_byline = soup.select_one('.publish-date-author')
@@ -273,10 +280,12 @@ def article_details(soup, url):
     if author.startswith(('http://', 'https://')):
         author = ''
     author = re.sub(r'^by(?:\s*:\s*|\s+|$)', '', author, flags=re.I)
+    if DATE.fullmatch(author):
+        author = ''
     body = article.get('articleBody')
     identified = (any(article_score(article)[:2]) or not article_urls(article) and
                   heading_matches(title, clean(article.get('headline'))))
-    if not isinstance(body, str) or not identified or not public_structured_article(article, references):
+    if not isinstance(body, str) or not identified or not public_structured_article(article, references, base_url=url):
         body = ''
     return publication, title, author, body
 

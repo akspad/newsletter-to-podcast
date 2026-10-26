@@ -51,12 +51,17 @@ def html(text: str) -> str:
     return "".join(f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip())
 
 
+def published_time(episode):
+    value = datetime.fromisoformat(episode['published'].replace('Z', '+00:00'))
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def build(site_url: str, episodes: list, title="Newsletter Podcast") -> str:
     items = []
     # GUIDs include the feed's address so apps that cache episodes by GUID (Castbox) pick up
     # fresh audio links if the feed ever moves, e.g. after a repo rename.
-    for e in sorted(episodes, key=lambda e: e["published"], reverse=True):
-        pub = format_datetime(datetime.fromisoformat(e["published"]).astimezone(timezone.utc))
+    for e in sorted(episodes, key=published_time, reverse=True):
+        pub = format_datetime(published_time(e))
         secs = int(e["duration"])
         rss_guid = e.get("rss_guid") or f"{site_url}/{e['guid']}"
         enclosure_url = e.get("enclosure_url") or f"{site_url}/episodes/{e['file']}"

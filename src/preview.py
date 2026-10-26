@@ -10,6 +10,7 @@ import sys
 import time
 from substack import SourceDownloadError
 from article_metadata import article_details
+from article_scope import readable_prose
 
 MAX_SECONDS = 60
 MAX_WORDS = 130
@@ -111,11 +112,11 @@ def article_text(url):
     publication, title, author, structured_body = article_details(soup, resolved_url)
     from article_extract import extract_text, extract_structured_text
     text = extract_text(soup, title, author, resolved_url)
-    if len(text.split()) < 20 and structured_body:
+    if not readable_prose(text) and structured_body:
         text = extract_structured_text(structured_body, title, author)
     if not text:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
-    if len(text.split()) < 20:
+    if not readable_prose(text):
         raise ValueError("That page has too little readable text. Try pasting the article text instead.")
     parts = [publication, title, f"By {author}" if author else ""]
     intro = " ".join(part if part.endswith((".", "!", "?")) else part + "." for part in parts if part)

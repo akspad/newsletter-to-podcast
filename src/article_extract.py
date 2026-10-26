@@ -2,7 +2,7 @@
 import re
 from html import unescape
 from soupsieve import match
-from article_scope import BODY_SELECTORS, article_scope, editorial, explicitly_hidden, heading_matches, heading_text
+from article_scope import BODY_SELECTORS, DATE, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose
 from tts import speech_text
 
 
@@ -26,11 +26,6 @@ EXCLUDED = (
     '.wp-block-image, .wp-caption, .wp-block-video, .caption, '
     'figure:has(img), figure:has(video), figure:has(audio)'
 )
-MONTH = (r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|'
-         r'Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)')
-DATE = re.compile(
-    rf'(?:{MONTH}\s+(?:\d{{1,2}}(?:st|nd|rd|th)?,?\s+)?\d{{4}}|'
-    rf'\d{{1,2}}(?:st|nd|rd|th)?\s+{MONTH}\s+\d{{4}}|\d{{4}}-\d{{2}}-\d{{2}})', re.I)
 
 
 def remove_opening_metadata(root, author):
@@ -103,7 +98,7 @@ def clean_tree(root, title, author):
         if node.parent is not None:
             node.decompose()
     # Attribute the article once, outside its narration body.
-    for node in root.select('h1, h2, h3, dt, [rel~="author"], [itemprop="author"]'):
+    for node in root.select('h1, h2, h3, dt, [rel~="author"], [itemprop~="author"]'):
         value = heading_text(node) if node.name in ('h1', 'h2', 'h3') else ' '.join(node.get_text(' ', strip=True).split())
         if ((title and heading_matches(value[:160].strip(), title)) or
                 (author and re.sub(r'^by\s+', '', value, flags=re.I)[:100].strip() == author)):
@@ -220,7 +215,7 @@ def extract_text(soup, title='', author='', url=''):
         # spoken Markdown pipes and separators.
         if document is not None and document.body is not None:
             text = ' '.join(' '.join(document.body.itertext()).split())
-            if len(text.split()) >= 20:
+            if readable_prose(text):
                 return text
     # Preserve short semantic articles when the density heuristic declines them.
     if body is not None and body.find(['p', 'blockquote']) is not None:

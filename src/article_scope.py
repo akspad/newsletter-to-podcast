@@ -8,6 +8,17 @@ BODY_SELECTORS = (
     '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text, '
     'topcomment > article.comment > pre'
 )
+MONTH = (r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|'
+         r'Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)')
+DATE = re.compile(
+    rf'(?:{MONTH}\s+(?:\d{{1,2}}(?:st|nd|rd|th)?,?\s+)?\d{{4}}|'
+    rf'\d{{1,2}}(?:st|nd|rd|th)?\s+{MONTH}\s+\d{{4}}|\d{{4}}-\d{{2}}-\d{{2}})', re.I)
+
+
+def readable_prose(text):
+    """Recognize substantial prose in spaced and unspaced writing systems."""
+    return len(text.split()) >= 20 or len(re.findall(
+        r'[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', text)) >= 100
 
 
 def url_identity(value, base=''):
