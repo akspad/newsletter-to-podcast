@@ -15,6 +15,15 @@ def visible_text(node):
     return ' '.join(str(value) for value in node.strings if editorial(value.parent))
 
 
+def reference_id(value, base_url):
+    if not isinstance(value, str):
+        return None
+    try:
+        return urljoin(base_url, value)
+    except ValueError:
+        return None
+
+
 def linked_byline_names(byline):
     """Read distinct author names inside attribution, excluding its controls."""
     members = byline.select('[rel~="author"], [itemprop~="author"], [itemprop~="name"], '
@@ -50,13 +59,13 @@ def public_structured_article(node, references, depth=0, base_url=''):
     if depth > 3:
         return False
     if isinstance(node, str):
-        node = references.get(urljoin(base_url, node))
+        node = references.get(reference_id(node, base_url))
     if not isinstance(node, dict):
         return True
     access = node.get('isAccessibleForFree')
     if access is False or isinstance(access, str) and access.strip().casefold() == 'false':
         return False
-    ref = references.get(urljoin(base_url, node['@id'])) if isinstance(node.get('@id'), str) else None
+    ref = references.get(reference_id(node.get('@id'), base_url))
     if ref is not None and ref is not node and not public_structured_article(ref, references, depth + 1, base_url):
         return False
     parts = node.get('hasPart', [])
@@ -90,7 +99,7 @@ def article_details(soup, url):
             for key in ('@graph', 'mainEntity'):
                 child = node.get(key, [])
                 pending.extend(child[:100] if isinstance(child, list) else [child])
-    references = {urljoin(url, node['@id']): node for node in nodes if isinstance(node.get('@id'), str)}
+    references = {identity: node for node in nodes if (identity := reference_id(node.get('@id'), url)) is not None}
 
     def names(value, depth=0):
         if depth > 3:
@@ -101,7 +110,7 @@ def article_details(soup, url):
             if isinstance(item, dict):
                 name = clean(item.get('name'), 100)
                 if not name and isinstance(item.get('@id'), str):
-                    name = names(references.get(urljoin(url, item['@id'])), depth + 1)
+                    name = names(references.get(reference_id(item['@id'], url)), depth + 1)
             else:
                 name = clean(item, 100)
             if name and not name.startswith(('http://', 'https://')) and name not in found:

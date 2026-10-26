@@ -124,6 +124,16 @@ class ImportRecoveryTests(unittest.TestCase):
 
 
 class AttributionRecoveryTests(unittest.TestCase):
+    def test_malformed_graph_ids_do_not_block_visible_article_prose(self):
+        data = {'@graph': [{'@type': 'Article', 'url': URL, 'headline': 'A discovery',
+                           'author': {'@id': 'https://[bad'}},
+                          {'@type': 'Person', '@id': 'https://[bad', 'name': 'Invalid Writer'}]}
+        html = page(metadata='<script type="application/ld+json">'+json.dumps(data)+'</script>')
+        with patch('substack.Substack.get', return_value=html):
+            text = preview.article_text(URL)
+        self.assertEqual(text.partition('\n')[2], PROSE)
+        self.assertNotIn('Invalid Writer', text)
+
     def test_relative_graph_ids_resolve_in_both_directions_without_fetches(self):
         for definition, reference in ((URL+'#', '#'), ('#', URL+'#')):
             graph = {'@context': 'https://schema.org', '@graph': [
