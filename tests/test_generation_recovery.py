@@ -203,6 +203,40 @@ class SummaryRecoveryTests(unittest.TestCase):
             summarize.write_script('Science Notes', 'Alice', 'A discovery', BODY)
         self.assertEqual(len(calls), 1)
 
+    def test_gateway_errors_recover_on_retry_or_use_healthy_fallback(self):
+        for code in (502, 504):
+            for fallback in (False, True):
+                calls = []
+                modules, APIError = self.provider(lambda **kwargs: None)
+                def generate(**kwargs):
+                    calls.append(kwargs['model'])
+                    if kwargs['model'] == 'gemini-flash-latest' and (fallback or len(calls) == 1):
+                        raise APIError(code)
+                    return self.response('A complete summary.')
+                modules['google.genai'].Client = lambda: types.SimpleNamespace(
+                    models=types.SimpleNamespace(generate_content=generate))
+                with self.subTest(code=code, fallback=fallback), patch.dict(sys.modules, modules), \
+                        patch.dict(os.environ, {}, clear=True), patch('summarize.time.sleep'), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(summarize.write_script('Science Notes', 'Alice', 'A discovery', BODY),
+                                     'A complete summary.')
+                self.assertEqual(calls, ['gemini-flash-latest'] * (3 if fallback else 2) +
+                                 (['gemini-flash-lite-latest'] if fallback else []))
+
+    def test_gateway_errors_still_stop_after_both_models_exhaust_their_attempts(self):
+        calls = []
+        modules, APIError = self.provider(lambda **kwargs: None)
+        def generate(**kwargs):
+            calls.append(kwargs['model'])
+            raise APIError(504)
+        modules['google.genai'].Client = lambda: types.SimpleNamespace(
+            models=types.SimpleNamespace(generate_content=generate))
+        with patch.dict(sys.modules, modules), patch.dict(os.environ, {}, clear=True), \
+                patch('summarize.time.sleep'), contextlib.redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(RuntimeError, 'no script'):
+            summarize.write_script('Science Notes', 'Alice', 'A discovery', BODY)
+        self.assertEqual(calls, ['gemini-flash-latest']*3 + ['gemini-flash-lite-latest']*3)
+
     def test_work_budget_exhaustion_stops_before_provider_retry(self):
         calls = []
         def generate(**kwargs):

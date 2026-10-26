@@ -45,12 +45,46 @@ def remove_opening_metadata(root, author):
         history = (len(links) == 1 and links[0].get('href', '').startswith('#') and
                    links[0].get_text(' ', strip=True).casefold() in ('changes', 'updates', 'changelog') and
                    DATE.fullmatch(outside.strip('()[] ')))
-        if not (translation or byline or history):
+        # A standalone emphasized date is an opening publication label. Stop
+        # at the first prose paragraph, leaving story dates and quotes intact.
+        date = DATE.fullmatch(value) and paragraph.find('em') is not None
+        if not (translation or byline or history or date):
             break
         paragraph.decompose()
 
 
+def remove_site_endmatter(root):
+    """Recognize a divided site footer, rather than matching prose about ads."""
+    for paragraph in list(root.find_all('p')):
+        if (not editorial(paragraph) or
+                paragraph.find_parent(['blockquote', 'pre', 'code', 'li', 'table', 'figure', 'figcaption'])):
+            continue
+        value = ' '.join(paragraph.get_text(' ', strip=True).split())
+        separator = paragraph.find_previous_sibling()
+        recommendations = paragraph.find(['ul', 'ol'])
+        if recommendations is None:
+            following = paragraph.find_next_sibling()
+            if following is not None and following.name in ('ul', 'ol'):
+                recommendations = following
+        # This combination marks the start of site endmatter: a divider, a
+        # self-description linked to the homepage, then recommended articles.
+        # Remove only the remainder of that same container, never its ancestors.
+        if (separator is None or separator.name != 'hr' or
+                not re.match(r"^You['’]re reading\s+", value, re.I) or
+                not re.search(r'If you liked this you might also enjoy:\s*', value, re.I) or
+                paragraph.select_one('a[href="/"]') is None or
+                recommendations is None or not recommendations.select('li a[href]')):
+            continue
+        preceding = ' '.join(node.get_text(' ', strip=True) for node in separator.find_previous_siblings()
+                             if editorial(node))
+        if not readable_prose(preceding):
+            continue
+        for node in [separator, *separator.next_siblings]:
+            node.extract()
+
+
 def clean_tree(root, title, author):
+    remove_site_endmatter(root)
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()

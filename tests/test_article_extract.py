@@ -73,6 +73,56 @@ class ArticleExtractionTests(unittest.TestCase):
                 author = '' if html == '<p>By Alex Writer</p>' else 'Alex Writer'
                 self.assertEqual(extract('<div class="entry-content">' + html + '</div>', author=author), expected)
 
+    def test_opening_emphasized_date_does_not_block_translation_cleanup(self):
+        labels = ('<p>By <a href="/">Alex Writer</a></p><p><em>October 20, 2012</em></p>'
+                  '<p>Translations: <a href="/fr/story">French</a></p>')
+        body = labels + '<p>' + PARAGRAPHS[0] + '</p>'
+        self.assertEqual(extract('<div class="entry-content">'+body+'</div>', author='Alex Writer'), PARAGRAPHS[0])
+        self.assertEqual(extract_structured_text(body, author='Alex Writer'), PARAGRAPHS[0])
+
+    def test_date_cleanup_preserves_narrative_dates_and_later_labels(self):
+        examples = (
+            ('<p>October 20, 2012</p>', 'October 20, 2012'),
+            ('<p><em>October 20, 2012</em> began a new phase of the experiment.</p>',
+             'October 20, 2012 began a new phase of the experiment.'),
+            ('<blockquote><p><em>October 20, 2012</em></p></blockquote>', 'October 20, 2012'),
+            ('<p>'+PARAGRAPHS[0]+'</p><p><em>October 20, 2012</em></p>', PARAGRAPHS[0]+' October 20, 2012'),
+        )
+        for body, expected in examples:
+            with self.subTest(body=body):
+                self.assertEqual(extract('<div class="entry-content">'+body+'</div>'), expected)
+                self.assertEqual(extract_structured_text(body), expected)
+
+    def test_divided_site_endmatter_excludes_recommendations_subscription_and_ads(self):
+        for nested_list in (True, False):
+            recommendations = '<ul><li><a href="/another">Another article</a></li></ul>'
+            marker = ('<p><em>You’re reading <a href="/">Science Notes</a>, a collection of observations. '
+                      'If you liked this you might also enjoy:' + (recommendations if nested_list else '') + '</em></p>')
+            footer = ('<hr>'+marker+(recommendations if not nested_list else '')+
+                      '<hr><p><em>Get new articles via <a href="/feed">RSS</a>.</em></p>'
+                      '<hr><p><em>Try our <a href="https://software.example">statistics software</a>.</em></p>')
+            body = '<p>'+PARAGRAPHS[0]+'</p><p>'+PARAGRAPHS[1]+'</p>'
+            with self.subTest(nested_list=nested_list):
+                self.assertEqual(extract('<div class="entry-content">'+body+footer+'</div>'), ' '.join(PARAGRAPHS[:2]))
+                self.assertEqual(extract_structured_text(body+footer), ' '.join(PARAGRAPHS[:2]))
+
+    def test_endmatter_cleanup_preserves_quotes_prose_and_other_containers(self):
+        marker = ('<p>You’re reading <a href="/">Science Notes</a>. If you liked this you might also enjoy:'
+                  '<ul><li><a href="/another">Another article</a></li></ul></p>')
+        body = '<p>'+PARAGRAPHS[0]+'</p>'
+        # Missing divider or a quoted/hidden marker cannot truncate later prose.
+        for middle in (marker, '<blockquote><hr>'+marker+'</blockquote>',
+                       '<div hidden><hr>'+marker+'</div>'):
+            html = '<div class="entry-content">'+body+middle+'<p>'+PARAGRAPHS[1]+'</p></div>'
+            with self.subTest(middle=middle):
+                text = extract(html)
+                self.assertIn(PARAGRAPHS[0], text)
+                self.assertIn(PARAGRAPHS[1], text)
+        # The footer belongs to its own container; following editorial sections survive.
+        html = ('<div class="entry-content"><section>'+body+'<hr>'+marker+
+                '<p>Subscribe to our site.</p></section><p>'+PARAGRAPHS[1]+'</p></div>')
+        self.assertEqual(extract(html), ' '.join(PARAGRAPHS[:2]))
+
     def test_lamer_news_body_is_selected_by_matching_permalink_and_news_id(self):
         html = ('<div id="content"><section id="newslist"><article data-news-id="42">'
                 '<h2><a href="/news/42">A useful article</a></h2></article></section>'

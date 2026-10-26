@@ -55,7 +55,7 @@ Hard limit: {budget} words, including the introduction. End with a complete sent
                 security.charge("model_tokens", len(prompt.encode("utf-8")) + config.max_output_tokens)
                 response = client.models.generate_content(model=model, contents=prompt, config=config)
             except errors.APIError as error:
-                if error.code not in (429, 500, 503):
+                if error.code not in (429, 500, 502, 503, 504):
                     raise
                 print(f"Summary service temporarily unavailable ({error.code}); retrying.")
             else:
