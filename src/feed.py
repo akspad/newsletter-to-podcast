@@ -7,6 +7,7 @@ from xml.sax.saxutils import escape as xml_escape
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 def escape(text, entities=None):
@@ -36,10 +37,13 @@ def read(path):
         seconds = 0
         for field in raw.split(":"):
             seconds = seconds * 60 + int(field)
+        link = item.findtext("link") or ""
+        # Recover the original notes so placeholder repairs still recognize them.
+        notes = (item.findtext("description") or "").removeprefix(article_link(link))
         episodes.append({"guid": guid, "rss_guid": rss_guid, "source_key": guid.split("-part-")[0],
                          "title": item.findtext("title") or "", "description": "",
-                         "description_html": item.findtext("description") or "",
-                         "link": item.findtext("link") or "",
+                         "description_html": notes,
+                         "link": link,
                          "published": parsedate_to_datetime(item.findtext("pubDate")).isoformat(),
                          "file": Path(enclosure.get("url", "")).name, "enclosure_url": enclosure.get("url", ""),
                          "bytes": int(enclosure.get("length", "0")), "duration": seconds})
@@ -49,6 +53,18 @@ def read(path):
 def html(text: str) -> str:
     """Plain text with one paragraph per line, as HTML show notes."""
     return "".join(f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip())
+
+
+def article_link(link: str) -> str:
+    """A visible source link at the beginning of podcast show notes."""
+    try:
+        parsed = urlsplit(link)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return ""
+    except ValueError:
+        return ""
+    href = escape(link, {'"': '&quot;'})
+    return f'<p>Original article: <a href="{href}">{escape(link)}</a></p>'
 
 
 def published_time(episode):
@@ -65,9 +81,11 @@ def build(site_url: str, episodes: list, title="Newsletter Podcast") -> str:
         secs = int(e["duration"])
         rss_guid = e.get("rss_guid") or f"{site_url}/{e['guid']}"
         enclosure_url = e.get("enclosure_url") or f"{site_url}/episodes/{e['file']}"
+        source = article_link(e["link"])
+        notes = source + (e.get("description_html") or html(e["description"])).removeprefix(source)
         items.append(f"""    <item>
       <title>{escape(e['title'])}</title>
-      <description>{escape(e.get('description_html') or html(e['description']))}</description>
+      <description>{escape(notes)}</description>
       <link>{escape(e['link'])}</link>
       <guid isPermaLink="false">{escape(rss_guid)}</guid>
       <pubDate>{pub}</pubDate>

@@ -21,6 +21,7 @@ PUB = {"base": "https://fictional.example/feed", "name": "Fictional Source", "mo
 POST = {"id": 123, "title": "Fictional title", "canonical_url": "https://fictional.example/article",
         "audience": "everyone", "post_date": datetime.now(timezone.utc).isoformat()}
 ARTICLE = "First paragraph with <literal tags> & punctuation.\nSecond paragraph: café."
+SOURCE_LINK = '<p>Original article: <a href="https://fictional.example/article">https://fictional.example/article</a></p>'
 
 
 class DescriptionTests(unittest.TestCase):
@@ -56,7 +57,7 @@ class DescriptionTests(unittest.TestCase):
             items = ET.fromstring(feed.build(settings.site_url, state["episodes"])).findall("channel/item")
             self.assertEqual(len(items), 2)
             for item in items:
-                self.assertEqual(item.findtext("description"), feed.html(ARTICLE))
+                self.assertEqual(item.findtext("description"), SOURCE_LINK + feed.html(ARTICLE))
                 self.assertNotIn(main.FULL_PLACEHOLDER, item.findtext("description"))
             for value in (ARTICLE, PUB["name"], PUB["base"], POST["title"]):
                 self.assertNotIn(value, logs.getvalue())
@@ -85,7 +86,7 @@ class DescriptionTests(unittest.TestCase):
                 self.assertEqual(state["episodes"][0]["description"], expected)
                 rss = feed.build(settings.site_url, state["episodes"])
                 item = ET.fromstring(rss).find("channel/item")
-                self.assertEqual(item.findtext("description"), feed.html(expected))
+                self.assertEqual(item.findtext("description"), SOURCE_LINK + feed.html(expected))
                 self.assertNotIn(ARTICLE, rss)
 
     def test_restricted_article_text_keeps_notice(self):
@@ -111,7 +112,7 @@ class DescriptionTests(unittest.TestCase):
                 self.assertEqual(main.run(settings, [PUB], source), 0)
                 self.assertEqual(main.run(settings, [PUB], source), 0)
             after = ET.parse(settings.site / "feed.xml").getroot().find("channel/item")
-            self.assertEqual(after.findtext("description"), feed.html(ARTICLE))
+            self.assertEqual(after.findtext("description"), SOURCE_LINK + feed.html(ARTICLE))
             for tag in ("guid", "title", "pubDate", "link"):
                 self.assertEqual(before.findtext(tag), after.findtext(tag))
             self.assertEqual(before.find("enclosure").attrib, after.find("enclosure").attrib)
@@ -158,6 +159,47 @@ class DescriptionTests(unittest.TestCase):
         main.refresh_descriptions(types.SimpleNamespace(post_text=text), PUB, [POST], {"episodes": episodes})
         self.assertEqual(episodes, original)
         text.assert_not_called()
+
+    def test_existing_html_notes_gain_one_link_across_repeated_feed_reloads(self):
+        notes = '<p>Existing <em>formatted</em> summary.</p>'
+        episode = self.old_episode(description_html=notes)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "feed.xml"
+            for _ in range(3):
+                original = dict(episode)
+                document = feed.build("https://fictional.example", [episode])
+                self.assertEqual(episode, original)
+                item = ET.fromstring(document).find("channel/item")
+                self.assertEqual(item.findtext("description"), SOURCE_LINK + notes)
+                path.write_text(document)
+                episode = feed.read(path)[0]
+
+    def test_source_link_escapes_html_and_skips_non_web_urls(self):
+        link = 'https://fictional.example/article?a=1&b="<tag>"'
+        for source_url in (link, "", "javascript:alert(1)", "//fictional.example/article", "https://["):
+            with self.subTest(link=source_url):
+                episode = self.old_episode(description=ARTICLE, link=source_url)
+                notes = ET.fromstring(feed.build("https://fictional.example", [episode])).findtext("channel/item/description")
+                if source_url == link:
+                    markup = ET.fromstring("<notes>" + notes + "</notes>")
+                    anchor = markup.find("p/a")
+                    self.assertEqual(anchor.attrib, {"href": link})
+                    self.assertEqual(anchor.text, link)
+                    self.assertIsNone(markup.find(".//tag"))
+                else:
+                    self.assertEqual(notes, feed.html(ARTICLE))
+
+    def test_recovered_placeholder_with_source_link_can_still_be_repaired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "feed.xml"
+            path.write_text(feed.build("https://fictional.example", [self.old_episode()]))
+            episodes = feed.read(path)
+        text = Mock(return_value=(POST, ARTICLE))
+        with contextlib.redirect_stdout(io.StringIO()):
+            main.refresh_descriptions(types.SimpleNamespace(post_text=text), PUB, [POST], {"episodes": episodes})
+        text.assert_called_once()
+        notes = ET.fromstring(feed.build("https://fictional.example", episodes)).findtext("channel/item/description")
+        self.assertEqual(notes, SOURCE_LINK + feed.html(ARTICLE))
 
 
 if __name__ == "__main__":
