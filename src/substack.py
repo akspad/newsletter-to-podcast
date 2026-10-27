@@ -41,6 +41,26 @@ def feed_date(value, *, rss=False):
     return published.replace(tzinfo=timezone.utc) if published.tzinfo is None else published
 
 
+def feed_url(value, base=''):
+    """Resolve optional feed metadata without fetching it or failing the source."""
+    if not isinstance(value, str) or not value.strip():
+        return ''
+    value = value.strip()
+    if any(ord(char) <= 32 or ord(char) == 127 for char in value):
+        return ''
+    try:
+        # An absolute link remains usable even if an inherited XML base is bad.
+        parsed = urlparse(value)
+        target = value if parsed.scheme else urljoin(base, value)
+        parsed = urlparse(target)
+        if (parsed.scheme in ('http', 'https') and parsed.hostname and parsed.port != 0 and
+                parsed.username is None and parsed.password is None):
+            return target
+    except ValueError:
+        pass
+    return ''
+
+
 class SourcePosts(list):
     """Usable discoveries, with a signal that some source work needs retrying."""
     def __init__(self, posts, *, complete=True):
@@ -318,6 +338,7 @@ class Substack:
         root = ET.fromstring(self.get(pub["base"], raw=True))
         if root.tag == "{http://www.w3.org/2005/Atom}feed":
             return self.atom_posts(pub, root, limit, base_url=self.last_url or pub['base'])
+        base_url = self.last_url or pub['base']
         items = (node for node in root.iter() if node.tag in ('item', '{' + ns['rss'] + '}item'))
         for index, item in enumerate(items):
             if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
@@ -325,16 +346,11 @@ class Substack:
             prefix = 'rss:' if item.tag.startswith('{') else ''
             link = item.findtext(prefix + 'link', namespaces=ns) or ''
             guid = (item.get('{' + ns['rdf'] + '}about') if prefix else item.findtext('guid')) or link
+            # Capture identity before resolving/omitting optional link metadata.
+            link = feed_url(link, base_url)
             guid_node = item.find('guid')
             if not link and guid_node is not None and guid_node.get('isPermaLink', 'true').strip().casefold() == 'true':
-                try:
-                    permalink = urlparse(guid.strip())
-                    if (permalink.scheme in ('http', 'https') and permalink.hostname and permalink.port != 0 and
-                            permalink.username is None and permalink.password is None and
-                            not any(ord(char) <= 32 or ord(char) == 127 for char in guid.strip())):
-                        link = permalink.geturl()
-                except ValueError:
-                    pass  # An opaque or malformed GUID remains an identity, not a link.
+                link = feed_url(guid)  # Opaque or malformed GUIDs remain identities only.
             html = item.findtext("content:encoded", namespaces=ns) or item.findtext(prefix + 'description', namespaces=ns) or ""
             text = html_to_text(html)
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
@@ -360,7 +376,7 @@ class Substack:
                 "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
                 "title": item.findtext(prefix + 'title', namespaces=ns) or "",
                 "post_date": published.isoformat(),
-                "podcast_url": enclosure.get("url") if enclosure is not None and enclosure.get("type", "").startswith("audio/") else None,
+                "podcast_url": feed_url(enclosure.get("url"), base_url) if enclosure is not None and enclosure.get("type", "").startswith("audio/") else None,
                 "canonical_url": link,
                 "audience": "everyone",
                 "wordcount": len(text.split()),
@@ -373,7 +389,8 @@ class Substack:
     def atom_posts(pub, root, limit, *, base_url=None):
         ns = {"a": "http://www.w3.org/2005/Atom"}
         xml_base = '{http://www.w3.org/XML/1998/namespace}base'
-        root_base = urljoin(base_url or pub['base'], root.get(xml_base, ''))
+        base_url = base_url or pub['base']
+        root_base = feed_url(root.get(xml_base) or base_url, base_url)
         posts = []
         for index, entry in enumerate(root.findall("a:entry", ns)):
             if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
@@ -382,10 +399,12 @@ class Substack:
             if published is None:
                 continue
             links = entry.findall("a:link", ns)
-            entry_base = urljoin(root_base, entry.get(xml_base, ''))
+            entry_base = feed_url(entry.get(xml_base) or root_base, root_base)
             def link_url(node):
-                return urljoin(urljoin(entry_base, node.get(xml_base, '')), node.get('href', ''))
-            link = next((link_url(e) for e in links if e.get('href') and e.get("rel", "alternate") == "alternate"), "")
+                link_base = feed_url(node.get(xml_base) or entry_base, entry_base)
+                return feed_url(node.get('href'), link_base)
+            link = next((value for e in links if e.get('href') and e.get("rel", "alternate") == "alternate"
+                         and (value := link_url(e))), "")
             body = atom_content(entry.find('a:content', ns))
             if not body.strip():
                 body = atom_content(entry.find('a:summary', ns))
@@ -399,7 +418,8 @@ class Substack:
                           "post_date": published.isoformat(), "canonical_url": link, "audience": "everyone",
                           "wordcount": len(html_to_text(body).split()), "body_html": body,
                           "publishedBylines": [{"name": name} for name in bylines],
-                          "podcast_url": next((link_url(e) for e in links if e.get('href') and e.get("rel") == "enclosure" and e.get("type", "").startswith("audio/")), None)})
+                          "podcast_url": next((value for e in links if e.get('href') and e.get("rel") == "enclosure"
+                                               and e.get("type", "").startswith("audio/") and (value := link_url(e))), None)})
         return posts[:limit]
 
     def page_posts(self, pub, limit):

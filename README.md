@@ -14,6 +14,7 @@ While preparing audio, the page shows an approximate remaining-time range and an
 
 - Reads Substack publications, RSS 1.0/2.0 and Atom feeds, and simple article listing pages. Malformed publication dates are skipped per entry, including Substack archive entries, and Atom links honor inherited XML bases, including after feed redirects. Atom entries inherit feed authors when needed and preserve plain text, HTML and XHTML content; formatted titles are read as plain words.
 - Uses RSS author display names when no Dublin Core creator is supplied, and recovers missing article links from HTTP(S) permalink GUIDs without changing article IDs.
+- Omits malformed RSS/Atom article and audio URLs without discarding readable entries or blocking the rest of the feed. Atom selects another valid alternate/enclosure when available. Relative links use the final feed URL and valid inherited XML bases; provided entry identities are preserved.
 - RSS entries without a GUID or link receive a stable title/date/text fingerprint; content edits may create a new identity when the source supplies none. Oversized entries are skipped individually, and episode ordering and retention compare publication instants across time zones.
 - Preserves table values, code blocks and inline word boundaries in imported text, and omits explicitly hidden markup.
 - Generates summaries with Gemini and audio with Edge TTS.
