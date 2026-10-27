@@ -121,6 +121,16 @@ def article_scope(soup, title='', url=''):
     # Main may contain recommendation <article>s beside an unmarked main story.
     # A heading outside those cards is evidence to keep the wider main scope.
     for main in mains:
+        main_score = score(main)
+        # Longform pages can place a short headline hero in main and the full
+        # article beside it. Prefer the matching, more substantial article,
+        # while retaining a main story with stronger permalink evidence.
+        if any(any(score(node)[:2]) and score(node)[:2] >= main_score[:2]
+               and score(node)[3] > main_score[3]
+               and not any(parent is main for parent in node.parents)
+               and not any(parent is node for parent in main.parents)
+               for node in articles):
+            continue
         own_prose = [p for p in main.select('p') if not p.find_parent('article') and editorial(p)]
         matched = any(heading_matches(heading_text(h), title) and not h.find_parent('article')
                       for h in main.select('h1') if editorial(h))
