@@ -98,9 +98,19 @@ def article_scope(soup, title='', url=''):
     def same_url(value):
         return requested is not None and url_identity(value, url) == requested
 
+    # Some short-link blogs use div.post instead of article. Require a
+    # permalink in the post's own metadata or controls, not an arbitrary link
+    # in its prose or a neighbouring post, before treating it as the story.
+    posts = [node for node in soup.select('div.post, section.post')
+             if editorial(node) and not node.find_parent(['blockquote', 'pre', 'code'])
+             and node.find(['p', 'blockquote']) is not None
+             and any(same_url(link.get('href')) for link in node.select(
+                 ':scope > .post-meta a[href], :scope > .post-actions a[href]'))]
+    post_ids = {id(node) for node in posts}
+
     def score(node):
         headings = [h for h in node.select('h1, h2, .entry-title') if editorial(h)]
-        linked = any(same_url(node.get(key)) for key in ('itemid', 'data-url')) or any(
+        linked = id(node) in post_ids or any(same_url(node.get(key)) for key in ('itemid', 'data-url')) or any(
             same_url(link.get('href')) for h in headings for link in h.select('a[href]'))
         matched = any(heading_matches(heading_text(h), title) for h in headings)
         in_main = node.name == 'main' or node.get('role') == 'main' or node.find_parent(['main']) is not None
@@ -117,6 +127,11 @@ def article_scope(soup, title='', url=''):
         body = top_comments.get(f'{news_id}-') if news_id else None
         if body is not None and score(node)[0]:
             return body
+
+    if posts:
+        post = max(posts, key=score)
+        if not articles or score(post)[:2] >= max(score(node)[:2] for node in articles):
+            return post
 
     # Main may contain recommendation <article>s beside an unmarked main story.
     # A heading outside those cards is evidence to keep the wider main scope.
@@ -154,4 +169,6 @@ def belongs_to_scope(node, scope):
     if not editorial(node):
         return False
     owner = node.find_parent('article')
+    if owner is None and scope.name in ('div', 'section') and 'post' in scope.get('class', []):
+        owner = node.find_parent(['div', 'section'], class_='post')
     return owner is None or owner is scope

@@ -13,8 +13,8 @@ EXCLUDED = (
     '[hidden], [aria-hidden="true"], [role="button"], [role="navigation"], '
     '[role="complementary"], [role="dialog"], .visually-hidden, .sr-only, '
     f'{FOOTNOTE_NAV}, '
-    '.post-header, .post-footer, .post-meta, .post-metadata, .share-buttons, '
-    '.byline, [data-block="byline"], [data-testid="multi-byline"], '
+    '.post-header, .post-footer, .post-meta, .post-metadata, .post-actions, .share-buttons, '
+    '.byline, .c-article__author, [data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '
     '.subscription-widget, .entryFooter, .mobile-date-eyebrow, .edit-page-link, '
     '.posted, .publish-date-author, .basic-hero--blog-detail__description, '
@@ -23,7 +23,7 @@ EXCLUDED = (
     '.gh-post-upgrade-cta, .gh-post-upgrade-cta-content, .post-access-cta, '
     '.j-icon, .sharedaddy, .translate-post, #jp-relatedposts, .harvard-sharing, '
     '.article-cta-box, .collection-cta, .collection-dateline, [class*="AscendiumAdUnit_wrapper__"], '
-    '.wp-block-image, .wp-caption, .wp-block-video, .caption, '
+    '.wp-block-image, .wp-caption, .wp-block-video, .caption, .featured-img__caption, '
     'figure:has(img), figure:has(video), figure:has(audio)'
 )
 
@@ -267,7 +267,7 @@ def extract_text(soup, title='', author='', url=''):
     for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
         if node.parent is not None and (not editorial(node) or
                 (node is not scope and not any(parent is node for parent in scope.parents)
-                 and node.name == 'article' and (scope.name in ('article', 'main') or scope.get('role') == 'main'))):
+                 and node.name == 'article' and scope is not soup)):
             node.decompose()
     clean_tree(soup, title, author, url)
     if deferred:

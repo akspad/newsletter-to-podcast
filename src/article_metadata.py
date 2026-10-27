@@ -182,7 +182,7 @@ def article_details(soup, url):
             break
     feed = soup.select_one('link[rel="alternate"][type="application/atom+xml"][title], '
                            'link[rel="alternate"][type="application/rss+xml"][title]')
-    feed_name = re.sub(r'\s+[-|–—]\s+(?:Atom|RSS)(?:\s+Feed)?$', '',
+    feed_name = re.sub(r'\s+(?:[-|–—]\s+)?(?:Atom|RSS)\s+Feed$|\s+[-|–—]\s+(?:Atom|RSS)$', '',
                        feed.get('title', '').split(' » ')[0] if feed else '', flags=re.I)
     if clean(feed_name).casefold() in {'rss', 'atom', 'feed', 'rss feed', 'atom feed',
                                       'recent entries', 'recent posts', 'latest posts'}:
@@ -226,7 +226,7 @@ def article_details(soup, url):
 
     scope = article_scope(soup, title, url)
     byline = next((node for node in scope.select('[rel~="author"], [itemprop~="author"], '
-                  '.PostsAuthors-root, .byline, .news-article--authored-by, p.author')
+                  '.PostsAuthors-root, .byline, .news-article--authored-by, p.author, .c-article__author__name')
                    if belongs_to_scope(node, scope)), None)
     if byline is None:
         # An ordinary link to somebody's author page in the prose isn't a
@@ -234,7 +234,7 @@ def article_details(soup, url):
         byline = scope.select_one('header a[href*="/authors/"], header a[href*="/author/"], '
                                   '.blog-post-meta a[href*="/author/"]')
     if byline is None:
-        byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by')
+        byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by, .c-article__author__name')
                        if belongs_to_scope(node, scope)), None)
     if byline is not None and re.fullmatch(r'by\s*:?', clean(byline.get_text(' ', strip=True)), re.I):
         byline = next((node for node in byline.parent.select(
@@ -285,7 +285,7 @@ def article_details(soup, url):
                                    re.split(r',\s+and\s+', paragraphs[-1].get_text(' ', strip=True)))
         elif sidebar_byline and re.match(r'^By\s+', sidebar_byline.get_text(' ', strip=True)):
             author = sidebar_byline.get_text(' ', strip=True)
-    author = clean(author or meta('article:author'), 100)
+    author = clean(author or meta('article:author', 'og:article:author'), 100)
     if author.startswith(('http://', 'https://')):
         author = ''
     author = re.sub(r'^by(?:\s*:\s*|\s+|$)', '', author, flags=re.I)
