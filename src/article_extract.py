@@ -1,8 +1,9 @@
 """Find narration text in already-downloaded HTML; never fetch extra resources."""
 import re
 from html import unescape
+from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose, url_identity
 from tts import speech_text
 
 
@@ -83,7 +84,49 @@ def remove_site_endmatter(root):
             node.extract()
 
 
-def clean_tree(root, title, author):
+def remove_table_of_contents(root, url):
+    """Remove marked section indexes, keeping their destination prose intact."""
+    contents = list(root.select('.toc, #toc, .table-of-contents, #table-of-contents'))
+    if not contents:
+        return
+    targets = {}
+    for node in root.select('[id], a[name]'):
+        for label in (node.get('id'), node.get('name') if node.name == 'a' else None):
+            if label:
+                targets.setdefault(label, []).append(node)
+    requested = url_identity(url)
+    for toc in contents:
+        if toc.parent is None or toc.find_parent(['blockquote', 'pre', 'code']):
+            continue
+
+        def section_link(link):
+            href = link.get('href', '').strip()
+            try:
+                fragment = unquote(urlsplit(href).fragment)
+            except ValueError:
+                return False
+            if not fragment or not (href.startswith('#') or
+                                    requested and url_identity(href, url) == requested):
+                return False
+            # A class on a wrapper containing the article itself is not an
+            # instruction to discard that wrapper and all its destination text.
+            return any(node.parent is not None and node is not toc and
+                       not any(parent is toc for parent in node.parents)
+                       for node in targets.get(fragment, []))
+
+        links = toc.select('a[href]')
+        if not links or not all(section_link(link) for link in links):
+            continue
+        heading = toc.find_previous_sibling()
+        if heading is not None and heading.name in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            label = heading.get_text(' ', strip=True).rstrip(':').casefold().replace('\u2019', "'")
+            if ('toch1' in heading.get('class', []) or
+                    label in ('contents', 'table of contents', 'on this page', "today's links")):
+                heading.decompose()
+        toc.decompose()
+
+
+def clean_tree(root, title, author, url=''):
     remove_site_endmatter(root)
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
@@ -140,6 +183,7 @@ def clean_tree(root, title, author):
     for node in root.select(EXCLUDED):
         if node.parent is not None:
             node.decompose()
+    remove_table_of_contents(root, url)
     # Attribute the article once, outside its narration body.
     for node in root.select('h1, h2, h3, dt, [rel~="author"], [itemprop~="author"]'):
         value = heading_text(node) if node.name in ('h1', 'h2', 'h3') else ' '.join(node.get_text(' ', strip=True).split())
@@ -180,14 +224,14 @@ def plain_text(root):
     return ' '.join(root.get_text('', strip=False).split())
 
 
-def extract_structured_text(body, title='', author=''):
+def extract_structured_text(body, title='', author='', url=''):
     """Normalize an already-selected JSON-LD body; never execute or fetch it."""
     from bs4 import BeautifulSoup
     # Preserve plain-text comparisons and code such as C++'s <vector>.
     if not re.search(r'</?(?:p|div|section|article|h[1-6]|br|ul|ol|li|blockquote|pre|table|thead|tbody|tfoot|tr|th|td|caption|dl|dt|dd|a|em|strong|span|script|style)\b[^>]*>', body, re.I):
         return ' '.join(unescape(body).split())
     fragment = BeautifulSoup(body, 'html.parser')
-    clean_tree(fragment, title, author)
+    clean_tree(fragment, title, author, url)
     return plain_text(fragment)
 
 
@@ -212,7 +256,7 @@ def extract_text(soup, title='', author='', url=''):
     deferred = []
     for node in sections:
         node.extract()
-        clean_tree(node, title, author)
+        clean_tree(node, title, author, url)
         if speech_text(node.get_text('', strip=True)).strip():
             text = plain_text(node)
             # Streaming can repeat the same body for another layout. Keep
@@ -225,7 +269,7 @@ def extract_text(soup, title='', author='', url=''):
                 (node is not scope and not any(parent is node for parent in scope.parents)
                  and node.name == 'article' and (scope.name in ('article', 'main') or scope.get('role') == 'main'))):
             node.decompose()
-    clean_tree(soup, title, author)
+    clean_tree(soup, title, author, url)
     if deferred:
         return ' '.join(deferred)
     candidates = scope.select(BODY_SELECTORS)
@@ -238,7 +282,7 @@ def extract_text(soup, title='', author='', url=''):
         sections = [node for node in candidates if not any(id(parent) in identities for parent in node.parents)]
         pieces = []
         for section in sections:
-            clean_tree(section, title, author)
+            clean_tree(section, title, author, url)
             # Empty placeholders must not suppress the density-based fallback.
             if speech_text(section.get_text('', strip=True)).strip():
                 pieces.append(plain_text(section))

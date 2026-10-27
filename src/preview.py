@@ -113,7 +113,7 @@ def article_text(url):
     from article_extract import extract_text, extract_structured_text
     text = extract_text(soup, title, author, resolved_url)
     if not readable_prose(text) and structured_body:
-        text = extract_structured_text(structured_body, title, author)
+        text = extract_structured_text(structured_body, title, author, resolved_url)
     if not text:
         raise ValueError("We couldn't find an article on that page. Try a direct article link or paste its text.")
     if not readable_prose(text):
