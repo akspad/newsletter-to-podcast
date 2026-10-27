@@ -201,6 +201,13 @@ def run(settings, publications, sub):
         return _run(settings, publications, sub)
 
 
+def state_timestamp(value):
+    """Read saved times in UTC, matching the scheduler's naive-time convention."""
+    parsed = datetime.fromisoformat(value)
+    return (parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None
+            else parsed.astimezone(timezone.utc))
+
+
 def _run(settings, publications, sub):
     sub.download_bytes = 0
     state = load_state(settings)
@@ -216,9 +223,9 @@ def _run(settings, publications, sub):
 
     since = now - timedelta(hours=settings.lookback_hours)
     if state.get("last_run") and not settings.explicit_lookback:
-        since = min(datetime.fromisoformat(state["last_run"]) - timedelta(hours=48), since)
+        since = min(state_timestamp(state["last_run"]) - timedelta(hours=48), since)
     if state.get("catchup_since"):
-        since = min(datetime.fromisoformat(state["catchup_since"]), since)
+        since = min(state_timestamp(state["catchup_since"]), since)
     seen = set(state.get("seen", []))
     configured = {pub["base"]: pub for pub in publications}
     # Drop queued posts from removed sources and use current mode/filter settings on retries.

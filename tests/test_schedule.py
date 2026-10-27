@@ -17,6 +17,7 @@ import config
 import feed
 import main
 import schedule
+import storage
 import substack
 
 NOW = datetime(2026, 10, 8, 18, 17, tzinfo=timezone.utc)
@@ -88,6 +89,86 @@ class CatchUpTests(unittest.TestCase):
         with patch.dict(os.environ, {"SITE_DIR": str(root / "site"), "STATE_DIR": str(root / "state"),
                                      "MAX_EPISODES_PER_RUN": "1", **extra}, clear=True):
             return config.Settings.from_env()
+
+    def check_saved_cutoff(self, field, timestamp, event, *, explicit=False):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(os.environ, {"GITHUB_EVENT_NAME": event}, clear=True):
+            settings = self.settings(Path(tmp), **({"LOOKBACK_HOURS": "24"} if explicit else {}))
+            state = {"episodes": [], "seen": [], "retry": [],
+                     "last_run": (NOW - timedelta(days=2)).isoformat(),
+                     "last_scheduled_run": (NOW - timedelta(days=30)).replace(tzinfo=None).isoformat(),
+                     field: timestamp}
+            storage.save(settings, state)
+            # last_run has a 48-hour overlap; catchup_since is the exact saved cutoff.
+            cutoff = NOW - timedelta(days=32 if field == "last_run" else 30)
+            posts = [{"id": minutes, "title": f"Fictional {minutes}", "audience": "everyone",
+                      "canonical_url": f"https://fictional.example/article/{minutes}",
+                      "post_date": (cutoff + timedelta(minutes=minutes)).isoformat()}
+                     for minutes in (1, -1)]
+            source = types.SimpleNamespace(recent_posts=Mock(return_value=posts),
+                                           post_text=lambda pub, post: (post, "Fictional text"))
+
+            def audio(script, path, cap, title):
+                path.write_bytes(b"synthetic")
+                return [path]
+
+            with patch("main.datetime", wraps=datetime) as clock, \
+                    patch("tts.synthesize_full", side_effect=audio) as generated, \
+                    patch("tts.duration", return_value=20), contextlib.redirect_stdout(io.StringIO()):
+                clock.now.return_value = NOW
+                self.assertEqual(main.run(settings, [PUB], source), 0)
+                saved = storage.load(settings)
+                expected = [] if explicit and field == "last_run" else [posts[0]]
+                self.assertEqual(generated.call_count, len(expected))
+                self.assertEqual(saved["seen"], [main.post_key(PUB, post) for post in expected])
+                self.assertEqual(len(ET.parse(settings.site / "feed.xml").getroot().findall("channel/item")),
+                                 len(expected))
+                self.assertEqual(saved["last_run"], NOW.isoformat())
+                self.assertNotIn("catchup_since", saved)
+                if event == "schedule":
+                    self.assertEqual(saved["last_scheduled_run"], NOW.isoformat())
+                # Rereading recovered state must not regenerate an episode.
+                self.assertEqual(main.run(settings, [PUB], source), 0)
+                self.assertEqual(generated.call_count, len(expected))
+
+    def test_last_run_cutoff_accepts_naive_utc_and_non_utc_offsets(self):
+        old = NOW - timedelta(days=30)
+        timestamps = [old.replace(tzinfo=None).isoformat(), old.isoformat().replace("+00:00", "Z")]
+        timestamps += [old.astimezone(timezone(timedelta(hours=hours))).isoformat() for hours in (-7, 5.5)]
+        for event in ("schedule", "workflow_dispatch"):
+            for timestamp in timestamps:
+                with self.subTest(event=event, timestamp=timestamp):
+                    self.check_saved_cutoff("last_run", timestamp, event)
+
+    def test_pending_catchup_cutoff_accepts_naive_utc_and_non_utc_offsets(self):
+        old = NOW - timedelta(days=30)
+        timestamps = [old.replace(tzinfo=None).isoformat(), old.isoformat().replace("+00:00", "Z")]
+        timestamps += [old.astimezone(timezone(timedelta(hours=hours))).isoformat() for hours in (-7, 5.5)]
+        for event in ("schedule", "workflow_dispatch"):
+            for timestamp in timestamps:
+                with self.subTest(event=event, timestamp=timestamp):
+                    self.check_saved_cutoff("catchup_since", timestamp, event)
+
+    def test_explicit_lookback_overrides_last_run_but_preserves_pending_catchup(self):
+        timestamp = (NOW - timedelta(days=30)).replace(tzinfo=None).isoformat()
+        for field in ("last_run", "catchup_since"):
+            with self.subTest(field=field):
+                self.check_saved_cutoff(field, timestamp, "workflow_dispatch", explicit=True)
+
+    def test_invalid_saved_cutoffs_fail_before_changing_state_or_output(self):
+        for field in ("last_run", "catchup_since"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp, \
+                    patch.dict(os.environ, {}, clear=True):
+                settings = self.settings(Path(tmp))
+                storage.save(settings, {"episodes": [], "seen": [], "retry": [], field: "invalid"})
+                state_path = settings.state_dir / "state.json"
+                before = state_path.read_bytes()
+                source = types.SimpleNamespace(recent_posts=Mock())
+                with self.assertRaises(ValueError):
+                    main.run(settings, [PUB], source)
+                source.recent_posts.assert_not_called()
+                self.assertEqual(state_path.read_bytes(), before)
+                self.assertFalse(settings.site.exists())
 
     def test_missing_articles_are_queued_then_appended_without_duplicates(self):
         with tempfile.TemporaryDirectory() as tmp:
