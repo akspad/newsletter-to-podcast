@@ -250,6 +250,10 @@ def extract_text(soup, title='', author='', url=''):
 
     # Density-based extraction handles unmarked layouts and separates article
     # prose from metadata, related stories, controls and comments.
+    # With images disabled, the extractor drops entire figures. Code figures
+    # are text: keep their pre blocks in place without enabling image content.
+    for figure in scope.select('figure:has(pre)'):
+        figure.unwrap()
     from trafilatura import bare_extraction
     body = scope if scope is not soup else None
     source = str(body if body is not None else soup)
