@@ -294,6 +294,11 @@ def extract_text(soup, title='', author='', url=''):
 
     # Density-based extraction handles unmarked layouts and separates article
     # prose from metadata, related stories, controls and comments.
+    # Empty inline diagram markers can make the density extractor discard
+    # their following text. Unwrap them first, including nested empty spans.
+    for span in reversed(scope.select('span')):
+        if not span.contents:
+            span.unwrap()
     # With images disabled, the extractor drops entire figures. Code figures
     # are text: keep their pre blocks in place without enabling image content.
     for figure in scope.select('figure:has(pre)'):

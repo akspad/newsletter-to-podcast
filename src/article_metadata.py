@@ -203,7 +203,7 @@ def article_details(soup, url):
     structured = clean(article.get('headline'))
     social = clean(meta('og:title', 'twitter:title'))
     page_title = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
-    headings = [node for node in soup.select('.PostsPageTitle-root, article h1, main h1, .entry-title')
+    headings = [node for node in soup.select('.PostsPageTitle-root, article h1, main h1, .entry-title, .post-title')
                 if editorial(node)]
     def matches_heading(node):
         value = clean(heading_text(node))
