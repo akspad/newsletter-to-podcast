@@ -19,7 +19,7 @@ import tts
 import website
 from schedule import scheduled_run_due
 from config import Settings, load_env
-from monitoring import GenerationReport
+from monitoring import GenerationReport, episode_attempt, set_episode_stage
 from substack import Substack, has_audio, html_to_text
 
 FULL_PLACEHOLDER = "Full narration of the text available from the source."
@@ -92,11 +92,13 @@ def eligible(pub, post, since, seen, settings):
 
 
 def make_episode(sub, pub, post, now, state, settings):
+    set_episode_stage('extract')
     full, text = sub.post_text(pub, post)
     security.check_text(text)
     security.charge("article_bytes", len(text.encode("utf-8")))
     if not text.strip():
         raise ValueError("Source returned no article text")
+    set_episode_stage('prepare')
     author = ", ".join(b.get("name", "") for b in full.get("publishedBylines", [])) or pub["name"]
     mode = episode_mode(pub, settings)
     # We cannot reliably infer entitlement from an unofficial endpoint's response.
@@ -107,19 +109,23 @@ def make_episode(sub, pub, post, now, state, settings):
         if preview:
             script = f"This source has restricted access; reading the text available from the source.\n{text}"
     else:
+        set_episode_stage('summary')
         script = summarize.write_script(pub["name"], author, post["title"], text,
                                         settings.max_seconds, settings.max_script_words, preview)
+    set_episode_stage('prepare')
     security.check_text(script, security.MAX_ARTICLE_BYTES + 8192)
     description = episode_description(text if mode == "full" else script, preview)
     key = post_key(pub, post)
     path = settings.site / "episodes" / f"{key}.mp3"
     try:
+        set_episode_stage('speech')
         with checkpoints.use(settings.state_dir):
             if mode == "full":
                 paths = tts.synthesize_full(script, path, settings.max_seconds, intro)
             else:
                 tts.synthesize(script, path, settings.max_seconds)
                 paths = [path]
+        set_episode_stage('audio_metadata')
         if len(paths) > security.MAX_AUDIO_PARTS:
             raise security.BudgetExceeded("Article produces too many audio parts")
         if len(description.encode("utf-8")) * len(paths) > 2 * 1024 * 1024:
@@ -287,25 +293,26 @@ def _run(settings, publications, sub):
     for pub, post in candidates[:settings.max_episodes]:
         report.attempted_articles += 1
         before = len(state["episodes"])
-        try:
-            make_episode(sub, pub, post, now, state, settings)
-            report.created_articles += 1
-            report.created_audio_files += len(state["episodes"]) - before
-            key = post_key(pub, post)
-            seen.add(key)
-            completed.append(key)
-        except security.BudgetExceeded:
-            report.skipped_articles += 1
-            print("Article exceeds a security limit; skipped without queuing its payload.", file=sys.stderr)
-        except security.RunBudgetExceeded:
-            report.deferred_articles += 1
-            print("Run work budget exhausted; article deferred for a later run.", file=sys.stderr)
-            state["retry"].append({"pub": pub, "post": post})
-        except Exception as error:
-            report.failed_articles += 1
-            # Exception messages may contain source text, URLs or credentials: don't print them.
-            print(f"Episode failed ({type(error).__name__}); queued for retry.", file=sys.stderr)
-            failed_retries.append({"pub": pub, "post": post})
+        with episode_attempt() as diagnostic:
+            try:
+                make_episode(sub, pub, post, now, state, settings)
+                report.created_articles += 1
+                report.created_audio_files += len(state["episodes"]) - before
+                key = post_key(pub, post)
+                seen.add(key)
+                completed.append(key)
+            except security.BudgetExceeded:
+                report.skipped_articles += 1
+                print("Article exceeds a security limit; skipped without queuing its payload.", file=sys.stderr)
+            except security.RunBudgetExceeded:
+                report.deferred_articles += 1
+                print("Run work budget exhausted; article deferred for a later run.", file=sys.stderr)
+                state["retry"].append({"pub": pub, "post": post})
+            except Exception as error:
+                report.failed_articles += 1
+                # Fixed codes only: messages, names and provider identifiers can reveal private data.
+                print(f"Episode failed ({diagnostic.fields(error)}); queued for retry.", file=sys.stderr)
+                failed_retries.append({"pub": pub, "post": post})
     state["retry"].extend({"pub": pub, "post": post} for pub, post in candidates[settings.max_episodes:])
     report.deferred_articles += len(candidates[settings.max_episodes:])
     # Preserve saved work and newly failed payloads when selecting a bounded

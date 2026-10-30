@@ -14,7 +14,7 @@ EXCLUDED = (
     '[role="complementary"], [role="dialog"], .visually-hidden, .sr-only, '
     f'{FOOTNOTE_NAV}, '
     '.post-header, .post-footer, .post-meta, .post-metadata, .post-actions, .share-buttons, '
-    '.byline, .c-article__author, [data-block="byline"], [data-testid="multi-byline"], '
+    '.byline, .c-article__author, .c-article-author, [data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '
     '.subscription-widget, .entryFooter, .mobile-date-eyebrow, .edit-page-link, '
     '.posted, .publish-date-author, .basic-hero--blog-detail__description, '
@@ -84,6 +84,26 @@ def remove_site_endmatter(root):
             node.extract()
 
 
+def remove_press_contacts(root):
+    """Recognize contact-only tails after a press release's explicit end marker."""
+    for marker in list(root.find_all('p')):
+        if (marker.get_text(' ', strip=True).casefold() != '-end-' or
+                marker.find_parent(['blockquote', 'pre', 'code', 'li', 'table'])):
+            continue
+        following = [node for node in marker.next_siblings if str(node).strip()]
+        if not following or len(following) > 8:
+            continue
+        if not all(getattr(node, 'name', '') == 'p' and node.find('br') and
+                   node.select_one('a[href^="mailto:"]') and
+                   len(node.get_text(' ', strip=True)) < 600 for node in following):
+            continue
+        preceding = ' '.join(node.get_text(' ', strip=True) for node in marker.find_previous_siblings())
+        if not readable_prose(preceding):
+            continue
+        for node in [marker, *following]:
+            node.decompose()
+
+
 def remove_table_of_contents(root, url):
     """Remove marked section indexes, keeping their destination prose intact."""
     contents = list(root.select('.toc, #toc, .table-of-contents, #table-of-contents'))
@@ -128,6 +148,7 @@ def remove_table_of_contents(root, url):
 
 def clean_tree(root, title, author, url=''):
     remove_site_endmatter(root)
+    remove_press_contacts(root)
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
@@ -180,6 +201,16 @@ def clean_tree(root, title, author, url=''):
                 parent.decompose()
                 break
             parent = parent.parent
+    # Remove a standalone byline's outer label with its author span. Keep
+    # paragraphs that use the same link as part of a sentence or quotation.
+    for byline in root.select('.byline, [rel~="author"], [itemprop~="author"]'):
+        parent = byline.parent
+        if parent is None or parent.name != 'p' or parent.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        outside = ' '.join(str(text) for text in parent.strings
+                           if not any(ancestor is byline for ancestor in text.parents))
+        if re.fullmatch(r'\s*By\s*:?\s*', outside, re.I):
+            parent.decompose()
     for node in root.select(EXCLUDED):
         if node.parent is not None:
             node.decompose()
