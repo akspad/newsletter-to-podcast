@@ -70,6 +70,26 @@ class AttributionAndContactTests(unittest.TestCase):
                 text = read('<title>A discovery</title><article><div class="entry-content"><p>'+BODY+'</p>'+tail+'</div></article>')
                 self.assertIn(expected, text)
 
+    def test_quoted_credits_keep_their_complete_text(self):
+        credit = 'By Alex Writer, who explained why the observations mattered to the research team.'
+        for cls in ('c-article-author', 'c-article__author'):
+            for wrapper in ('blockquote', 'pre'):
+                with self.subTest(cls=cls, wrapper=wrapper):
+                    html = ('<title>A discovery</title><meta name="author" content="Correct Writer">'
+                            '<article><div class="entry-content"><p>'+BODY+'</p>'
+                            '<'+wrapper+'><div class="'+cls+'">'+credit+'</div></'+wrapper+'></div></article>')
+                    text = read(html)
+                    self.assertEqual(text.partition('\n')[2], BODY+' '+credit)
+                    self.assertTrue(text.partition('\n')[0].endswith('By Correct Writer.'))
+
+    def test_contact_link_does_not_turn_continued_prose_into_a_footer(self):
+        prose = ('Readers with observations from their own experiments can send their measurements and detailed notes '
+                 'to the research team. Please describe the methods you used and the conditions you observed.')
+        html = ('<title>A discovery</title><article><div class="entry-content"><p>'+BODY+'</p><p>-end-</p>'
+                '<p>'+prose+'<br><a href="mailto:research@fictional.example">research@fictional.example</a></p>'
+                '</div></article>')
+        self.assertEqual(read(html).partition('\n')[2], BODY+' -end- '+prose+' research@fictional.example')
+
 
 if __name__ == '__main__':
     unittest.main()

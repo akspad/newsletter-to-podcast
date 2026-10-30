@@ -263,7 +263,8 @@ def article_details(soup, url):
     # An explicit visible author list is stronger evidence than a generic
     # publisher account in JSON-LD (for example "The Editors"). Read the whole
     # group so a multi-author byline isn't reduced to its first link.
-    groups = [node for node in soup.select('.article-authors, .c-article-author') if belongs_to_scope(node, scope)]
+    groups = [node for node in soup.select('.article-authors, .c-article-author')
+              if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])]
     group = next((node for node in groups if any(parent is scope for parent in node.parents)),
                  next(iter(groups), None))
     visible_authors = ''

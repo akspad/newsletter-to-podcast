@@ -14,7 +14,7 @@ EXCLUDED = (
     '[role="complementary"], [role="dialog"], .visually-hidden, .sr-only, '
     f'{FOOTNOTE_NAV}, '
     '.post-header, .post-footer, .post-meta, .post-metadata, .post-actions, .share-buttons, '
-    '.byline, .c-article__author, .c-article-author, [data-block="byline"], [data-testid="multi-byline"], '
+    '.byline, [data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '
     '.subscription-widget, .entryFooter, .mobile-date-eyebrow, .edit-page-link, '
     '.posted, .publish-date-author, .basic-hero--blog-detail__description, '
@@ -95,7 +95,8 @@ def remove_press_contacts(root):
             continue
         if not all(getattr(node, 'name', '') == 'p' and node.find('br') and
                    node.select_one('a[href^="mailto:"]') and
-                   len(node.get_text(' ', strip=True)) < 600 for node in following):
+                   len(node.get_text(' ', strip=True)) < 600 and
+                   not readable_prose(node.get_text(' ', strip=True)) for node in following):
             continue
         preceding = ' '.join(node.get_text(' ', strip=True) for node in marker.find_previous_siblings())
         if not readable_prose(preceding):
@@ -211,6 +212,9 @@ def clean_tree(root, title, author, url=''):
                            if not any(ancestor is byline for ancestor in text.parents))
         if re.fullmatch(r'\s*By\s*:?\s*', outside, re.I):
             parent.decompose()
+    for credit in root.select('.c-article-author, .c-article__author'):
+        if credit.parent is not None and not credit.find_parent(['blockquote', 'pre', 'code']):
+            credit.decompose()
     for node in root.select(EXCLUDED):
         if node.parent is not None:
             node.decompose()

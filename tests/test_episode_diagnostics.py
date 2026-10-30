@@ -25,6 +25,7 @@ class EpisodeDiagnosticsTests(unittest.TestCase):
     def test_failure_stages_keep_retry_state_and_redact_all_provider_details(self):
         for stage, reason, error in (
                 ('extract', 'timeout', TimeoutError(PRIVATE)),
+                ('prepare', 'invalid_value', ValueError(PRIVATE)),
                 ('summary', 'runtime_error', RuntimeError(PRIVATE)),
                 ('speech', 'runtime_error', RuntimeError(PRIVATE)),
                 ('audio_metadata', 'subprocess_error', subprocess.CalledProcessError(1, PRIVATE, stderr=PRIVATE))):
@@ -46,6 +47,8 @@ class EpisodeDiagnosticsTests(unittest.TestCase):
                         raise error
                     path.write_bytes(b'fictional audio')
                 with patch.dict(os.environ, env, clear=True), patch('main.refresh_descriptions'), \
+                        patch('main.episode_description', wraps=main.episode_description,
+                              side_effect=error if stage == 'prepare' else None), \
                         patch('summarize.write_script', side_effect=error if stage == 'summary' else None,
                               return_value=BODY), patch('tts.synthesize', side_effect=render), \
                         patch('tts.duration', side_effect=error if stage == 'audio_metadata' else None,
