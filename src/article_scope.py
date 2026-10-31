@@ -90,6 +90,21 @@ def heading_matches(value, title):
            title.endswith(': ' + value))
 
 
+def article_labels(root, title):
+    """Recognize a labeled article masthead, not ordinary definition lists."""
+    for block in root.select('dl.macrodata'):
+        if block.parent is None or not editorial(block) or block.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        fields = {}
+        for label in block.find_all('dt'):
+            value = label.find_next_sibling('dd')
+            if value is not None and editorial(label) and editorial(value):
+                fields[label.get_text(' ', strip=True).casefold()] = value
+        if (fields.keys() <= {'title', 'author', 'dated'} and 'title' in fields and
+                heading_matches(heading_text(fields['title']), title)):
+            yield block, fields
+
+
 def article_scope(soup, title='', url=''):
     articles = [node for node in soup.select('article') if editorial(node)]
     mains = [node for node in soup.select('main, [role="main"]') if editorial(node)]

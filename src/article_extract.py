@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose, url_identity
 from tts import speech_text
 
 
@@ -148,6 +148,21 @@ def remove_table_of_contents(root, url):
 
 
 def clean_tree(root, title, author, url=''):
+    for block, _ in article_labels(root, title):
+        block.decompose()
+    # RebelMouse recommendation widgets can sit inside the article body.
+    # Require their complete component structure; retain quotations and prose.
+    for widget in root.select('.around-the-web'):
+        children = [node for node in widget.children if str(node).strip()]
+        headings = widget.select(':scope > .from-your-site__headline, :scope > .around-the-web__headline')
+        if (not widget.find_parent(['blockquote', 'pre', 'code']) and
+                headings and all(node.get_text(' ', strip=True).casefold() in
+                                 {'from your site articles', 'related articles around the web'} for node in headings) and
+                widget.select_one('ul.around-the-web__list li a[href]') and
+                all(getattr(node, 'name', None) and match(
+                    '.from-your-site__headline, .around-the-web__headline, .around-the-web__list', node)
+                    for node in children)):
+            widget.decompose()
     remove_site_endmatter(root)
     remove_press_contacts(root)
     for node in root.select('[style], [hidden], [aria-hidden]'):

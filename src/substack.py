@@ -346,6 +346,8 @@ class Substack:
             prefix = 'rss:' if item.tag.startswith('{') else ''
             link = item.findtext(prefix + 'link', namespaces=ns) or ''
             guid = (item.get('{' + ns['rdf'] + '}about') if prefix else item.findtext('guid')) or link
+            if not guid.strip():
+                guid = link
             # Capture identity before resolving/omitting optional link metadata.
             link = feed_url(link, base_url)
             guid_node = item.find('guid')
@@ -412,11 +414,17 @@ class Substack:
             bylines = [name.strip() for author in authors if (name := author.findtext('a:name', namespaces=ns)) and name.strip()]
             guid = entry.findtext("a:id", namespaces=ns) or link
             title = ' '.join(html_to_text(atom_content(entry.find('a:title', ns))).split()) or 'Untitled'
+            text = html_to_text(body)
+            if not guid.strip():
+                guid = link
+            if not guid:
+                guid = 'atom-fallback:' + json.dumps([
+                    title, published.astimezone(timezone.utc).isoformat(), ' '.join(text.split())], ensure_ascii=False)
             posts.append({"id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                           "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
                           "title": title,
                           "post_date": published.isoformat(), "canonical_url": link, "audience": "everyone",
-                          "wordcount": len(html_to_text(body).split()), "body_html": body,
+                          "wordcount": len(text.split()), "body_html": body,
                           "publishedBylines": [{"name": name} for name in bylines],
                           "podcast_url": next((value for e in links if e.get('href') and e.get("rel") == "enclosure"
                                                and e.get("type", "").startswith("audio/") and (value := link_url(e))), None)})

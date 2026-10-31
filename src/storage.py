@@ -114,6 +114,10 @@ def migrate(state, feed_path):
         value = str(identifier)
         seen.append(legacy_key(value) if value.isdecimal() else value)
     existing = {e["guid"]: e for e in feed.read(feed_path)} if feed_path.exists() else {}
+    # A restored state snapshot can lag the published feed. Recover missing
+    # public episodes before rebuilding seen IDs, retaining unpublished work too.
+    known = {episode['guid'] for episode in state['episodes']}
+    state['episodes'].extend(episode for guid, episode in existing.items() if guid not in known)
     for episode in state["episodes"]:
         episode.setdefault("source_key", episode["guid"].split("-part-")[0])
         match = re.fullmatch(r"substack-(\d+)", episode["guid"])

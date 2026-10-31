@@ -4,7 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from article_scope import DATE, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
+from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
 
 
 def clean(value, limit=160):
@@ -218,9 +218,12 @@ def article_details(soup, url):
     # Match metadata to distinguish an article heading from blog branding (Go
     # has both as h1). Otherwise prefer the visible headline over its SEO variant.
     preliminary_scope = article_scope(soup, structured or social or page_title, url)
+    labels = next((fields for raw in (structured, social, page_title)
+                   for block, fields in article_labels(soup, raw)
+                   if belongs_to_scope(block, preliminary_scope)), {})
     preferred_headings = [node for node in headings if any(parent is preliminary_scope for parent in node.parents)]
     heading = next((node for node in headings if matches_heading(node)),
-                   next(iter(preferred_headings or headings), None))
+                   labels.get('title') or next(iter(preferred_headings or headings), None))
     title = clean(heading_text(heading) if heading else '') or structured or social or page_title
     title = strip_suffix(title)
 
@@ -265,6 +268,8 @@ def article_details(soup, url):
     # group so a multi-author byline isn't reduced to its first link.
     groups = [node for node in soup.select('.article-authors, .c-article-author')
               if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])]
+    if labels.get('author') is not None:
+        groups.append(labels['author'])
     group = next((node for node in groups if any(parent is scope for parent in node.parents)),
                  next(iter(groups), None))
     visible_authors = ''
