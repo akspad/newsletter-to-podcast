@@ -228,9 +228,13 @@ def create_app(allowed_origins=(), generator=generate_audio, max_concurrent=2):
     return app
 
 
-if __name__ == "__main__":
+def main():
     if os.name != "posix" or not all(shutil.which(name) for name in ("ffmpeg", "ffprobe")):
         sys.exit("The preview server needs macOS/Linux and ffmpeg (including ffprobe).")
     configured = [value.strip() for value in os.environ.get("PREVIEW_ALLOWED_ORIGINS", "").split(",") if value.strip()]
     web.run_app(create_app(configured, max_concurrent=int(os.environ.get("PREVIEW_CONCURRENCY", "2"))), host=os.environ.get("PREVIEW_HOST", "127.0.0.1"),
-                port=int(os.environ.get("PORT", "8000")), access_log=None)
+                port=int(os.environ.get("PORT", "8000")), access_log=None, handler_cancellation=True)
+
+
+if __name__ == "__main__":
+    main()

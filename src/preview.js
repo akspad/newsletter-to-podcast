@@ -14,6 +14,7 @@
   const hasTiming = Boolean(timing && eta && elapsed);
   let audioUrl;
   let pending = false;
+  let activeRequest;
   let timingStarted;
   let timingInterval;
   let estimate;
@@ -69,6 +70,25 @@
     elapsed.textContent = '';
   }
 
+  function finishRequest(request) {
+    clearTimeout(request.timeout);
+    if (activeRequest !== request) return;
+    activeRequest = undefined;
+    stopTiming();
+    pending = false;
+    button.disabled = false;
+    button.textContent = 'Generate audio preview';
+    form.removeAttribute('aria-busy');
+  }
+
+  function cancelRequest(request, timedOut = false) {
+    if (activeRequest !== request) return;
+    if (timedOut) showError('The preview service took too long to respond. Try a shorter excerpt or try again shortly.');
+    // Reset before abort callbacks run, so a late response cannot affect a new request.
+    finishRequest(request);
+    request.controller.abort();
+  }
+
   function pause(milliseconds, signal) {
     return new Promise((resolve, reject) => {
       const abort = () => {
@@ -84,15 +104,18 @@
     });
   }
 
-  async function requestPreview(payload, signal, generationRange) {
+  async function requestPreview(payload, request, generationRange) {
+    const signal = request.controller.signal;
     const capacityDeadline = Date.now() + 120000;
     while (true) {
       const response = await fetch(form.dataset.endpoint, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         credentials: 'omit', referrerPolicy: 'no-referrer', signal, body: payload,
       });
+      if (activeRequest !== request) throw new DOMException('Preview request cancelled', 'AbortError');
       if (response.ok) return response;
       const error = await response.json().catch(() => ({}));
+      if (activeRequest !== request) throw new DOMException('Preview request cancelled', 'AbortError');
       // Retry only a confirmed rejection before generation started. Support
       // the previous backend's exact busy response while a deploy rolls out.
       const busy = response.status === 503 && (error.code === 'preview_busy' ||
@@ -165,22 +188,27 @@
     audio.pause();
     result.hidden = true;
     const controller = new AbortController();
+    const request = {controller};
+    activeRequest = request;
     const payload = JSON.stringify({url: articleUrl, text: articleText, voice: form.elements.voice.value});
     // Coarse estimates, not provider-reported progress. Unknown article lengths
     // and longer excerpts use the service's full two-minute generation budget.
     const inputSize = Math.max(text.value.trim().split(/\s+/u).length, Math.ceil(text.value.length / 6));
     const generationRange = paste && inputSize <= 80 ? [10, 60] : [30, 120];
-    let timeout = setTimeout(() => controller.abort(), 90000);
+    request.timeout = setTimeout(() => cancelRequest(request, true), 90000);
     try {
       await waitForService(controller.signal);
-      clearTimeout(timeout);
+      if (activeRequest !== request) return;
+      clearTimeout(request.timeout);
       // Allow up to two minutes waiting for capacity, plus a two-minute job.
-      timeout = setTimeout(() => controller.abort(), 250000);
+      request.timeout = setTimeout(() => cancelRequest(request, true), 250000);
       setEstimate('generating', ...generationRange);
-      const response = await requestPreview(payload, controller.signal, generationRange);
+      const response = await requestPreview(payload, request, generationRange);
+      if (activeRequest !== request) return;
       if (!response.headers.get('Content-Type')?.startsWith('audio/mpeg')) throw new Error('The service did not return audio. Please try again.');
       setEstimate('finishing', 1, 15);
       const blob = await response.blob();
+      if (activeRequest !== request) return;
       if (!blob.size || blob.size > 2 * 1024 * 1024) throw new Error('The service returned an invalid audio preview.');
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       audioUrl = URL.createObjectURL(blob);
@@ -191,15 +219,13 @@
       else source.removeAttribute('href');
       result.hidden = false;
     } catch (error) {
-      showError(error.name === 'AbortError' ? 'The preview service took too long to respond. Try a shorter excerpt or try again shortly.' : error instanceof TypeError ? 'Couldn’t reach the preview service. Please try again shortly.' : error.message);
+      if (activeRequest === request) showError(error.name === 'AbortError' ? 'The preview service took too long to respond. Try a shorter excerpt or try again shortly.' : error instanceof TypeError ? 'Couldn’t reach the preview service. Please try again shortly.' : error.message);
     } finally {
-      clearTimeout(timeout);
-      stopTiming();
-      pending = false;
-      button.disabled = false;
-      button.textContent = 'Generate audio preview';
-      form.removeAttribute('aria-busy');
+      finishRequest(request);
     }
   });
-  window.addEventListener('pagehide', (event) => { if (audioUrl && !event.persisted) URL.revokeObjectURL(audioUrl); });
+  window.addEventListener('pagehide', (event) => {
+    if (activeRequest) cancelRequest(activeRequest);
+    if (audioUrl && !event.persisted) URL.revokeObjectURL(audioUrl);
+  });
 })();

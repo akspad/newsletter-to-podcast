@@ -7,6 +7,8 @@ python -m pip install --require-hashes --only-binary=:all: -r requirements.txt -
 python -m unittest discover -s tests -v
 ```
 
+Node.js 18+ also enables the frontend request-lifecycle regressions in that command; no npm packages are required. Run them directly with `node tests/frontend/preview.test.cjs`. The Python wrapper skips these checks when Node is unavailable.
+
 Keep test fixtures fictional. Never commit publication lists, login cookies, API keys, real paid article text, generated personal audio or processing state. `publications.example.txt` and `.env.example` document the supported configuration.
 
 For bug reports, include your Python version, mode, sanitized configuration and a reproducible example using content you can share. Avoid posting raw provider errors, private URLs or article bodies.

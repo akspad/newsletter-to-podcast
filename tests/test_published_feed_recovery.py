@@ -76,6 +76,28 @@ class PublishedFeedRecoveryTests(unittest.TestCase):
             self.assertIn('retired-history', state['seen'])
             self.assertIn(key, state['seen'])
 
+    def test_source_outage_leaves_retry_payload_and_publication_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+                'SITE_DIR': tmp+'/site', 'STATE_DIR': tmp+'/state', 'EPISODE_MODE': 'full'}, clear=True):
+            settings = config.Settings.from_env()
+            settings.site.mkdir()
+            pub = {'base': 'https://fictional.example/feed', 'name': 'Research Notes', 'rss': True, 'mode': 'full'}
+            queued = {'id': 3, 'title': 'A queued report', 'post_date': NOW, 'body_html': '<p>Original text.</p>'}
+            document = feed.build('https://original.example', [episode('post-old'), episode('post-missing')])
+            (settings.site/'feed.xml').write_text(document)
+            storage.save(settings, {'episodes': [episode('post-old')], 'seen': ['retired-history'],
+                                   'retry': [{'pub': pub, 'post': queued}], 'last_run': None})
+            saved = (settings.state_dir/'state.json').read_bytes()
+            def unavailable(_):
+                raise OSError('PRIVATE fictional provider details')
+            source = types.SimpleNamespace(recent_posts=unavailable)
+            with patch('main.make_episode', side_effect=AssertionError('Outage must not consume retries')), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as errors:
+                self.assertEqual(main.run(settings, [pub], source), 1)
+            self.assertEqual((settings.state_dir/'state.json').read_bytes(), saved)
+            self.assertEqual((settings.site/'feed.xml').read_text(), document)
+            self.assertNotIn('PRIVATE', errors.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main()

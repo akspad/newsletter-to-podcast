@@ -58,6 +58,14 @@ class MissingFeedIdentityTests(unittest.TestCase):
                     post = self.discover(kind, entry(kind, 'one', identity, link))[0]
                     self.assertEqual(post['id'], int(hashlib.sha1((identity or link).encode()).hexdigest()[:10], 16))
 
+    def test_publisher_id_survives_article_edits_and_link_changes(self):
+        for kind in ('rss', 'atom'):
+            for identity in ('urn:report:one', ' urn:report:one '):
+                with self.subTest(kind=kind, identity=identity):
+                    before = self.discover(kind, entry(kind, 'one', identity, 'https://fictional.example/old'))[0]
+                    after = self.discover(kind, entry(kind, 'revised', identity, 'https://fictional.example/new'))[0]
+                    self.assertEqual(before['id'], after['id'])
+
     def test_every_unlinked_entry_publishes_once_and_reordering_does_not_duplicate(self):
         for kind in ('rss', 'atom'):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
