@@ -27,7 +27,7 @@ def reference_id(value, base_url):
 def linked_byline_names(byline):
     """Read distinct author names inside attribution, excluding its controls."""
     members = byline.select('[rel~="author"], [itemprop~="author"], [itemprop~="name"], '
-                            'a[href*="/authors/"], a[href*="/author/"]')
+                            'a[href*="/authors/"], a[href*="/author/"], a[href*="/by/"]')
     explicit = bool(members)
     if ('author' in byline.get('rel', []) or 'author' in byline.get('itemprop', '').split()
             or 'author' in byline.get('class', [])) and byline.parent:
@@ -230,7 +230,7 @@ def article_details(soup, url):
     scope = article_scope(soup, title, url)
     byline = next((node for node in scope.select('[rel~="author"], [itemprop~="author"], '
                   '.PostsAuthors-root, .byline, .news-article--authored-by, p.author, .c-article__author__name')
-                   if belongs_to_scope(node, scope)), None)
+                   if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])), None)
     if byline is None:
         # An ordinary link to somebody's author page in the prose isn't a
         # byline. Accept these links only inside article attribution markup.
@@ -238,7 +238,7 @@ def article_details(soup, url):
                                   '.blog-post-meta a[href*="/author/"]')
     if byline is None:
         byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by, .c-article__author__name')
-                       if belongs_to_scope(node, scope)), None)
+                       if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])), None)
     if byline is not None and re.fullmatch(r'by\s*:?', clean(byline.get_text(' ', strip=True)), re.I):
         byline = next((node for node in byline.parent.select(
             ':scope > .author, :scope > [rel~="author"], :scope > [itemprop~="author"]')
@@ -261,12 +261,16 @@ def article_details(soup, url):
         members = linked_byline_names(byline)
         if members:
             byline_name = ', '.join(members)
-            if len(members) > 1:
+            # A visible single name may be a collapsed view of a complete
+            # structured coauthor list. Keep that list when it agrees.
+            structured_authors = article.get('author')
+            if (len(members) > 1 or not isinstance(structured_authors, list) or
+                    not any(names(value) == byline_name for value in structured_authors)):
                 byline_authors = byline_name
     # An explicit visible author list is stronger evidence than a generic
     # publisher account in JSON-LD (for example "The Editors"). Read the whole
     # group so a multi-author byline isn't reduced to its first link.
-    groups = [node for node in soup.select('.article-authors, .c-article-author')
+    groups = [node for node in soup.select('.article-authors, .c-article-author, .single-article-meta .bylines')
               if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])]
     if labels.get('author') is not None:
         groups.append(labels['author'])

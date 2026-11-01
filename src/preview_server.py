@@ -21,7 +21,8 @@ import preview
 import website
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUEST_BYTES = 120_000
+# Escaped JSON can be much larger than the validated UTF-8 text it carries.
+REQUEST_BYTES = preview.MAX_WORKER_INPUT_BYTES
 REQUEST_ID = ContextVar('preview_request_id', default='')
 
 

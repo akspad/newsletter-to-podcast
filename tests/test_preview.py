@@ -443,7 +443,8 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
         await self.client.close()
 
     async def test_oversized_text_gets_a_shorter_excerpt_prompt_before_generation(self):
-        for text, expected_status in (('é' * 50001, 400), ('a' * 100001, 400), ('a' * 130000, 413)):
+        for text, expected_status in (('é' * 50001, 400), ('a' * 100001, 400), ('a' * 130000, 400),
+                                      ('a' * (preview_server.REQUEST_BYTES + 1), 413)):
             data = json.dumps({'text': text}, ensure_ascii=False).encode('utf-8')
             response = await self.client.post('/api/preview', data=data,
                                               headers={'Content-Type': 'application/json', 'Origin': 'https://demo.example'})
@@ -457,6 +458,17 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
                                               headers={'Content-Type': 'application/json'})
             self.assertEqual(response.status, 200)
         self.assertEqual(len(self.calls), 5)  # Invalid inputs spent no generation allowance.
+
+    async def test_escaped_json_preserves_valid_unicode_and_backslashes(self):
+        for text in ('界' * 33333 + 'a', '"\\' * 45000):
+            for ascii_encoding in (False, True):
+                with self.subTest(ascii_encoding=ascii_encoding, text_bytes=len(text.encode())):
+                    data = json.dumps({'text': text}, ensure_ascii=ascii_encoding).encode('utf-8')
+                    response = await self.client.post('/api/preview', data=data,
+                                                      headers={'Content-Type': 'application/json'})
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(self.calls[-1]['text'], text)
+        self.assertEqual(len(self.calls), 4)
 
     async def test_form_to_mp3_response_and_cors(self):
         page = await self.client.get("/")
@@ -516,7 +528,7 @@ class PreviewApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status, 400)
         self.assertEqual((await self.client.post("/api/preview", data="bad json", headers={"Content-Type": "application/json"})).status, 400)
         self.assertEqual((await self.client.post("/api/preview", data="text")).status, 415)
-        self.assertEqual((await self.client.post("/api/preview", json={"text": "a" * 130000})).status, 413)
+        self.assertEqual((await self.client.post("/api/preview", json={"text": "a" * (preview_server.REQUEST_BYTES + 1)})).status, 413)
         self.assertEqual(self.calls, [])
 
     async def test_rate_limit_is_enforced(self):

@@ -11,7 +11,7 @@ BODY_SELECTORS = (
 FOOTNOTE_NAV = (
     '[role~="doc-noteref"], [role~="doc-backlink"], a.footnote-ref, a.footnote-backref, '
     'a.reversefootnote, a.footnote-return, a[rel~="footnote"], a[rel~="footnote-backref"], '
-    'sup a[href^="#fn"]'
+    'sup a[href^="#fn"], a[aria-label^="Back to reference " i][href^="#"]'
 )
 MONTH = (r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|'
          r'Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)')

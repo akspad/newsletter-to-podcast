@@ -14,7 +14,7 @@ EXCLUDED = (
     '[role="complementary"], [role="dialog"], .visually-hidden, .sr-only, '
     f'{FOOTNOTE_NAV}, '
     '.post-header, .post-footer, .post-meta, .post-metadata, .post-actions, .share-buttons, '
-    '.byline, [data-block="byline"], [data-testid="multi-byline"], '
+    '[data-block="byline"], [data-testid="multi-byline"], '
     '[itemprop="datePublished"], [itemprop="dateModified"], [data-testid="timestamp"], '
     '.subscription-widget, .entryFooter, .mobile-date-eyebrow, .edit-page-link, '
     '.posted, .publish-date-author, .basic-hero--blog-detail__description, '
@@ -105,6 +105,27 @@ def remove_press_contacts(root):
             node.decompose()
 
 
+def remove_article_footer(root, author):
+    """Remove a marked footer and its adjacent author-bio/feedback labels."""
+    for footer in root.select('#single-article-footer'):
+        if footer.parent is None or footer.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        feedback = footer.find_previous_sibling()
+        if (feedback is not None and feedback.name == 'p' and feedback.find('a') and
+                feedback.find(['b', 'strong']) and len(feedback.get_text(' ', strip=True)) < 350 and
+                re.match(r'^FEEDBACK:\s*Use this form\b', feedback.get_text(' ', strip=True), re.I)):
+            biography = feedback.find_previous_sibling()
+            feedback.decompose()
+            if (author and biography is not None and biography.name == 'p' and
+                    biography.find(['i', 'em']) and biography.find('a') and
+                    len(biography.get_text(' ', strip=True)) < 500 and
+                    re.match(re.escape(author)+r' is (?:a|an) .{0,100}\b(?:writer|reporter|journalist|editor)\b',
+                             biography.get_text(' ', strip=True)) and
+                    re.search(r'\bFind (?:him|her|them)\s+on\b', biography.get_text(' ', strip=True), re.I)):
+                biography.decompose()
+        footer.decompose()
+
+
 def remove_table_of_contents(root, url):
     """Remove marked section indexes, keeping their destination prose intact."""
     contents = list(root.select('.toc, #toc, .table-of-contents, #table-of-contents'))
@@ -165,6 +186,7 @@ def clean_tree(root, title, author, url=''):
             widget.decompose()
     remove_site_endmatter(root)
     remove_press_contacts(root)
+    remove_article_footer(root, author)
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
@@ -188,7 +210,8 @@ def clean_tree(root, title, author, url=''):
                    paragraph.find('strong') and len(value) < 250)
         newsletter = (re.match(r'^Enjoying .{1,100}\?\s*Subscribe to our free newsletter', value, re.I)
                       and paragraph.find('a') and len(value) < 250)
-        credit = re.match(r'^Lead Image:', value, re.I) and paragraph.find('em') and len(value) < 300
+        credit = (re.match(r'^(?:Lead|Banner) Image:', value, re.I) and
+                  paragraph.find(['em', 'i']) and len(value) < 300)
         if related or newsletter or credit:
             paragraph.decompose()
     for heading in list(root.find_all(['h2', 'h3'])):
@@ -227,7 +250,7 @@ def clean_tree(root, title, author, url=''):
                            if not any(ancestor is byline for ancestor in text.parents))
         if re.fullmatch(r'\s*By\s*:?\s*', outside, re.I):
             parent.decompose()
-    for credit in root.select('.c-article-author, .c-article__author'):
+    for credit in root.select('.byline, .c-article-author, .c-article__author'):
         if credit.parent is not None and not credit.find_parent(['blockquote', 'pre', 'code']):
             credit.decompose()
     for node in root.select(EXCLUDED):
@@ -236,6 +259,8 @@ def clean_tree(root, title, author, url=''):
     remove_table_of_contents(root, url)
     # Attribute the article once, outside its narration body.
     for node in root.select('h1, h2, h3, dt, [rel~="author"], [itemprop~="author"]'):
+        if node.find_parent(['blockquote', 'pre', 'code']):
+            continue
         value = heading_text(node) if node.name in ('h1', 'h2', 'h3') else ' '.join(node.get_text(' ', strip=True).split())
         if ((title and heading_matches(value[:160].strip(), title)) or
                 (author and re.sub(r'^by\s+', '', value, flags=re.I)[:100].strip() == author)):
