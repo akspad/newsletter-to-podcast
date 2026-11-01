@@ -211,7 +211,9 @@ def clean_tree(root, title, author, url=''):
         newsletter = (re.match(r'^Enjoying .{1,100}\?\s*Subscribe to our free newsletter', value, re.I)
                       and paragraph.find('a') and len(value) < 250)
         credit = (re.match(r'^(?:Lead|Banner) Image:', value, re.I) and
-                  paragraph.find(['em', 'i']) and len(value) < 300)
+                  paragraph.find(['em', 'i']) and len(value) < 300 and
+                  not any(str(text).strip() for text in paragraph.find_all(string=True)
+                          if text.find_parent(['em', 'i']) is None))
         if related or newsletter or credit:
             paragraph.decompose()
     for heading in list(root.find_all(['h2', 'h3'])):
@@ -369,6 +371,12 @@ def extract_text(soup, title='', author='', url=''):
 
     # Density-based extraction handles unmarked layouts and separates article
     # prose from metadata, related stories, controls and comments.
+    # Links and attribution classes inside an editorial quotation describe its
+    # source, not navigation. Normalize the cleaned quotation to narration text
+    # before density pruning, retaining its position and the surrounding layout.
+    quotes = [node for node in scope.select('blockquote') if not node.find_parent('blockquote')]
+    for quote in quotes:
+        quote.string = plain_text(quote)
     # Empty inline diagram markers can make the density extractor discard
     # their following text. Unwrap them first, including nested empty spans.
     for span in reversed(scope.select('span')):

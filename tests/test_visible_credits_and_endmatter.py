@@ -55,6 +55,14 @@ class VisibleCreditTests(unittest.TestCase):
 
 
 class EndmatterTests(unittest.TestCase):
+    def test_partial_emphasis_in_caption_named_prose_is_preserved(self):
+        for label in ('Lead Image:', 'Banner Image:'):
+            prose = label + ' The Illustrated World is the name of the exhibition discussed in this article.'
+            text = read('<article><div class="entry-content"><p>' + BODY + '</p><p>' + label +
+                        ' <em>The Illustrated World</em> is the name of the exhibition discussed in this article.</p>'
+                        '</div></article>')
+            self.assertEqual(text.partition('\n')[2], BODY + ' ' + prose)
+
     def test_marked_feedback_and_author_bio_are_omitted_but_reporting_credit_remains(self):
         content=('<article><h1>A discovery</h1><p class="byline"><a href="/author/alex">Alex Writer</a></p>'
                  '<div class="entry-content"><p>'+BODY+'</p><p><i>Sam Writer contributed reporting.</i></p>'
