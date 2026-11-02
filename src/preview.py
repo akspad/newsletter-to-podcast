@@ -163,7 +163,10 @@ async def narrate(text, voice, path):
                         output.write(item["data"])
             if not count:
                 raise edge_tts.exceptions.NoAudioReceived("No speech returned")
-            seconds = duration(path)
+            try:
+                seconds = await asyncio.to_thread(duration, path, verify=True)
+            except (ValueError, subprocess.SubprocessError) as error:
+                raise IncompleteSpeechError from error
             if not math.isfinite(seconds) or seconds <= 0 or seconds < minimum_audio_seconds(text):
                 raise IncompleteSpeechError
             stage_log('speech', 'completed', started, attempt=attempt)

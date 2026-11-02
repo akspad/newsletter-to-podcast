@@ -87,10 +87,25 @@ def chunks(text):
     return out
 
 
-def duration(path) -> float:
+def duration(path, *, verify=False) -> float:
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-                       capture_output=True, text=True, check=True)
-    return float(r.stdout.strip())
+                       capture_output=True, text=True, check=True, timeout=15)
+    seconds = float(r.stdout.strip())
+    if verify:
+        # A readable MP3 header can hide damaged frames later in the stream.
+        # Check complete provider/cache clips before accepting or joining them.
+        decoded = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", str(path),
+                                  "-map", "0:a:0", "-af", "asetpts=N/SR/TB", "-progress", "pipe:1",
+                                  "-nostats", "-f", "null", "-"], check=True, timeout=30,
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        # Some decoder versions silently resynchronize after missing frames.
+        # Reset timestamps to the decoded sample count so a gap cannot count as
+        # speech. Allow encoder padding and conservative duration estimation.
+        clocks = re.findall(r'^out_time_us=(\d+)$', decoded.stdout, re.M)
+        rendered = int(clocks[-1]) / 1_000_000 if clocks else 0
+        if rendered <= 0 or rendered + max(0.25, seconds * 0.02) < seconds:
+            raise ValueError("Audio decoding omitted part of the stream")
+    return seconds
 
 
 def speak(text: str, path: Path, attempts=3) -> bool:
@@ -113,7 +128,7 @@ def speak(text: str, path: Path, attempts=3) -> bool:
             rate = os.environ.get("TTS_RATE") or RATE
             asyncio.run(asyncio.wait_for(save_audio(edge_tts.Communicate(text, voice, rate=rate), path), timeout=60))
             if path.stat().st_size > 0:
-                seconds = duration(path)
+                seconds = duration(path, verify=True)
                 # A successful stream can still contain only a tiny prefix.
                 # Use a deliberately generous 600 words/minute ceiling, adjusted
                 # for the requested rate, to catch gross truncation without
@@ -153,7 +168,7 @@ def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
     if saved and saved.startswith(b"audio:"):
         path.write_bytes(saved[6:])
         try:
-            seconds = duration(path)
+            seconds = duration(path, verify=True)
             rate = os.environ.get("TTS_RATE") or RATE
             minimum = len(text.split()) / (10 * max(0.1, 1 + int(rate.rstrip("%")) / 100))
             reused = math.isfinite(seconds) and seconds > 0 and seconds >= minimum
