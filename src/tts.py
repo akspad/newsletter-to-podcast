@@ -90,13 +90,22 @@ def chunks(text):
 def duration(path, *, verify=False) -> float:
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
                        capture_output=True, text=True, check=True, timeout=15)
+    seconds = float(r.stdout.strip())
     if verify:
         # A readable MP3 header can hide damaged frames later in the stream.
         # Check complete provider/cache clips before accepting or joining them.
-        subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", str(path),
-                        "-map", "0:a:0", "-f", "null", "-"], check=True, timeout=30,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return float(r.stdout.strip())
+        decoded = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", str(path),
+                                  "-map", "0:a:0", "-af", "asetpts=N/SR/TB", "-progress", "pipe:1",
+                                  "-nostats", "-f", "null", "-"], check=True, timeout=30,
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        # Some decoder versions silently resynchronize after missing frames.
+        # Reset timestamps to the decoded sample count so a gap cannot count as
+        # speech. Allow encoder padding and conservative duration estimation.
+        clocks = re.findall(r'^out_time_us=(\d+)$', decoded.stdout, re.M)
+        rendered = int(clocks[-1]) / 1_000_000 if clocks else 0
+        if rendered <= 0 or rendered + max(0.25, seconds * 0.02) < seconds:
+            raise ValueError("Audio decoding omitted part of the stream")
+    return seconds
 
 
 def speak(text: str, path: Path, attempts=3) -> bool:

@@ -58,8 +58,20 @@ class AudioIntegrityTests(unittest.TestCase):
             bad.write_bytes(DAMAGED)
             self.assertEqual(tts.duration(good), tts.duration(bad))
             self.assertGreater(tts.duration(good, verify=True), 3)
-            with self.assertRaises(subprocess.SubprocessError):
+            with self.assertRaises((ValueError, subprocess.SubprocessError)):
                 tts.duration(bad, verify=True)
+
+    def test_silent_frame_skipping_cannot_use_header_duration_as_decoded_audio(self):
+        for decoded, succeeds in ((2_000_000, False), (3_000_000, True)):
+            def run(args, **kwargs):
+                text = '3.048\n' if args[0] == 'ffprobe' else f'out_time_us={decoded}\nprogress=end\n'
+                return subprocess.CompletedProcess(args, 0, stdout=text)
+            with self.subTest(decoded=decoded), patch('tts.subprocess.run', side_effect=run):
+                if succeeds:
+                    self.assertEqual(tts.duration(Path('fictional.mp3'), verify=True), 3.048)
+                else:
+                    with self.assertRaises(ValueError):
+                        tts.duration(Path('fictional.mp3'), verify=True)
 
     def test_personal_speech_retries_corruption_before_caching_or_joining(self):
         calls = []
