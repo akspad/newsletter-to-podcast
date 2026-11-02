@@ -87,9 +87,15 @@ def chunks(text):
     return out
 
 
-def duration(path) -> float:
+def duration(path, *, verify=False) -> float:
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-                       capture_output=True, text=True, check=True)
+                       capture_output=True, text=True, check=True, timeout=15)
+    if verify:
+        # A readable MP3 header can hide damaged frames later in the stream.
+        # Check complete provider/cache clips before accepting or joining them.
+        subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", str(path),
+                        "-map", "0:a:0", "-f", "null", "-"], check=True, timeout=30,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return float(r.stdout.strip())
 
 
@@ -113,7 +119,7 @@ def speak(text: str, path: Path, attempts=3) -> bool:
             rate = os.environ.get("TTS_RATE") or RATE
             asyncio.run(asyncio.wait_for(save_audio(edge_tts.Communicate(text, voice, rate=rate), path), timeout=60))
             if path.stat().st_size > 0:
-                seconds = duration(path)
+                seconds = duration(path, verify=True)
                 # A successful stream can still contain only a tiny prefix.
                 # Use a deliberately generous 600 words/minute ceiling, adjusted
                 # for the requested rate, to catch gross truncation without
@@ -153,7 +159,7 @@ def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
     if saved and saved.startswith(b"audio:"):
         path.write_bytes(saved[6:])
         try:
-            seconds = duration(path)
+            seconds = duration(path, verify=True)
             rate = os.environ.get("TTS_RATE") or RATE
             minimum = len(text.split()) / (10 * max(0.1, 1 + int(rate.rstrip("%")) / 100))
             reused = math.isfinite(seconds) and seconds > 0 and seconds >= minimum
