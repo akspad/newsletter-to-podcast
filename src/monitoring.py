@@ -1,10 +1,13 @@
 """Private-content-free generation diagnostics and workflow health counts."""
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 import os
 from pathlib import Path
 import subprocess
+import re
+import sys
+import uuid
 
 
 EPISODE_STAGES = frozenset({'unknown', 'extract', 'prepare', 'summary', 'speech', 'audio_metadata'})
@@ -21,12 +24,49 @@ def failure_reason(error):
     return next((code for kind, code in categories if isinstance(error, kind)), 'unexpected_error')
 
 
+SUMMARY_REASONS = frozenset({'none', 'authentication_failed', 'permission_denied', 'model_unavailable',
+    'request_rejected', 'rate_limited', 'service_unavailable', 'provider_error', 'response_blocked',
+    'truncated_response', 'empty_response', 'timeout', 'connection_error', 'missing_file', 'io_error',
+    'subprocess_error', 'invalid_value', 'runtime_error', 'unexpected_error', 'budget_exceeded'})
+
+
+@dataclass
+class SummaryDiagnostic:
+    identity: str = field(default_factory=lambda: uuid.uuid4().hex)
+    reason: str = 'none'
+    model_slot: int = 0
+    attempt: int = 0
+    http_status: int | None = None
+
+    def fields(self):
+        reason = self.reason if type(self.reason) is str and self.reason in SUMMARY_REASONS else 'unexpected_error'
+        identity = self.identity if type(self.identity) is str and re.fullmatch(r'[0-9a-f]{32}', self.identity) else 'unknown'
+        slot = self.model_slot if type(self.model_slot) is int and 0 <= self.model_slot <= 2 else 0
+        attempt = self.attempt if type(self.attempt) is int and 0 <= self.attempt <= 3 else 0
+        status = f' http_status={self.http_status}' if type(self.http_status) is int and 100 <= self.http_status <= 599 else ''
+        return f'reason={reason} summary_id={identity} model_slot={slot} attempt={attempt}{status}'
+
+    def log(self, event):
+        event = event if type(event) is str and event in {'attempt', 'retry', 'exhausted', 'completed', 'failed'} else 'failed'
+        print(f'summary_request event={event} {self.fields()}', file=sys.stderr, flush=True)
+
+
+def summary_diagnostic():
+    diagnostic = SummaryDiagnostic()
+    if episode := _episode_diagnostic.get():
+        episode.summary = diagnostic
+    return diagnostic
+
+
 @dataclass
 class EpisodeDiagnostic:
     stage: str = 'unknown'
+    summary: SummaryDiagnostic | None = None
 
     def fields(self, error):
         stage = self.stage if type(self.stage) is str and self.stage in EPISODE_STAGES else 'unknown'
+        if stage == 'summary' and type(self.summary) is SummaryDiagnostic:
+            return f'stage={stage} {self.summary.fields()}'
         return f'stage={stage} reason={failure_reason(error)}'
 
 
