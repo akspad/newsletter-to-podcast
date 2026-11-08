@@ -24,6 +24,26 @@ def failure_reason(error):
     return next((code for kind, code in categories if isinstance(error, kind)), 'unexpected_error')
 
 
+def source_failure_fields(error):
+    """Expose only validated transport labels, never source URLs or response text."""
+    from substack import SourceDownloadError
+
+    if not isinstance(error, SourceDownloadError):
+        return f'reason={failure_reason(error)}'
+    fields = ['reason=source_download_error']
+    status = error.status_code
+    if type(status) is int and 100 <= status <= 599:
+        fields.append(f'http_status={status}')
+    diagnostic = error.diagnostics
+    # Revalidate at the output boundary rather than trusting mutable attributes.
+    pattern = (r'server=(?:vercel|cloudflare|cloudfront|fastly|nginx|other|unknown) '
+               r'protection=(?:none|vercel_challenge|cloudflare_challenge) '
+               r'retry_after=(?:[0-9]{1,6}|present|none)')
+    if type(diagnostic) is str and re.fullmatch(pattern, diagnostic):
+        fields.append(diagnostic)
+    return ' '.join(fields)
+
+
 SUMMARY_REASONS = frozenset({'none', 'authentication_failed', 'permission_denied', 'model_unavailable',
     'request_rejected', 'rate_limited', 'service_unavailable', 'provider_error', 'response_blocked',
     'truncated_response', 'empty_response', 'timeout', 'connection_error', 'missing_file', 'io_error',

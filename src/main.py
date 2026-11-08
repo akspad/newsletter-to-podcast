@@ -19,7 +19,7 @@ import tts
 import website
 from schedule import scheduled_run_due
 from config import Settings, load_env
-from monitoring import GenerationReport, episode_attempt, set_episode_stage
+from monitoring import GenerationReport, episode_attempt, set_episode_stage, source_failure_fields
 from substack import Substack, has_audio, html_to_text
 
 FULL_PLACEHOLDER = "Full narration of the text available from the source."
@@ -278,7 +278,8 @@ def _run(settings, publications, sub):
                 sources_available += 1
         except Exception as error:
             source_failed = True
-            print(f"Source {index} unavailable ({type(error).__name__}); will retry.", file=sys.stderr)
+            print(f"Source {index} unavailable ({source_failure_fields(error)}); will retry.",
+                  file=sys.stderr, flush=True)
     source_failed = source_failed or overflow
     if source_failed and not sources_available:
         print("All sources unavailable. Existing feed, audio and processing state were left unchanged; "
