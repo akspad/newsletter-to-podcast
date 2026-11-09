@@ -23,6 +23,10 @@ HEADERS = {"Accept": "application/json, text/plain, */*", "Accept-Language": "en
 # Fields that indicate a post already ships with audio (podcast upload or voiceover).
 AUDIO_FIELDS = ("podcast_url", "podcast_upload_id", "podcast_duration", "voiceover_upload_id", "audio_items")
 
+# The archive API rejects a single 50-entry request. Keep the discovery window
+# by using small pages, with a fixed request ceiling as well as the entry cap.
+ARCHIVE_PAGE_SIZE = 20
+
 
 def feed_date(value, *, rss=False):
     """Return a usable timestamp, or skip an entry whose date cannot be parsed."""
@@ -328,7 +332,63 @@ class Substack:
             return self.rss_posts(pub, security.MAX_SOURCE_ENTRIES)
         if pub.get("page"):
             return self.page_posts(pub, 30)
-        return self.get(f"{pub['base']}/api/v1/archive", sort="new", limit=limit)[:min(limit, security.MAX_SOURCE_ENTRIES)]
+        return self.archive_posts(pub, limit)
+
+    def archive_posts(self, pub, limit):
+        """Read bounded cursor pages, retaining older list/offset API support."""
+        limit = max(0, min(limit, security.MAX_SOURCE_ENTRIES))
+        posts, seen, cursors = [], set(), set()
+        complete = True
+        offset, cursor = 0, None
+        for _ in range((limit + ARCHIVE_PAGE_SIZE - 1) // ARCHIVE_PAGE_SIZE):
+            count = min(ARCHIVE_PAGE_SIZE, limit - offset)
+            params = {"sort": "new", "limit": count}
+            if cursor is not None:
+                params["cursor"] = cursor
+            elif offset:
+                params["offset"] = offset
+            try:
+                page = self.get(f"{pub['base']}/api/v1/archive", **params)
+                entries = page.get("posts") if isinstance(page, dict) else page
+                next_cursor = page.get("nextCursor") if isinstance(page, dict) else None
+                if (not isinstance(entries, list) or isinstance(page, dict) and "nextCursor" not in page or
+                        next_cursor is not None and (not isinstance(next_cursor, str) or
+                                                     not next_cursor.strip() or len(next_cursor) > 4096)):
+                    raise ValueError("Invalid archive page")
+            except (security.BudgetExceeded, security.RunBudgetExceeded):
+                raise
+            except (RuntimeError, OSError, ValueError):
+                if not posts:
+                    raise
+                # Usable first pages must not advance the catch-up checkpoint
+                # past older articles that could not yet be discovered.
+                return SourcePosts(posts, complete=False)
+            previous = len(posts)
+            for post in entries[:count]:
+                identity = post.get("id") if isinstance(post, dict) else None
+                if type(identity) in (int, str):
+                    if identity in seen:
+                        complete = False
+                        continue
+                    seen.add(identity)
+                posts.append(post)
+            offset += min(len(entries), count)
+            if len(entries) > count:
+                return SourcePosts(posts, complete=False)
+            if isinstance(page, dict):
+                if next_cursor is None:
+                    return SourcePosts(posts, complete=complete)
+                if not entries or next_cursor in cursors:
+                    return SourcePosts(posts, complete=False)
+                cursors.add(next_cursor)
+                cursor = next_cursor
+            elif len(entries) < count:
+                return SourcePosts(posts, complete=complete)
+            if offset >= limit:
+                return SourcePosts(posts, complete=complete and len(posts) >= limit)
+            if len(posts) == previous:
+                return SourcePosts(posts, complete=False)
+        return SourcePosts(posts, complete=not limit)
 
     def rss_posts(self, pub, limit):
         """Reads an RSS feed into the same shape as Substack's archive entries."""

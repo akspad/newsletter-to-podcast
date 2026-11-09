@@ -242,7 +242,7 @@ class CatchUpTests(unittest.TestCase):
             self.assertEqual(len(source.recent_posts(PUB)), 75)
         with patch.object(source, "get", return_value=[]) as get:
             source.recent_posts({**PUB, "rss": False})
-            self.assertEqual(get.call_args.kwargs["limit"], 50)
+            self.assertEqual(get.call_args.kwargs["limit"], 20)
 
 
 if __name__ == "__main__":
