@@ -15,6 +15,43 @@ def metadata(html):
 
 
 class ArticleMetadataTests(unittest.TestCase):
+    def test_duplicate_page_schemas_prefer_visible_headline_over_seo_posting_record(self):
+        generic = {'@type': 'Article', 'url': 'https://fictional.example/story',
+                   'headline': 'A discovery - Science Notes', 'author': {'name': 'postingaccount'}}
+        specific = {'@type': 'NewsArticle', 'mainEntityOfPage': {'@id': 'https://fictional.example/story'},
+                    'headline': 'A discovery', 'author': [{'name': 'Alex Writer'}, {'name': 'Sam Writer'}]}
+        for records in ([generic, specific], [specific, generic]):
+            html = ('<title>A discovery - Science Notes</title><meta property="og:title" '
+                    'content="A discovery - Science Notes"><script type="application/ld+json">' +
+                    json.dumps(records) + '</script><article><h1>A discovery</h1></article>')
+            self.assertEqual(metadata(html)[2], 'Alex Writer, Sam Writer')
+            byline = html.replace('</h1>', '</h1><p class="byline"><a rel="author">Visible Writer</a></p>')
+            self.assertEqual(metadata(byline)[2], 'Visible Writer')
+
+    def test_exact_schema_headline_cannot_override_url_identity_or_borrow_hidden_heading(self):
+        generic = {'@type': 'Article', 'url': 'https://fictional.example/story',
+                   'headline': 'A discovery - Science Notes', 'author': {'name': 'Correct Writer'}}
+        other = {'@type': 'NewsArticle', 'url': 'https://fictional.example/other',
+                 'headline': 'A discovery', 'author': {'name': 'Other Writer'}}
+        html = ('<title>A discovery - Science Notes</title><script type="application/ld+json">' +
+                json.dumps([other, generic]) + '</script><article><h1>A discovery</h1></article>')
+        self.assertEqual(metadata(html)[2], 'Correct Writer')
+        other['url'] = generic['url']
+        other['headline'] = 'Hidden headline'
+        html = ('<title>A discovery - Science Notes</title><script type="application/ld+json">' +
+                json.dumps([generic, other]) + '</script><article><h1>A discovery</h1>'
+                '<h1 hidden>Hidden headline</h1></article>')
+        self.assertEqual(metadata(html)[2], 'Correct Writer')
+
+    def test_schema_type_does_not_outrank_matching_visible_headline(self):
+        records = [{'@type': 'NewsArticle', 'url': 'https://fictional.example/story',
+                    'headline': 'A discovery - Science Notes', 'author': {'name': 'postingaccount'}},
+                   {'@type': 'Article', 'url': 'https://fictional.example/story',
+                    'headline': 'A discovery', 'author': {'name': 'Alex Writer'}}]
+        html = ('<title>A discovery - Science Notes</title><script type="application/ld+json">' +
+                json.dumps(records) + '</script><article><h1>A discovery</h1></article>')
+        self.assertEqual(metadata(html)[2], 'Alex Writer')
+
     def test_nested_print_metadata_does_not_become_part_of_the_headline(self):
         html = ('<title>Science Notes: A discovery</title><meta name="author" content="Alex Writer">'
                 '<link rel="alternate" type="application/atom+xml" title="Science Notes - Atom">'

@@ -139,15 +139,22 @@ def article_details(soup, url):
     social_title = clean(meta('og:title', 'twitter:title'))
     page_label = clean(soup.title.get_text(' ', strip=True) if soup.title else '')
     identity_scope = article_scope(soup, social_title or page_label, url)
-    title_hints = [social_title, page_label] + [
+    visible_titles = [
         clean(heading_text(node)) for node in
         identity_scope.select('.PostsPageTitle-root, h1, .entry-title')
         if belongs_to_scope(node, identity_scope)]
+    title_hints = [social_title, page_label] + visible_titles
     title_hints = list(filter(None, title_hints))
     def article_score(node):
         identities = article_urls(node)
         return (requested in identities, canonical_url is not None and canonical_url in identities,
-                any(heading_matches(clean(node.get('headline')), hint) for hint in title_hints))
+                any(heading_matches(clean(node.get('headline')), hint) for hint in title_hints),
+                # Publishing plugins can emit a second record for the same
+                # URL with an SEO suffix and the posting account as author.
+                # Break otherwise equal identity scores using the article's
+                # visible headline, independently of schema type or order.
+                any(clean(node.get('headline')).casefold() == hint.casefold()
+                    for hint in visible_titles if hint))
     def eligible_article(node):
         score = article_score(node)
         if article_urls(node):
