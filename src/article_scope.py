@@ -11,7 +11,8 @@ BODY_SELECTORS = (
 FOOTNOTE_NAV = (
     '[role~="doc-noteref"], [role~="doc-backlink"], a.footnote-ref, a.footnote-backref, '
     'a.reversefootnote, a.footnote-return, a[rel~="footnote"], a[rel~="footnote-backref"], '
-    'sup a[href^="#fn"], a[aria-label^="Back to reference " i][href^="#"]'
+    'sup a[href^="#fn"], a[aria-label^="Back to reference " i][href^="#"], '
+    'a.ref[href^="#note-"]:has(sup)'
 )
 MONTH = (r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|'
          r'Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)')
@@ -24,6 +25,21 @@ def readable_prose(text):
     """Recognize substantial prose in spaced and unspaced writing systems."""
     return len(text.split()) >= 20 or len(re.findall(
         r'[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', text)) >= 100
+
+
+def opening_writer_credits(root):
+    """Read a publication's explicit opening writer label, never quoted prose."""
+    for body in root.select('.single-content'):
+        if not editorial(body) or body.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        paragraph = body.find('p', recursive=False)
+        if (paragraph is None or not editorial(paragraph) or
+                paragraph.find_parent(['blockquote', 'pre', 'code'])):
+            continue
+        value = paragraph.get_text(' ', strip=True)
+        match = re.fullmatch(r'This blog was written and prepared by PLOS editor ([^\d.!?:;\n]{2,100})\.?', value)
+        if match:
+            yield paragraph, match[1].strip()
 
 
 def url_identity(value, base=''):

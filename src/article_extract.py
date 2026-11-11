@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, readable_prose, url_identity
 from tts import speech_text
 
 
@@ -126,6 +126,50 @@ def remove_article_footer(root, author):
         footer.decompose()
 
 
+def remove_publication_notices(root):
+    """Omit marked publishing widgets while retaining article references/prose."""
+    for node in root.select('.cc-attribution'):
+        if node.parent is None or node.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        paragraphs = node.find_all('p')
+        if (len(paragraphs) == 1 and len(node.get_text(' ', strip=True)) < 1500 and
+                paragraphs[0].get_text(' ', strip=True).startswith('The text in this work is licensed under a Creative Commons') and
+                node.select_one('a[href*="creativecommons.org/licenses/"]')):
+            node.decompose()
+    labels = {'article-citation': 'cite this work', 'article-past-versions': 'past versions',
+              'article-licence': 'reuse this work freely'}
+    for node in root.select('section#article-citation, section#article-past-versions, section#article-licence'):
+        if (node.parent is None or node.find_parent(['blockquote', 'pre', 'code']) or
+                not node.find_parent('article', class_='centered-article-container')):
+            continue
+        heading = node.find(['h2', 'h3'])
+        if heading and heading.get_text(' ', strip=True).casefold() == labels[node['id']]:
+            node.decompose()
+
+
+def remove_repeated_cover_deck(root, title):
+    """Avoid reading a title-cover teaser again at the start of the body."""
+    for cover in root.select('.wp-block-cover__inner-container'):
+        if not editorial(cover) or cover.find_parent(['blockquote', 'pre', 'code']):
+            continue
+        heading = cover.find('h1')
+        paragraphs = cover.find_all('p')
+        owner = next((node for node in cover.parents if match(BODY_SELECTORS, node)), None)
+        if (owner is None or heading is None or len(paragraphs) != 1 or
+                not heading_matches(heading_text(heading), title)):
+            continue
+        deck = paragraphs[0]
+        following = deck.find_next('p')
+        if (following is None or not editorial(following) or
+                following.find_parent(['blockquote', 'pre', 'code']) or
+                not any(node is owner for node in following.parents)):
+            continue
+        value = ' '.join(deck.get_text(' ', strip=True).split()).rstrip('.!?')
+        body = ' '.join(following.get_text(' ', strip=True).split())
+        if len(value) > 40 and re.match(re.escape(value) + r'[.!?](?:\s|$)', body):
+            deck.decompose()
+
+
 def remove_table_of_contents(root, url):
     """Remove marked section indexes, keeping their destination prose intact."""
     contents = list(root.select('.toc, #toc, .table-of-contents, #table-of-contents'))
@@ -187,6 +231,11 @@ def clean_tree(root, title, author, url=''):
     remove_site_endmatter(root)
     remove_press_contacts(root)
     remove_article_footer(root, author)
+    remove_publication_notices(root)
+    remove_repeated_cover_deck(root, title)
+    for paragraph, writer in opening_writer_credits(root):
+        if writer == author:
+            paragraph.decompose()
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()

@@ -4,7 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
+from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, url_identity
 
 
 def clean(value, limit=160):
@@ -282,6 +282,9 @@ def article_details(soup, url):
         if not visible_authors and not group.select('a, [itemprop~="name"]'):
             visible_authors = clean(visible_text(group), 100)
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    if author.casefold() in {'plos one editors', 'plos editors'}:
+        author = next((name for node, name in opening_writer_credits(scope)
+                       if belongs_to_scope(node, scope)), author)
     if not author:
         rust_byline = soup.select_one('.publish-date-author')
         google_byline = soup.select_one('.basic-hero--blog-detail__description')
