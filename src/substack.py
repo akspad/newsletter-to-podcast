@@ -414,7 +414,7 @@ class Substack:
             if not link and guid_node is not None and guid_node.get('isPermaLink', 'true').strip().casefold() == 'true':
                 link = feed_url(guid)  # Opaque or malformed GUIDs remain identities only.
             html = item.findtext("content:encoded", namespaces=ns) or item.findtext(prefix + 'description', namespaces=ns) or ""
-            text = html_to_text(html)
+            text = html_to_text(html, title=item.findtext(prefix + 'title', namespaces=ns) or '', url=link)
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
             if published is None:
                 continue  # undated entries cannot be filtered reliably by lookback
@@ -474,7 +474,7 @@ class Substack:
             bylines = [name.strip() for author in authors if (name := author.findtext('a:name', namespaces=ns)) and name.strip()]
             guid = entry.findtext("a:id", namespaces=ns) or link
             title = ' '.join(html_to_text(atom_content(entry.find('a:title', ns))).split()) or 'Untitled'
-            text = html_to_text(body)
+            text = html_to_text(body, title=title, url=link)
             if not guid.strip():
                 guid = link
             if not guid:
@@ -567,12 +567,13 @@ class Substack:
 
     def post_text(self, pub, post):
         if pub.get("rss") or pub.get("page"):
-            return post, html_to_text(post["body_html"])
+            return post, html_to_text(post["body_html"], title=post.get("title", ""),
+                                      url=post.get("canonical_url", ""))
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
         return full, html_to_text(full.get("body_html") or "")
 
 
-def html_to_text(html: str) -> str:
+def html_to_text(html: str, *, title='', url='') -> str:
     from bs4 import BeautifulSoup, CData, NavigableString
 
     soup = BeautifulSoup(html, "html.parser")
@@ -585,6 +586,31 @@ def html_to_text(html: str) -> str:
                           '.captioned-button-wrap, .share-dialog, ' + FOOTNOTE_NAV):
         if el.parent is not None:
             el.decompose()
+    # WordPress syndication credits aren't article prose. Require the known
+    # two-link footer, this entry's title/permalink, its publisher's homepage,
+    # and a terminal paragraph. Never infer a footer from words alone.
+    identity = url_identity(url)
+    if title and identity and identity[2]:
+        for paragraph in list(soup.find_all('p')):
+            if paragraph.find_parent(['blockquote', 'pre', 'code', 'li', 'table']):
+                continue
+            links = paragraph.find_all('a')
+            if len(links) != 2:
+                continue
+            label, publisher = (speech_label.get_text('', strip=False) for speech_label in links)
+            label, publisher = ' '.join(label.split()), ' '.join(publisher.split())
+            home = url_identity(links[1].get('href'), url)
+            value = ' '.join(paragraph.get_text('', strip=False).split())
+            if (label != ' '.join(title.split()) or not publisher or
+                    value != f'The post {label} appeared first on {publisher}.' or
+                    url_identity(links[0].get('href'), url) != identity or
+                    home is None or home[:2] != identity[:2] or home[2] or home[3]):
+                continue
+            following_text = any(type(node) in (NavigableString, CData) and str(node).strip()
+                                 and not any(parent is paragraph for parent in node.parents)
+                                 for node in paragraph.next_elements)
+            if not following_text:
+                paragraph.decompose()
     # Collapse source formatting whitespace without inserting gaps between
     # inline word parts. Comments and doctypes must keep their non-text types.
     for node in list(soup.find_all(string=True)):

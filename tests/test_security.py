@@ -259,7 +259,7 @@ class ResourceTests(unittest.TestCase):
                "<updated>2026-10-12T12:00:00Z</updated><content>Body</content></entry>" for i in range(10)) + "</feed>"
         source = substack.Substack("")
         for document in [xml, atom]:
-            with patch.object(source, "get", return_value=document), patch("substack.html_to_text", side_effect=lambda x: x), \
+            with patch.object(source, "get", return_value=document), patch("substack.html_to_text", side_effect=lambda x, **context: x), \
                     patch("security.MAX_SOURCE_ENTRIES", 3):
                 self.assertEqual(len(source.recent_posts({"base": "https://fictional.example/feed", "rss": True})), 3)
 
