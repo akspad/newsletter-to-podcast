@@ -15,6 +15,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 from pathlib import Path
 import security
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
+from imported_content import clean_imported_widgets, earth_observatory_writer
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -433,6 +434,8 @@ class Substack:
                     name = name.strip() or (value if '@' not in value else '')
                     if name and name not in bylines:
                         bylines.append(name)
+            if not bylines and (writer := earth_observatory_writer(html, link)):
+                bylines = [writer]
             posts.append({
                 "id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                 "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
@@ -472,6 +475,8 @@ class Substack:
                 body = atom_content(entry.find('a:summary', ns))
             authors = entry.findall('a:author', ns) or entry.findall('a:source/a:author', ns) or root.findall('a:author', ns)
             bylines = [name.strip() for author in authors if (name := author.findtext('a:name', namespaces=ns)) and name.strip()]
+            if not bylines and (writer := earth_observatory_writer(body, link)):
+                bylines = [writer]
             guid = entry.findtext("a:id", namespaces=ns) or link
             title = ' '.join(html_to_text(atom_content(entry.find('a:title', ns))).split()) or 'Untitled'
             text = html_to_text(body, title=title, url=link)
@@ -567,6 +572,9 @@ class Substack:
 
     def post_text(self, pub, post):
         if pub.get("rss") or pub.get("page"):
+            if not post.get('publishedBylines') and (writer := earth_observatory_writer(
+                    post['body_html'], post.get('canonical_url', ''))):
+                post = {**post, 'publishedBylines': [{'name': writer}]}
             return post, html_to_text(post["body_html"], title=post.get("title", ""),
                                       url=post.get("canonical_url", ""))
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
@@ -580,6 +588,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
     for node in soup.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
+    clean_imported_widgets(soup, url)
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
     for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '
                           'svg, audio, video, iframe, .subscription-widget-wrap, .button-wrapper, '

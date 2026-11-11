@@ -4,6 +4,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
+from imported_content import earth_observatory_writer
 from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, url_identity
 
 
@@ -28,6 +29,9 @@ def linked_byline_names(byline):
     """Read distinct author names inside attribution, excluding its controls."""
     members = byline.select('[rel~="author"], [itemprop~="author"], [itemprop~="name"], '
                             'a[href*="/authors/"], a[href*="/author/"], a[href*="/by/"]')
+    if byline.name == 'a' and (byline.get('rel') and 'author' in byline['rel'] or
+                              any(part in byline.get('href', '') for part in ('/authors/', '/author/', '/by/'))):
+        members = [byline]
     explicit = bool(members)
     if ('author' in byline.get('rel', []) or 'author' in byline.get('itemprop', '').split()
             or 'author' in byline.get('class', [])) and byline.parent:
@@ -39,7 +43,7 @@ def linked_byline_names(byline):
     identities = {id(node) for node in members}
     values = []
     for node in members[:100]:
-        if (not editorial(node) or node.find_parent('time') or
+        if (not editorial(node) or node.find_parent(['time', 'template', 'script', 'style', 'noscript']) or
                 any(id(parent) in identities for parent in node.parents)):
             continue
         value = node.select_one('[itemprop~="name"]') or node
@@ -241,8 +245,10 @@ def article_details(soup, url):
     if byline is None:
         # An ordinary link to somebody's author page in the prose isn't a
         # byline. Accept these links only inside article attribution markup.
-        byline = scope.select_one('header a[href*="/authors/"], header a[href*="/author/"], '
-                                  '.blog-post-meta a[href*="/author/"]')
+        byline = next((node for node in scope.select(
+            'header a[href*="/authors/"], header a[href*="/author/"], .blog-post-meta a[href*="/author/"]')
+            if belongs_to_scope(node, scope) and
+            not node.find_parent(['blockquote', 'pre', 'code', 'template', 'script', 'style', 'noscript'])), None)
     if byline is None:
         byline = next((node for node in soup.select('.PostsAuthors-root, .byline, .news-article--authored-by, .c-article__author__name')
                        if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])), None)
@@ -289,6 +295,8 @@ def article_details(soup, url):
         if not visible_authors and not group.select('a, [itemprop~="name"]'):
             visible_authors = clean(visible_text(group), 100)
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    if not author or author.casefold() in {'nasa earth observatory', 'nasa science', 'nasa'}:
+        author = earth_observatory_writer(scope, url) or author
     if author.casefold() in {'plos one editors', 'plos editors'}:
         author = next((name for node, name in opening_writer_credits(scope)
                        if belongs_to_scope(node, scope)), author)
