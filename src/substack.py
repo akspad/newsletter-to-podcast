@@ -14,7 +14,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
 import security
-from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
+from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_resolved_footnote_backlinks, url_identity
 from imported_content import clean_imported_widgets, earth_observatory_writer
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
@@ -589,6 +589,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     clean_imported_widgets(soup, url)
+    remove_resolved_footnote_backlinks(soup, url)
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
     for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '
                           'svg, audio, video, iframe, .subscription-widget-wrap, .button-wrapper, '

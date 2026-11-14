@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, readable_prose, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from tts import speech_text
 
 
@@ -213,6 +213,7 @@ def remove_table_of_contents(root, url):
 
 
 def clean_tree(root, title, author, url=''):
+    remove_resolved_footnote_backlinks(root, url)
     for block, _ in article_labels(root, title):
         block.decompose()
     # RebelMouse recommendation widgets can sit inside the article body.
@@ -361,6 +362,33 @@ def extract_structured_text(body, title='', author='', url=''):
     return plain_text(fragment)
 
 
+def preserve_reference_lists(scope, url):
+    """Keep editorial reference labels from being pruned solely for link density."""
+    if scope.name == '[document]':
+        return
+    for heading in scope.find_all(['h2', 'h3', 'h4', 'h5', 'h6']):
+        if (not editorial(heading) or heading.find_parent(['blockquote', 'pre', 'code', 'li', 'table', 'figcaption']) or
+                ' '.join(heading.get_text('', strip=False).split()).casefold().rstrip(':') not in
+                {'references', 'some references'}):
+            continue
+        following = heading.find_next_sibling()
+        if following is not None and following.name == 'p' and len(following.get_text()) <= 300:
+            following = following.find_next_sibling()
+        if following is None or following.name not in ('ul', 'ol') or not editorial(following):
+            continue
+        items = following.find_all('li', recursive=False)
+        links = following.find_all('a', href=True)
+        if (not items or not links or following.find(['img', 'picture', 'figure', 'button', 'article', 'div', 'section', 'ul', 'ol']) or
+                any(not item.find('a', href=True) for item in items) or
+                any(not url_identity(link['href'], url) or url_identity(link['href'], url) == url_identity(url)
+                    for link in links)):
+            continue
+        # Labels and inline formatting stay in place; only the link markup is
+        # normalized. No references are fetched and no prose is reconstructed.
+        for link in links:
+            link.unwrap()
+
+
 def extract_text(soup, title='', author='', url=''):
     scope = article_scope(soup, title, url)
     # Capture the layout evidence before cleanup removes its masthead. This
@@ -426,6 +454,7 @@ def extract_text(soup, title='', author='', url=''):
     # Links and attribution classes inside an editorial quotation describe its
     # source, not navigation. Normalize the cleaned quotation to narration text
     # before density pruning, retaining its position and the surrounding layout.
+    preserve_reference_lists(scope, url)
     quotes = [node for node in scope.select('blockquote') if not node.find_parent('blockquote')]
     for quote in quotes:
         quote.string = plain_text(quote)

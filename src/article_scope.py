@@ -1,6 +1,6 @@
 """Choose one article consistently for attribution and narration, without I/O."""
 import re
-from urllib.parse import parse_qsl, urljoin, urlsplit
+from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 from bs4 import Comment
 
 
@@ -57,6 +57,51 @@ def url_identity(value, base=''):
         return parsed.scheme, parsed.netloc.casefold(), parsed.path.rstrip('/'), query
     except ValueError:
         return None
+
+
+def remove_resolved_footnote_backlinks(root, url=''):
+    """Remove unmarked return controls only after verifying both footnote links."""
+    identity = url_identity(url)
+    # Keep context-free imports (including anonymous feed identity material)
+    # unchanged. The supplied page URL also anchors relative/absolute links.
+    if not identity:
+        return
+    def fragment(href):
+        if not isinstance(href, str):
+            return ''
+        try:
+            parsed = urlsplit(href)
+        except ValueError:
+            return ''
+        if not href.startswith('#') and (not identity or url_identity(href, url) != identity):
+            return ''
+        return unquote(parsed.fragment)
+
+    identities = {}
+    for node in root.select('[id]'):
+        if editorial(node):
+            identities.setdefault(node['id'], []).append(node)
+    for link in list(root.find_all('a', href=True)):
+        if (link.get_text('', strip=True).rstrip('\ufe0e\ufe0f') != '↩' or not editorial(link) or
+                link.find_parent(['blockquote', 'pre', 'code'])):
+            continue
+        note = next((node for node in link.parents if getattr(node, 'attrs', None) and node.get('id') and
+                     ('doc-endnote' in node.get('role', '').split() or
+                      node.name == 'li' and node.find_parent(class_='footnotes'))), None)
+        destination = fragment(link['href'])
+        targets = identities.get(destination, [])
+        if (note is None or not destination or len(targets) != 1 or
+                len(identities.get(note['id'], [])) != 1):
+            continue
+        reference = targets[0]
+        if (not editorial(reference) or reference.find_parent(['blockquote', 'pre', 'code']) or
+                reference.find_parent('article') is not note.find_parent('article') or
+                not (reference.name == 'sup' and 'footnote-reference' in reference.get('class', []) or
+                     'doc-noteref' in reference.get('role', '').split())):
+            continue
+        forwards = [reference] if reference.name == 'a' else reference.find_all('a', href=True)
+        if any(fragment(forward.get('href')) == note['id'] for forward in forwards):
+            link.decompose()
 
 
 def explicitly_hidden(node):
