@@ -56,7 +56,8 @@ class EpisodeDiagnosticsTests(unittest.TestCase):
                         contextlib.redirect_stderr(io.StringIO()) as err:
                     settings = config.Settings.from_env()
                     self.assertEqual(main.run(settings, [pub], source), 0)
-                self.assertEqual(err.getvalue(), f'Episode failed (stage={stage} reason={reason}); queued for retry.\n')
+                details = ' step=load_article source_kind=substack' if stage == 'extract' else ''
+                self.assertEqual(err.getvalue(), f'Episode failed (stage={stage} reason={reason}{details}); queued for retry.\n')
                 logs = out.getvalue() + err.getvalue() + (root / 'summary').read_text() + (root / 'outputs').read_text()
                 for secret in ('PRIVATE', 'private.example', 'SECRET', '::error::injected'):
                     self.assertNotIn(secret, logs)
