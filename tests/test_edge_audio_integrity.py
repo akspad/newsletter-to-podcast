@@ -57,7 +57,9 @@ class AudioIntegrityTests(unittest.TestCase):
             good.write_bytes(VALID)
             bad.write_bytes(DAMAGED)
             self.assertEqual(tts.duration(good), tts.duration(bad))
-            self.assertGreater(tts.duration(good, verify=True), 3)
+            # Encoders/probers may include MP3 padding or report exactly the
+            # three-second source duration. Neither requires extra content.
+            self.assertAlmostEqual(tts.duration(good, verify=True), 3, delta=0.1)
             with self.assertRaises((ValueError, subprocess.SubprocessError)):
                 tts.duration(bad, verify=True)
 

@@ -1,6 +1,7 @@
 """Choose one article consistently for attribution and narration, without I/O."""
 import re
 from urllib.parse import parse_qsl, urljoin, urlsplit
+from bs4 import Comment
 
 
 BODY_SELECTORS = (
@@ -121,6 +122,47 @@ def article_labels(root, title):
             yield block, fields
 
 
+def masthead_body(soup, title):
+    """Recognize a static blog's body only beside its matching article masthead."""
+    if not title:
+        return None
+    candidates = []
+    for body in soup.select('div.container.main'):
+        if (not editorial(body) or body.find_parent(['article', 'blockquote', 'pre', 'code']) or
+                not readable_prose(' '.join(p.get_text(' ', strip=True) for p in
+                                           body.find_all('p', recursive=False) if editorial(p)))):
+            continue
+        # This layout has flat prose blocks. An unknown nested container may
+        # be a sidebar or another story; leave that ambiguity to density pruning.
+        if (any(editorial(node) for node in body.find_all(['div', 'section', 'main'], recursive=False)) or
+                not any(editorial(h) for h in body.find_all(['h2', 'h3', 'h4', 'h5', 'h6'], recursive=False))):
+            continue
+        # Empty edit links / line breaks may separate the masthead and body.
+        # A content-bearing sibling is a boundary; never reach across another
+        # story, recommendation card or prose to borrow a matching headline.
+        previous = body.previous_sibling
+        while previous is not None:
+            if getattr(previous, 'name', None):
+                if (previous.name not in ('a', 'br') or previous.get_text(' ', strip=True) or
+                        previous.find(['img', 'svg'])):
+                    break
+            elif str(previous).strip() and not isinstance(previous, Comment):
+                break
+            previous = previous.previous_sibling
+        if (previous is None or not getattr(previous, 'attrs', None) or
+                previous.name != 'div' or not {'container', 'blog-title'} <= set(previous.get('class', [])) or
+                not editorial(previous)):
+            continue
+        headings = [h for h in previous.select('h1') if editorial(h) and
+                    not h.find_parent(['blockquote', 'pre', 'code'])]
+        labels = previous.select('.blog-meta-author, .blog-meta-date')
+        if (len(headings) == 1 and heading_matches(heading_text(headings[0]), title) and
+                any(editorial(label) and not label.find_parent(['blockquote', 'pre', 'code']) and
+                    label.get_text(' ', strip=True) for label in labels)):
+            candidates.append(body)
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def article_scope(soup, title='', url=''):
     articles = [node for node in soup.select('article') if editorial(node)]
     mains = [node for node in soup.select('main, [role="main"]') if editorial(node)]
@@ -190,6 +232,10 @@ def article_scope(soup, title='', url=''):
         if (own_prose or own_body) and (matched or not main.select('article') and
                                       not any(any(score(node)[:2]) for node in articles)):
             return main
+    if not any(any(score(node)[:2]) for node in articles):
+        recovered = masthead_body(soup, title)
+        if recovered is not None:
+            return recovered
     if articles:
         return max(articles, key=score)
     return max(mains, key=score) if mains else soup
