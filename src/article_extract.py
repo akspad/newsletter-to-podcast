@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, readable_prose, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, readable_prose, url_identity
 from tts import speech_text
 
 
@@ -363,6 +363,9 @@ def extract_structured_text(body, title='', author='', url=''):
 
 def extract_text(soup, title='', author='', url=''):
     scope = article_scope(soup, title, url)
+    # Capture the layout evidence before cleanup removes its masthead. This
+    # body uses the same structure-preserving path as explicit article bodies.
+    recovered_body = masthead_body(soup, title)
     # LessWrong streams its explicit post body inside an initially hidden React
     # container. Detach only that body before discarding hidden page sections.
     candidates = []
@@ -399,7 +402,7 @@ def extract_text(soup, title='', author='', url=''):
     if deferred:
         return ' '.join(deferred)
     candidates = scope.select(BODY_SELECTORS)
-    if match(BODY_SELECTORS, scope):
+    if match(BODY_SELECTORS, scope) or scope is recovered_body:
         candidates = [scope]
     if candidates:
         # Some publications split the article among sibling body containers.
