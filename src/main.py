@@ -19,7 +19,7 @@ import tts
 import website
 from schedule import scheduled_run_due
 from config import Settings, load_env
-from monitoring import GenerationReport, episode_attempt, set_episode_stage, source_failure_fields
+from monitoring import ExtractionError, GenerationReport, episode_attempt, set_episode_stage, set_extraction_step, source_failure_fields
 from substack import Substack, has_audio, html_to_text
 
 FULL_PLACEHOLDER = "Full narration of the text available from the source."
@@ -93,11 +93,15 @@ def eligible(pub, post, since, seen, settings):
 
 def make_episode(sub, pub, post, now, state, settings):
     set_episode_stage('extract')
+    set_extraction_step('load_article', source_kind='feed' if pub.get('rss') else 'page' if pub.get('page') else 'substack')
     full, text = sub.post_text(pub, post)
+    set_extraction_step('validate_text')
+    if not isinstance(text, str):
+        raise ExtractionError('invalid_article_text')
     security.check_text(text)
     security.charge("article_bytes", len(text.encode("utf-8")))
     if not text.strip():
-        raise ValueError("Source returned no article text")
+        raise ExtractionError('empty_article_text')
     set_episode_stage('prepare')
     author = ", ".join(b.get("name", "") for b in full.get("publishedBylines", [])) or pub["name"]
     mode = episode_mode(pub, settings)

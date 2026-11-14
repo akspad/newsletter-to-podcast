@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, fields
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -11,7 +12,19 @@ import uuid
 
 
 EPISODE_STAGES = frozenset({'unknown', 'extract', 'prepare', 'summary', 'speech', 'audio_metadata'})
+EXTRACTION_STEPS = frozenset({'load_article', 'validate_destination', 'download_article',
+    'decode_response', 'validate_response', 'convert_html', 'validate_text'})
+EXTRACTION_SOURCES = frozenset({'unknown', 'feed', 'page', 'substack'})
+EXTRACTION_REASONS = frozenset({'empty_article_text', 'invalid_article_text',
+    'invalid_post_response', 'missing_article_body', 'invalid_article_body'})
 _episode_diagnostic = ContextVar('episode_diagnostic', default=None)
+
+
+class ExtractionError(ValueError):
+    """A known validation failure, without storing any source content."""
+    def __init__(self, reason):
+        super().__init__('Article extraction failed')
+        self.reason = reason if type(reason) is str and reason in EXTRACTION_REASONS else 'invalid_value'
 
 
 def failure_reason(error):
@@ -82,11 +95,26 @@ def summary_diagnostic():
 class EpisodeDiagnostic:
     stage: str = 'unknown'
     summary: SummaryDiagnostic | None = None
+    extraction_step: str = 'load_article'
+    extraction_source: str = 'unknown'
 
     def fields(self, error):
         stage = self.stage if type(self.stage) is str and self.stage in EPISODE_STAGES else 'unknown'
         if stage == 'summary' and type(self.summary) is SummaryDiagnostic:
             return f'stage={stage} {self.summary.fields()}'
+        if stage == 'extract':
+            step = (self.extraction_step if type(self.extraction_step) is str and
+                    self.extraction_step in EXTRACTION_STEPS else 'load_article')
+            source = (self.extraction_source if type(self.extraction_source) is str and
+                      self.extraction_source in EXTRACTION_SOURCES else 'unknown')
+            # Reuse the validated HTTP/challenge fields; never inspect messages or causes.
+            reason = source_failure_fields(error)
+            if isinstance(error, ExtractionError):
+                code = error.reason if type(error.reason) is str and error.reason in EXTRACTION_REASONS else 'invalid_value'
+                reason = f'reason={code}'
+            elif step == 'decode_response' and isinstance(error, json.JSONDecodeError):
+                reason = 'reason=invalid_json_response'
+            return f'stage=extract {reason} step={step} source_kind={source}'
         return f'stage={stage} reason={failure_reason(error)}'
 
 
@@ -105,6 +133,16 @@ def set_episode_stage(stage):
     diagnostic = _episode_diagnostic.get()
     if diagnostic is not None:
         diagnostic.stage = stage if type(stage) is str and stage in EPISODE_STAGES else 'unknown'
+
+
+def set_extraction_step(step, *, source_kind=None):
+    """Instrument extraction only; discovery and description refreshes have no episode context."""
+    diagnostic = _episode_diagnostic.get()
+    if diagnostic is not None and diagnostic.stage == 'extract':
+        diagnostic.extraction_step = step if type(step) is str and step in EXTRACTION_STEPS else 'load_article'
+        if source_kind is not None:
+            diagnostic.extraction_source = (source_kind if type(source_kind) is str and
+                                            source_kind in EXTRACTION_SOURCES else 'unknown')
 
 
 @dataclass

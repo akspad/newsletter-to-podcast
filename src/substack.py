@@ -14,6 +14,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
 import security
+from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_resolved_footnote_backlinks, url_identity
 from imported_content import clean_imported_widgets, earth_observatory_writer
 
@@ -215,6 +216,7 @@ class Substack:
         self.last_url = None  # Failed requests must not retain a previous destination.
         # Pin an authorized address: a second DNS lookup must not enable rebinding.
         for _ in range(5):
+            set_extraction_step('validate_destination')
             host, port, address = security.public_destination(url)
             target = f"[{address}]" if ":" in address else address
             body = bytearray()
@@ -231,6 +233,7 @@ class Substack:
                 return len(data)
 
             try:
+                set_extraction_step('download_article')
                 r = requests.get(
                     url, params=params,
                     headers={**HEADERS, "Accept-Encoding": "identity", **self.auth_headers(url)},
@@ -259,6 +262,7 @@ class Substack:
                     continue
                 raise error
             # libcurl's write callback receives decoded bytes; no whole-response buffer is used.
+            set_extraction_step('decode_response')
             if raw:
                 result = decode_source(body, getattr(r, "headers", {}))
                 # Follow immediate HTML navigation through this same bounded,
@@ -572,12 +576,26 @@ class Substack:
 
     def post_text(self, pub, post):
         if pub.get("rss") or pub.get("page"):
+            set_extraction_step('validate_response')
+            if 'body_html' not in post:
+                raise ExtractionError('missing_article_body')
+            if not isinstance(post['body_html'], str):
+                raise ExtractionError('invalid_article_body')
+            set_extraction_step('convert_html')
             if not post.get('publishedBylines') and (writer := earth_observatory_writer(
                     post['body_html'], post.get('canonical_url', ''))):
                 post = {**post, 'publishedBylines': [{'name': writer}]}
             return post, html_to_text(post["body_html"], title=post.get("title", ""),
                                       url=post.get("canonical_url", ""))
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
+        set_extraction_step('validate_response')
+        if not isinstance(full, dict):
+            raise ExtractionError('invalid_post_response')
+        if 'body_html' not in full:
+            raise ExtractionError('missing_article_body')
+        if full.get('body_html') is not None and not isinstance(full['body_html'], str):
+            raise ExtractionError('invalid_article_body')
+        set_extraction_step('convert_html')
         return full, html_to_text(full.get("body_html") or "")
 
 
