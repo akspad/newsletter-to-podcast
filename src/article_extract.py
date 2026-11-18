@@ -266,6 +266,9 @@ def clean_tree(root, title, author, url=''):
                 if link.get_text(' ', strip=True) == label:
                     link.decompose()
     caption_selectors = {
+        'blogs.loc.gov': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
+        'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
+                         '.entry-content > div.wp-caption > p.wp-caption-text'),
         'webkit.org': 'article .bodycopy > figure > figcaption',
         'www.nist.gov': '.text-with-summary figure.nist-image > figcaption.nist-image__caption',
         'blog.cloudflare.com': '.article-content figure.emdash-image > figcaption',

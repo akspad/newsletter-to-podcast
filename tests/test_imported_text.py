@@ -34,6 +34,13 @@ class ImportedTextTests(unittest.TestCase):
                 '<button>Do not read controls</button></body></html>')
         self.assertEqual(html_to_text(html), 'An examples sentence, with a link and & entity.\nBefore\nAfter')
 
+    def test_code_keeps_literal_whitespace_and_prose_keeps_normal_punctuation(self):
+        html = ('<p>A test <em>case</em> , for <code>&lt;widget :value="a  b" /&gt;</code> .</p>'
+                '<pre><code>if ready:\n    render(<span>value</span>  : mode)\n\n    finish()</code></pre>'
+                '<p>One <b>last</b> !</p>')
+        self.assertEqual(html_to_text(html), 'A test case, for <widget :value="a  b" />.\n'
+                         'if ready:\n    render(value  : mode)\n\n    finish()\nOne last!')
+
     def test_nested_lists_quotes_and_captions_are_read_once(self):
         html = ('<blockquote><p>A quoted sentence.</p><p>Another quoted sentence.</p></blockquote>'
                 '<ul><li><p>First item.</p><ul><li>Nested item.</li></ul></li><li>Second item.</li></ul>'
