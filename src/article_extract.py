@@ -265,6 +265,12 @@ def clean_tree(root, title, author, url=''):
             for link in root.select(f'.post-content > span.nav-{label.lower()} > a[rel~="{rel}"][href]'):
                 if link.get_text(' ', strip=True) == label:
                     link.decompose()
+    if identity and identity[1] == 'inkscape.org' and identity[2].startswith('/news/'):
+        for stamp in root.select('#content .wrapper > h1 + p.postdate'):
+            label = ' '.join(stamp.stripped_strings)
+            date = re.sub(r',\s+\d{1,2}:\d{2}(?:\s+[ap]\.m\.)?$', '', label, flags=re.I)
+            if DATE.fullmatch(date):
+                stamp.decompose()
     if identity and identity[1] == 'earthsky.org':
         for widget in root.select('.post-rich-text > .ns-buttons.ns-inline-below'):
             if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
@@ -491,6 +497,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .bodycopy'
+        elif identity[1] == 'blogs.kde.org' and match('article.post-content', scope):
+            body_selector = ':scope > .jumbotron ~ .content-width'
         elif identity[1] == 'earthsky.org':
             body_selector = '.post-body > .post > .post-rich-text'
         elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')
