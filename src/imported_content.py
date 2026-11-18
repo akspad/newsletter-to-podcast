@@ -74,6 +74,17 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] == 'simonwillison.net':
+        # The Atom feed appends a paragraph of category links after the story.
+        paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
+        if getattr(paragraph, 'name', None) == 'p':
+            links = paragraph.find_all('a', recursive=False, href=True)
+            tags = [link.get_text(strip=True) for link in links]
+            if (tags and ' '.join(paragraph.get_text().split()) == 'Tags: ' + ', '.join(tags)
+                    and all(re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', tag)
+                            and url_identity(link['href'], url) == url_identity('/tags/' + tag, url)
+                            for tag, link in zip(tags, links))):
+                paragraph.decompose()
     if identity and identity[1] in {'eff.org', 'www.eff.org'}:
         for notice in root.select('.mytube > .mytubetext'):
             if notice.find_parent(['blockquote', 'pre', 'code']) or not notice.parent.select_one(':scope > .mytubetrigger'):

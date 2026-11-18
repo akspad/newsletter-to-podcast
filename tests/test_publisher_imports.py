@@ -140,6 +140,21 @@ class PublisherWidgetTests(unittest.TestCase):
                 self.assertIn('Unrelated recommendation', text)
         self.assertIn('September 20, 2026', html_to_text(PROSE + '<p>September 20, 2026</p>', url=NASA))
 
+    def test_simon_atom_removes_only_the_terminal_category_links(self):
+        url = 'https://simonwillison.net/2026/11/17/seed-trials/'
+        categories = ('<p>Tags: <a href="/tags/botany">botany</a>, '
+                      '<a href="https://simonwillison.net/tags/field-notes">field-notes</a></p>')
+        self.assertEqual(html_to_text(PROSE + categories, url=url), html_to_text(PROSE))
+        for markup, source in (
+                (categories, 'https://other.example/story'),
+                (categories + 'The article continues.', url),
+                ('<blockquote>' + categories + '</blockquote>', url),
+                (categories.replace('/tags/botany', 'https://other.example/tags/botany'), url),
+                (categories.replace('</p>', ' are recommended reading.</p>'), url),
+                ('<p>Tags: a note from the author.</p>', url)):
+            with self.subTest(markup=markup, url=source):
+                self.assertIn('Tags:', html_to_text(PROSE + markup, url=source))
+
     def test_ars_removes_only_matching_terminal_navigation_pair(self):
         self.assertEqual(html_to_text(PROSE + NAV, url=ARS), html_to_text(PROSE))
         for markup, url in (('<blockquote>' + NAV + '</blockquote>', ARS),
