@@ -283,6 +283,10 @@ def clean_tree(root, title, author, url=''):
     caption_selectors = {
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
+        'astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
+        'www.astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
+        'www.experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
+        'experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
         'earthsky.org': '.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption',
         'www.futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',

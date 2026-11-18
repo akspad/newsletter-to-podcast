@@ -114,6 +114,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
 
     def test_wordpress_editorial_photo_captions_stay_in_place(self):
         cases = [
+            ('www.astronomy.com', '<figure class="wp-block-image wp-lightbox-container"><img src="tray">'
+             '<figcaption class="wp-element-caption">The robotic arm at rest.</figcaption></figure>',
+             'The robotic arm at rest.'),
             ('blogs.loc.gov', '<figure class="wp-caption"><img src="tray">'
              '<figcaption class="wp-caption-text">Seeds in March.</figcaption></figure>', 'Seeds in March.'),
             ('www.futilitycloset.com', '<figure class="wp-caption"><img src="roots">'
@@ -132,6 +135,15 @@ class PublisherReadingOrderTests(unittest.TestCase):
                         f'<div hidden>{photo}</div><aside>{photo}</aside><p>{LAST}</p></div></article>')
                 _, body = narrate(f'https://{host}/seed-trials/', html)
                 self.assertEqual(body.split(), f'{FIRST} {expected} {LAST}'.split())
+
+    def test_experimental_history_preserves_linked_image_captions_in_source_order(self):
+        html = f"""<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
+        <p>{FIRST}</p><div class="captioned-image-container"><figure><a href="/photo"><img src="tray"></a>
+        <figcaption class="image-caption">Early growth (<a href="/source">source</a>).</figcaption>
+        </figure></div><p>{LAST}</p><div hidden class="captioned-image-container"><figure><img src="hidden">
+        <figcaption class="image-caption">Hidden draft.</figcaption></figure></div></div></div></article>"""
+        _, body = narrate('https://www.experimental-history.com/p/seed-trials', html)
+        self.assertEqual(body.split(), f'{FIRST} Early growth (source). {LAST}'.split())
 
     def test_webkit_author_line_caption_and_linked_code_examples(self):
         html = f"""<article><h1>Seeds</h1><div class="byline"><p class="date">May 18, 2026</p>
