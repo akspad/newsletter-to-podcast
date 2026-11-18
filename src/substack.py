@@ -630,7 +630,8 @@ def html_to_text(html: str, *, title='', url='') -> str:
             home = url_identity(links[1].get('href'), url)
             value = ' '.join(paragraph.get_text('', strip=False).split())
             if (label != ' '.join(title.split()) or not publisher or
-                    value != f'The post {label} appeared first on {publisher}.' or
+                    value not in {f'The post {label} appeared first on {publisher}.',
+                                  f'The post {label} first appeared on {publisher}.'} or
                     url_identity(links[0].get('href'), url) != identity or
                     home is None or home[:2] != identity[:2] or home[2] or home[3]):
                 continue

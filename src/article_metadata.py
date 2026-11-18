@@ -263,6 +263,10 @@ def article_details(soup, url):
             if belongs_to_scope(node, scope)), None)
     if byline is None and scope.parent is not None and scope.parent.name == 'topcomment':
         byline = next((node for node in scope.select('.info > .username') if belongs_to_scope(node, scope)), None)
+    if requested and requested[1] == 'webkit.org' and byline is not None:
+        writer = byline.select_one(':scope > p.author')
+        if writer and editorial(writer):
+            byline = writer
     byline_name = byline_authors = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.
