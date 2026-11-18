@@ -260,7 +260,13 @@ def clean_tree(root, title, author, url=''):
             heading_id = anchor.parent.get('id')
             if heading_id and anchor.get('href') == '#' + heading_id and anchor.get_text(strip=True) == '¶':
                 anchor.decompose()
+    if identity and identity[1] == 'freebsdfoundation.org' and identity[2].startswith('/blog/'):
+        for rel, label in (('prev', 'Previous'), ('next', 'Next')):
+            for link in root.select(f'.post-content > span.nav-{label.lower()} > a[rel~="{rel}"][href]'):
+                if link.get_text(' ', strip=True) == label:
+                    link.decompose()
     caption_selectors = {
+        'webkit.org': 'article .bodycopy > figure > figcaption',
         'www.nist.gov': '.text-with-summary figure.nist-image > figcaption.nist-image__caption',
         'blog.cloudflare.com': '.article-content figure.emdash-image > figcaption',
         'www.raspberrypi.com': '.c-post-content__wysiwyg .wp-block-image > figure > figcaption.wp-element-caption',
@@ -475,6 +481,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
         elif identity[1] == 'www.internetsociety.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .body-text'
+        elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':
+            body_selector = ':scope > .bodycopy'
         elif identity[1] == 'www.nist.gov' and identity[2].startswith('/news-events/news/'):
             body_selector = '.nist-page__region--content .text-with-summary'
         elif identity[1] == 'www.djangoproject.com' and identity[2].startswith('/weblog/'):

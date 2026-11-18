@@ -18,6 +18,32 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_webkit_author_line_caption_and_linked_code_examples(self):
+        html = f"""<article><h1>Seeds</h1><div class="byline"><p class="date">May 18, 2026</p>
+        <p class="author">by <span>Ash and Lee</span></p></div><div class="bodycopy"><p>{FIRST}</p>
+        <figure><picture><img src="seeds"></picture><figcaption>A tray of seedlings.</figcaption></figure>
+        <ul><li><a href="/sample"><code>&lt;seed&gt;</code></a></li>
+        <li><a href="/size"><code>size()</code></a></li></ul><p>{LAST}</p></div></article>"""
+        intro, body = narrate('https://webkit.org/blog/123/seeds', html)
+        self.assertIn('By Ash and Lee.', intro)
+        self.assertNotIn('2026', intro)
+        self.assertEqual(body.split(), f'{FIRST} A tray of seedlings. <seed> size() {LAST}'.split())
+
+    def test_freebsd_post_navigation_and_feed_footer_keep_editorial_links(self):
+        url = 'https://freebsdfoundation.org/blog/seeds/'
+        html = f"""<article><h1>Seeds</h1><div class="post-content"><p>{FIRST}</p>
+        <p><a rel="prev" href="/prior">Previous</a> trials had a different result.</p><p>{LAST}</p>
+        <span class="nav-previous"><a href="/old" rel="prev">Previous</a></span>
+        <span class="nav-next"><a href="/new" rel="next">Next</a></span></div></article>"""
+        _, body = narrate(url, html)
+        self.assertEqual(body.split(), f'{FIRST} Previous trials had a different result. {LAST}'.split())
+        credit = (f'<p>The post <a href="{url}">Seeds</a> first appeared on '
+                  '<a href="https://freebsdfoundation.org/">The Journal</a>.</p>')
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>'+credit, title='Seeds', url=url), FIRST)
+        for retained in ('<blockquote>'+credit+'</blockquote>', credit+f'<p>{LAST}</p>',
+                         credit.replace('/blog/seeds/', '/blog/other/')):
+            self.assertIn('first appeared on', html_to_text(retained, title='Seeds', url=url))
+
     def test_internet_society_uses_matching_article_header_and_keeps_linked_prose(self):
         html = f"""<meta name="author" content="Publishing Account"><main>
         <div class="content-wrapper"><header><h1>Seed trials</h1><div class="author-box"><div class="author-meta">
