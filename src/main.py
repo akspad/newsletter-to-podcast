@@ -22,6 +22,8 @@ from config import Settings, load_env
 from monitoring import ExtractionError, GenerationReport, episode_attempt, set_episode_stage, set_extraction_step, source_failure_fields
 from substack import Substack, has_audio, html_to_text
 
+MAX_EMPTY_FEED_ATTEMPTS = 3
+
 FULL_PLACEHOLDER = "Full narration of the text available from the source."
 RESTRICTED_NOTICE = "The source has restricted access; the returned text may be a preview."
 
@@ -81,7 +83,7 @@ def eligible(pub, post, since, seen, settings):
     published = datetime.fromisoformat(post["post_date"].replace("Z", "+00:00"))
     if published.tzinfo is None:
         published = published.replace(tzinfo=timezone.utc)
-    if published < since:
+    if since is not None and published < since:
         return False
     only = pub.get("only")
     if only and only.lower() not in post["title"].lower():
@@ -192,6 +194,9 @@ def bounded_retries(retries):
     for retry in retries:
         try:
             candidate = {"pub": retry["pub"], "post": bounded_post(retry["post"])}
+            attempts = retry.get('empty_feed_attempts')
+            if type(attempts) is int and 0 < attempts < MAX_EMPTY_FEED_ATTEMPTS:
+                candidate['empty_feed_attempts'] = attempts
             count = len(json.dumps(candidate).encode("utf-8")) + 2
             if len(result) >= security.MAX_RETRY_COUNT or size + count > security.MAX_RETRY_BYTES:
                 rejected += 1
@@ -239,19 +244,24 @@ def _run(settings, publications, sub):
     seen = set(state.get("seen", []))
     configured = {pub["base"]: pub for pub in publications}
     # Drop queued posts from removed sources and use current mode/filter settings on retries.
-    candidates = []
-    queued = set()
+    candidates = {}  # Insertion order keeps saved retries ahead of new discoveries.
+    empty_attempts = {}
+    exhausted = set(state.get('empty_feed_keys', []))
     overflow = False
     for retry in bounded_retries(state.get("retry", [])):
         pub = configured.get(retry["pub"]["base"])
         post = retry["post"]
-        if pub and not storage.was_seen(pub, post, seen, post_key(pub, post)) and post_key(pub, post) not in queued:
+        if pub is None:
+            continue
+        key = post_key(pub, post)
+        if not storage.was_seen(pub, post, seen, key) and key not in candidates:
             only = pub.get("only")
             if only and only.lower() not in post["title"].lower():
                 continue
-            candidates.append((pub, post))
-            queued.add(post_key(pub, post))
-    previous_retries = queued.copy()
+            candidates[key] = (pub, post)
+            if retry.get('empty_feed_attempts') and pub.get('rss'):
+                empty_attempts[key] = retry['empty_feed_attempts']
+    previous_retries = set(candidates)
     source_failed = False
     sources_available = 0
     for index, pub in enumerate(publications, 1):
@@ -272,12 +282,24 @@ def _run(settings, publications, sub):
                     print("An article entry exceeded its limits or had invalid metadata; skipping it.", file=sys.stderr)
             refresh_descriptions(sub, pub, posts, state)
             for post in posts:
-                if eligible(pub, post, since, seen, settings) and post_key(pub, post) not in queued:
-                    if len(candidates) >= security.MAX_CANDIDATES:
-                        overflow = True
-                        break
-                    candidates.append((pub, post))
-                    queued.add(post_key(pub, post))
+                key = post_key(pub, post)
+                # Feed discovery counts words after the same cleanup used for narration.
+                if key in candidates:
+                    if pub.get('rss') and key in previous_retries and post.get('wordcount'):
+                        if eligible(pub, post, None, seen, settings):
+                            candidates[key] = (pub, post)
+                        else:
+                            del candidates[key]
+                    continue  # An empty update cannot displace a readable saved copy.
+                waiting_for_text = pub.get('rss') and key in exhausted
+                if waiting_for_text and not post.get('wordcount'):
+                    continue
+                if not eligible(pub, post, None if waiting_for_text else since, seen, settings):
+                    continue
+                if len(candidates) >= security.MAX_CANDIDATES:
+                    overflow = True
+                    continue  # Later entries may still refresh work already in the queue.
+                candidates[key] = (pub, post)
             if complete or posts:
                 sources_available += 1
         except Exception as error:
@@ -295,7 +317,9 @@ def _run(settings, publications, sub):
     (settings.site / "episodes").mkdir(parents=True, exist_ok=True)
     completed = []
     report = GenerationReport()
-    for pub, post in candidates[:settings.max_episodes]:
+    ordered = list(candidates.values())
+    for pub, post in ordered[:settings.max_episodes]:
+        key = post_key(pub, post)
         report.attempted_articles += 1
         before = len(state["episodes"])
         with episode_attempt() as diagnostic:
@@ -303,7 +327,7 @@ def _run(settings, publications, sub):
                 make_episode(sub, pub, post, now, state, settings)
                 report.created_articles += 1
                 report.created_audio_files += len(state["episodes"]) - before
-                key = post_key(pub, post)
+                exhausted.discard(key)
                 seen.add(key)
                 completed.append(key)
             except security.BudgetExceeded:
@@ -314,15 +338,32 @@ def _run(settings, publications, sub):
                 print("Run work budget exhausted; article deferred for a later run.", file=sys.stderr)
                 state["retry"].append({"pub": pub, "post": post})
             except Exception as error:
+                if (pub.get('rss') and diagnostic.stage == 'extract' and isinstance(error, ExtractionError)
+                        and error.reason == 'empty_article_text'):
+                    empty_attempts[key] = empty_attempts.get(key, 0) + 1
+                    if empty_attempts[key] >= MAX_EMPTY_FEED_ATTEMPTS:
+                        exhausted.add(key)
+                        report.skipped_articles += 1
+                        print(f"Episode skipped ({diagnostic.fields(error)}); empty feed attempt limit reached.",
+                              file=sys.stderr)
+                        continue
+                else:
+                    empty_attempts.pop(key, None)
                 report.failed_articles += 1
                 # Fixed codes only: messages, names and provider identifiers can reveal private data.
                 print(f"Episode failed ({diagnostic.fields(error)}); queued for retry.", file=sys.stderr)
                 failed_retries.append({"pub": pub, "post": post})
-    state["retry"].extend({"pub": pub, "post": post} for pub, post in candidates[settings.max_episodes:])
-    report.deferred_articles += len(candidates[settings.max_episodes:])
+    state["retry"].extend({"pub": pub, "post": post} for pub, post in ordered[settings.max_episodes:])
+    report.deferred_articles += len(ordered[settings.max_episodes:])
     # Preserve saved work and newly failed payloads when selecting a bounded
     # queue, then move attempted failures behind work still awaiting a turn.
     pending = failed_retries + state["retry"]
+    for row in pending:
+        attempts = empty_attempts.get(post_key(row['pub'], row['post']))
+        if attempts:
+            row['empty_feed_attempts'] = attempts
+    if exhausted or 'empty_feed_keys' in state:
+        state['empty_feed_keys'] = sorted(exhausted)
     pending.sort(key=lambda row: post_key(row['pub'], row['post']) not in previous_retries)
     retained_retries = bounded_retries(pending)
     failed_keys = {post_key(row['pub'], row['post']) for row in failed_retries}

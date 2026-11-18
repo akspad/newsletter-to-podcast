@@ -314,6 +314,8 @@ If every configured source fails, the command exits with status **1** and leaves
 
 A source that responds successfully with no eligible recent posts is different: that run succeeds with **0** new episodes. Partial source failures are logged by source number and error type; available sources can still produce output, and the catch-up timestamp is not advanced. Episode-generation failures remain queued for retry. Private URLs and raw provider errors are omitted from logs.
 
+For RSS and Atom retries, the next scan uses readable text from the same feed entry when available. An empty update leaves any saved readable copy available for retry. After three attempts that find no readable text, generation reports a skip and drops the empty payload. Private state remembers the entry key so an unchanged empty entry stays out of the queue. A later scan can pick it up when the publisher adds readable text, even after its original date falls outside the lookback window, subject to the configured filters. Queue deferrals do not consume attempts.
+
 ### Pipeline failure alerts
 
 Each due generation step writes numeric results to GitHub Actions outputs and a run summary: attempted/created articles, new audio files, unrecovered failures, expected deferrals, security skips and queued articles. These reports contain no source names, titles, URLs, article text or provider errors.
