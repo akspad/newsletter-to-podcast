@@ -18,6 +18,31 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_inkscape_uses_brand_and_skips_placeholder_and_header_timestamp(self):
+        html = f"""<head><title>Seed trials | Inkscape</title><meta name="author" content="None">
+        <link rel="alternate" type="application/rss+xml" title="News Feed" href="/news/feed/"></head>
+        <div id="logo"><a href="/en/"><img alt="Inkscape"></a></div>
+        <div id="content"><div class="wrapper"><h1>Seed trials</h1>
+        <p class="postdate">May 2, 2026, 7:10 p.m.</p><p>{FIRST}</p>
+        <p>Measurements on May 2, 2026 were repeated at 7:10 p.m.</p><p>{LAST}</p></div></div>"""
+        url = 'https://inkscape.org/news/2026/05/02/seed-trials/'
+        intro, body = narrate(url, html)
+        self.assertEqual(intro, 'Inkscape. Seed trials.')
+        self.assertEqual(body.split(), f'{FIRST} Measurements on May 2, 2026 were repeated at 7:10 p.m. {LAST}'.split())
+        named, _ = narrate(url, html.replace('content="None"', 'content="Lee"'))
+        self.assertTrue(named.endswith('By Lee.'), named)
+
+    def test_kde_reads_article_author_once_and_skips_header_metadata(self):
+        html = f"""<article class="post-content"><div class="jumbotron"><div class="content-width">
+        <h1 class="page-header">Seed trials</h1><p class="meta">Friday, 6 November 2026 |
+        <a href="/authors/ash">Ash Linden</a></p><div class="blog-tags">#research</div>
+        </div></div><div class="content-width"><p>{FIRST}</p>
+        <p>Read <a href="/authors/lee">Lee’s article</a> for the earlier protocol.</p>
+        <p>{LAST}</p></div></article>"""
+        intro, body = narrate('https://blogs.kde.org/2026/11/06/seed-trials/', html)
+        self.assertTrue(intro.endswith('By Ash Linden.'), intro)
+        self.assertEqual(body.split(), f'{FIRST} Read Lee’s article for the earlier protocol. {LAST}'.split())
+
     def test_gds_byline_keeps_both_names_without_job_titles(self):
         html = f"""<article><header><h1>Seed trials</h1><div class="govuk-body-s">
         <a rel="author" href="/author/ash">Ash Linden, Head of Policy, Partnerships, and Program Delivery</a>

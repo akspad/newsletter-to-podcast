@@ -203,6 +203,13 @@ def article_details(soup, url):
         logo = soup.select_one('header .md-logo[data-md-component="logo"][title]')
         if logo:
             home_name = logo['title']
+    inkscape_news = requested and requested[1] == 'inkscape.org' and requested[2].startswith('/news/')
+    if inkscape_news:
+        logo = soup.select_one('#logo a > img[alt]')
+        if logo and editorial(logo):
+            home_name = logo['alt']
+            if clean(feed_name).casefold() == 'news feed':
+                feed_name = ''
     publication = clean(meta('og:site_name') or names(article.get('publisher')) or
                         names(site) or names(article.get('isPartOf')) or meta('application-name') or
                         feed_name or home_name, 80)
@@ -267,6 +274,10 @@ def article_details(soup, url):
         writer = byline.select_one(':scope > p.author')
         if writer and editorial(writer):
             byline = writer
+    if byline is None and requested and requested[1] == 'blogs.kde.org' and scope.name == 'article':
+        byline = next((node for node in scope.select(
+            ':scope > .jumbotron > .content-width > p.meta:has(a[href*="/authors/"])')
+            if belongs_to_scope(node, scope)), None)
     byline_name = byline_authors = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.
@@ -374,7 +385,7 @@ def article_details(soup, url):
     if author.startswith(('http://', 'https://')):
         author = ''
     author = re.sub(r'^by(?:\s*:\s*|\s+|$)', '', author, flags=re.I)
-    if DATE.fullmatch(author):
+    if DATE.fullmatch(author) or (inkscape_news and author.casefold() == 'none'):
         author = ''
     body = article.get('articleBody')
     identified = (any(article_score(article)[:2]) or not article_urls(article) and
