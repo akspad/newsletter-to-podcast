@@ -18,6 +18,36 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_gds_byline_keeps_both_names_without_job_titles(self):
+        html = f"""<article><header><h1>Seed trials</h1><div class="govuk-body-s">
+        <a rel="author" href="/author/ash">Ash Linden, Head of Policy, Partnerships, and Program Delivery</a>
+        and <a rel="author" href="/author/lee">Lee Cooper-Quinn, Head of Product, and Program Delivery</a>
+        <a rel="category" href="/topics">Research</a></div></header>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>"""
+        intro, _ = narrate('https://gds.blog.gov.uk/2026/10/19/seed-trials/', html)
+        self.assertTrue(intro.endswith('By Ash Linden, Lee Cooper-Quinn.'), intro)
+
+    def test_earthsky_reads_the_rich_text_and_captions_without_controls(self):
+        html = f"""<h1>Seed trials</h1><div class="post-content"><div class="post-body">
+        <div class="post-share">Share this page</div><div class="post">
+        <div class="post-rich-text"><p>{FIRST}</p><figure class="wp-block-image"><img src="sample">
+        <figcaption class="wp-element-caption">A tray after rain.</figcaption></figure>
+        <p>{LAST}</p><div class="ns-buttons ns-inline-below"><div class="ns-buttons-wrapper">
+        <a href="/share" aria-label="Share on Bluesky">Share on Bluesky</a></div></div></div></div></div>
+        <div class="post-subscribe">Join our list</div><div class="post-more">Another story</div></div>"""
+        _, body = narrate('https://earthsky.org/science/seed-trials/', html)
+        self.assertEqual(body.split(), f'{FIRST} A tray after rain. {LAST}'.split())
+
+    def test_r_project_preserves_short_command_before_its_output(self):
+        html = f"""<main id="quarto-document-content" class="quarto-banner-title-block">
+        <h1>Seed trials</h1><section class="level2"><h2>Results</h2>
+        <p>{FIRST}</p><div class="cell"><div class="code-copy-outer-scaffold"><pre class="sourceCode">
+        <code><span>(fit &lt;- count(x ~ g))</span></code></pre><button>Copy example</button></div>
+        <div class="cell-output"><pre>Group 1: 20 samples</pre></div></div>
+        <p>{LAST}</p></section></main>"""
+        _, body = narrate('https://blog.r-project.org/posts/seed-trials/', html)
+        self.assertEqual(body.split(), f'Results {FIRST} (fit <- count(x ~ g)) Group 1: 20 samples {LAST}'.split())
+
     def test_loc_and_geolog_keep_editorial_photo_captions_in_place(self):
         cases = [
             ('blogs.loc.gov', '<figure class="wp-caption"><img src="tray">'
