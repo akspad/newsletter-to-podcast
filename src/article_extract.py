@@ -280,6 +280,26 @@ def clean_tree(root, title, author, url=''):
         for widget in root.select('.post-rich-text > .ns-buttons.ns-inline-below'):
             if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
                 widget.decompose()
+    if identity and identity[1] in {'robinsloan.com', 'www.robinsloan.com'}:
+        for stamp in root.select('main > article > h1 + date-stamp'):
+            if DATE.fullmatch(' '.join(stamp.stripped_strings)):
+                stamp.decompose()
+        for link in root.select('main > article > a.button[href="/lab/"]'):
+            if link.get_text(' ', strip=True) == 'To the blog home page':
+                link.decompose()
+    if identity and identity[1] in {'popsci.com', 'www.popsci.com'}:
+        for body in root.select('article > .article-content-featured-image + .entry-content'):
+            featured = body.find_previous_sibling()
+            caption = featured.select_one('figure:has(img) > figcaption.article-featured-image-caption')
+            if caption and editorial(caption) and editorial(body):
+                caption.name = 'div' if caption.find('p') else 'p'
+                credit = caption.select_one(':scope > .article-featured-image-caption-credits')
+                if credit:
+                    credit.insert_before(' ')
+                body.insert(0, caption.extract())
+        for widget in root.select('.entry-content section.content-widget.pw-incontent-excluded'):
+            if widget.select_one('a[href*="/home-of-the-future-awards-"]'):
+                widget.decompose()
     caption_selectors = {
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
@@ -516,6 +536,11 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .jumbotron ~ .content-width'
         elif identity[1] in {'openculture.com', 'www.openculture.com'}:
             body_selector = '.recent_post > .colorcontrast > .entry'
+        elif (identity[1] in {'robinsloan.com', 'www.robinsloan.com'} and identity[2].startswith('/lab/')
+              and match('main > article', scope)):
+            candidates = [scope]
+        elif identity[1] in {'aeon.co', 'www.aeon.co'} and identity[2].startswith('/videos/'):
+            body_selector = '.article-content'
         elif identity[1] == 'earthsky.org':
             body_selector = '.post-body > .post > .post-rich-text'
         elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')

@@ -18,6 +18,31 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_robin_sloan_keeps_short_linked_paragraph_and_removes_home_button(self):
+        html = f"""<main><article><h1>Seed trials</h1><date-stamp>November 11, 2026</date-stamp>
+        <p>{FIRST}</p><p>Examples <a href="/one">here</a>, <a href="/two">here</a>.</p>
+        <p>{LAST}</p><a class="button" href="/lab/">To the blog home page</a></article></main>"""
+        _, body = narrate('https://www.robinsloan.com/lab/seed-trials/', html)
+        self.assertEqual(body.split(), f'{FIRST} Examples here, here. {LAST}'.split())
+
+    def test_popsci_keeps_featured_image_caption_and_omits_marked_awards_promo(self):
+        html = f"""<article><h1>Seed trials</h1><div class="article-content-featured-image">
+        <figure><img src="tray"><figcaption class="article-featured-image-caption">
+        <span>A tray at rest.</span><span class="article-featured-image-caption-credits">Credit: Lee</span></figcaption></figure></div>
+        <section class="entry-content"><p>{FIRST}</p><section class="content-widget pw-incontent-excluded">
+        <a href="/gear/home-of-the-future-awards-2026/">See it</a></section>
+        <p>The <a href="/gear/home-of-the-future-awards-2026/">awards page</a> mentions our trials.</p>
+        <p>{LAST}</p></section></article>"""
+        _, body = narrate('https://www.popsci.com/science/seed-trials/', html)
+        self.assertEqual(body.split(),
+                         f'A tray at rest. Credit: Lee {FIRST} The awards page mentions our trials. {LAST}'.split())
+
+    def test_aeon_video_uses_the_description_instead_of_recommendations(self):
+        html = f"""<main><h1>Seed trials</h1><div class="article-content"><p>{FIRST}</p><p>{LAST}</p></div>
+        <div><p>Watch a different video about riding bicycles.</p></div></main>"""
+        _, body = narrate('https://aeon.co/videos/seed-trials', html)
+        self.assertEqual(body.split(), f'{FIRST} {LAST}'.split())
+
     def test_openculture_takes_author_from_its_footer_and_removes_template_endmatter(self):
         url = 'https://www.openculture.com/2026/11/seed-trials.html'
         appeal = ('<p><i>If you would like to sup&shy;port the mission of Open Culture, consider '
