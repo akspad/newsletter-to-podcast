@@ -18,6 +18,34 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_internet_society_uses_matching_article_header_and_keeps_linked_prose(self):
+        html = f"""<meta name="author" content="Publishing Account"><main>
+        <div class="content-wrapper"><header><h1>Seed trials</h1><div class="author-box"><div class="author-meta">
+        <span class="author-name">By <a href="/author/ash/">Ash</a></span>
+        <span class="author-name"><a href="/author/lee/">Lee</a><a hidden href="/author/old/">Old name</a></span>
+        <a href="/author/ash/feed">RSS</a></div></div></header>
+        <article><h2 class="entry-title">Seed trials</h2><div class="body-text"><p>{FIRST}</p>
+        <p><a href="/map">See the individual trial results.</a></p><h4>Findings</h4><p>{LAST}</p></div>
+        <div class="tags">Other topics</div></article></div></main>"""
+        url = 'https://www.internetsociety.org/blog/seed-trials/'
+        intro, body = narrate(url, html)
+        self.assertIn('By Ash, Lee.', intro)
+        self.assertEqual(body.split(), f'{FIRST} See the individual trial results. Findings {LAST}'.split())
+        for alternative in (html.replace('<h1>Seed trials', '<h1>Other story'),
+                            html.replace('class="content-wrapper"', 'class="other"')):
+            self.assertIn('By Publishing Account.', narrate(url, alternative)[0])
+
+    def test_creative_commons_preserves_opening_and_removes_only_the_posting_stamp(self):
+        html = f"""<body class="blog-post"><main><header><h1>Seed trials</h1></header><div class="content">
+        <aside class="opening"><p>How did the experiment begin? We asked the gardeners.</p></aside>
+        <p>{FIRST}</p><aside class="opening"><p>More stories from the archive.</p></aside>
+        <p>Our notebook reads <span class="pub-date">Posted 18 May 2026</span> on its cover.</p>
+        <p>{LAST}</p><span class="pub-date">Posted 19 May 2026</span></div></main></body>"""
+        url = 'https://creativecommons.org/2026/05/19/seed-trials/'
+        _, body = narrate(url, html)
+        self.assertEqual(body.split(), ('How did the experiment begin? We asked the gardeners. '
+                         + FIRST + ' Our notebook reads Posted 18 May 2026 on its cover. ' + LAST).split())
+
     def test_pypi_post_identity_and_heading_links(self):
         html = f"""<header><a class="md-logo" data-md-component="logo" title="Seed Journal"></a></header>
         <aside class="md-sidebar--post"><nav><a href="/">Back to index</a><div class="md-post__authors">

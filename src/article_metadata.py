@@ -302,6 +302,14 @@ def article_details(soup, url):
         visible_authors = ', '.join(linked_byline_names(group))
         if not visible_authors and not group.select('a, [itemprop~="name"]'):
             visible_authors = clean(visible_text(group), 100)
+    if (requested and requested[1] == 'www.internetsociety.org' and requested[2].startswith('/blog/')
+            and scope.name == 'article' and 'content-wrapper' in scope.parent.get('class', [])):
+        header = scope.find_previous_sibling()
+        headline = header.find('h1') if header and header.name == 'header' else None
+        if headline and editorial(headline) and heading_matches(heading_text(headline), title):
+            names_in_header = [clean(visible_text(link)) for link in header.select(
+                '.author-box .author-meta .author-name > a[href]') if editorial(link)]
+            visible_authors = ', '.join(dict.fromkeys(filter(None, names_in_header))) or visible_authors
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
     if not author and pypi_post:

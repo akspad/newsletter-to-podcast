@@ -241,6 +241,15 @@ def clean_tree(root, title, author, url=''):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     identity = url_identity(url)
+    if identity and identity[1] == 'creativecommons.org':
+        body = 'body.blog-post main > .content'
+        for opening in root.select(body + ' > aside.opening:first-child'):
+            if opening.find('p', recursive=False):
+                opening.name = 'div'
+        for stamp in root.select(body + ' > span.pub-date'):
+            label = stamp.get_text(' ', strip=True)
+            if label.startswith('Posted ') and DATE.fullmatch(label.removeprefix('Posted ')):
+                stamp.decompose()
     if identity and identity[1] == 'blog.openstreetmap.org':
         for menu in root.select('p.icl_post_in_other_langs.wpml-ls-statics-post_translations'):
             if (menu.select_one('[role="navigation"] a.wpml-ls-link[hreflang]')
@@ -464,6 +473,8 @@ def extract_text(soup, title='', author='', url=''):
     if identity:
         if identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
+        elif identity[1] == 'www.internetsociety.org' and identity[2].startswith('/blog/') and scope.name == 'article':
+            body_selector = ':scope > .body-text'
         elif identity[1] == 'www.nist.gov' and identity[2].startswith('/news-events/news/'):
             body_selector = '.nist-page__region--content .text-with-summary'
         elif identity[1] == 'www.djangoproject.com' and identity[2].startswith('/weblog/'):
