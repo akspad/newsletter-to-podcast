@@ -279,6 +279,8 @@ def clean_tree(root, title, author, url=''):
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'earthsky.org': '.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption',
+        'www.futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
+        'futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'blogs.loc.gov': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
                          '.entry-content > div.wp-caption > p.wp-caption-text'),
