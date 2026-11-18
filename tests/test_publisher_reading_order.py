@@ -87,10 +87,15 @@ class PublisherReadingOrderTests(unittest.TestCase):
         _, body = narrate('https://blog.r-project.org/posts/seed-trials/', html)
         self.assertEqual(body.split(), f'Results {FIRST} (fit <- count(x ~ g)) Group 1: 20 samples {LAST}'.split())
 
-    def test_loc_and_geolog_keep_editorial_photo_captions_in_place(self):
+    def test_wordpress_editorial_photo_captions_stay_in_place(self):
         cases = [
             ('blogs.loc.gov', '<figure class="wp-caption"><img src="tray">'
              '<figcaption class="wp-caption-text">Seeds in March.</figcaption></figure>', 'Seeds in March.'),
+            ('www.futilitycloset.com', '<figure class="wp-caption"><img src="roots">'
+             '<figcaption class="wp-caption-text">Image: <a href="/credits/one">Plant archive</a></figcaption></figure>'
+             '<figure class="wp-caption"><img src="stems">'
+             '<figcaption class="wp-caption-text">Image: <a href="/credits/two">Plant archive</a></figcaption></figure>',
+             'Image: Plant archive Image: Plant archive'),
             ('blogs.egu.eu', '<figure class="wp-caption post-thumbnail"><img src="tray">'
              '<figcaption class="featured_caption">Early growth.</figcaption></figure>'
              '<div class="wp-caption"><a href="/photo"><img src="tray2"></a>'
