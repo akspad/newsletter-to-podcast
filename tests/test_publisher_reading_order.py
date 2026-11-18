@@ -1,0 +1,63 @@
+"""Publisher templates must keep article content separate from page controls."""
+from pathlib import Path
+import sys
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+import preview
+from substack import html_to_text, Substack
+
+FIRST = 'We measured how quickly the fictional seedlings grew in different conditions.'
+LAST = 'The final observations recorded the effect of light on every individual plant.'
+
+
+def narrate(url, html):
+    with patch.object(Substack, 'get', return_value=html):
+        return preview.article_text(url).split('\n', 1)
+
+
+class PublisherReadingOrderTests(unittest.TestCase):
+    def test_coauthors_and_visible_image_caption(self):
+        html = f"""<article><div class="post-content"><header><h1>Seedlings</h1><p>
+        <span><a href="/author/ash/"><bdi>Ash</bdi></a></span>
+        <span hidden><a href="/author/fake/"><bdi>Hidden</bdi></a></span>
+        <span><a href="/author/lee/"><bdi>Lee</bdi></a></span></p></header>
+        <div class="article-content"><p>{FIRST}</p>
+        <figure class="emdash-image"><img src="one"><figcaption>The shaded tray.</figcaption></figure>
+        <figure class="emdash-image" hidden><img src="two"><figcaption>Hidden</figcaption></figure>
+        <p>{LAST}</p></div></div></article>"""
+        intro, body = narrate('https://blog.cloudflare.com/seedlings/', html)
+        self.assertIn('By Ash, Lee.', intro)
+        self.assertEqual(body.split(), f'{FIRST} The shaded tray. {LAST}'.split())
+
+    def test_guardian_excludes_card_and_topic_widgets_but_keeps_prose_links(self):
+        html = f"""<article><h1>Notes</h1><div data-gu-name="body">
+        <div class="article-body-viewer-selector"><p>{FIRST}</p>
+        <figure data-spacefinder-role="richLink"><div data-component="rich-link">
+        <a href="/other">Another story</a></div></figure>
+        <p><a href="/source">Read more</a> about this result.</p><p>{LAST}</p></div>
+        <div>Topic widgets</div></div></article>"""
+        _, body = narrate('https://www.theguardian.com/science/notes', html)
+        self.assertEqual(body.split(), f'{FIRST} Read more about this result. {LAST}'.split())
+
+    def test_guardian_feed_removes_only_terminal_standalone_permalink(self):
+        url = 'https://www.theguardian.com/science/notes'
+        link = '<a href="/science/notes">Continue reading...</a>'
+        body = f'<p>{FIRST}</p>'
+        self.assertEqual(html_to_text(body + link, url=url), FIRST)
+        for html in (body + '<blockquote>' + link + '</blockquote>', link + body,
+                     body + link.replace('/notes', '/other')):
+            self.assertIn('Continue reading...', html_to_text(html, url=url))
+
+    def test_go_atom_uses_matching_wrapper_and_preserves_navigation_words_in_prose(self):
+        html = f"""<div id="blog"><div class="Article" data-slug="/blog/notes">
+        <h1 class="small"><a href="/blog/">Example blog</a></h1><h1>Notes</h1>
+        <p class="author">Ash</p><div class="markdown"><p>{FIRST}</p>
+        <p>Next article: a quotation.</p></div></div>
+        <div class="Article prevnext"><a href="/blog/all">Blog Index</a></div></div>"""
+        url = 'https://go.dev/blog/notes'
+        self.assertEqual(html_to_text(html, title='Notes', url=url).split(),
+                         f'{FIRST} Next article: a quotation.'.split())
+        for other, title in ((url, 'Different'), (url + '-other', 'Notes'), ('https://example.org/blog/notes', 'Notes')):
+            self.assertIn('Blog Index', html_to_text(html, title=title, url=other))

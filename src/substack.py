@@ -606,7 +606,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
     for node in soup.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
-    clean_imported_widgets(soup, url)
+    clean_imported_widgets(soup, url, title)
     remove_resolved_footnote_backlinks(soup, url)
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
     for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '

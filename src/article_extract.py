@@ -240,6 +240,17 @@ def clean_tree(root, title, author, url=''):
     for node in root.select('[style], [hidden], [aria-hidden]'):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
+    identity = url_identity(url)
+    if identity and identity[1] == 'blog.cloudflare.com':
+        for caption in root.select('.article-content figure.emdash-image > figcaption'):
+            if editorial(caption) and caption.parent.find('img'):
+                figure = caption.parent
+                caption.name = 'p'
+                figure.insert_before(caption.extract())
+    if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
+        for card in root.select('.article-body-viewer-selector figure[data-spacefinder-role="richLink"]'):
+            if card.select_one('[data-component="rich-link"] a[href]') and not card.find_parent('blockquote'):
+                card.decompose()
     for node in root.select('p.date, p.mobile-date'):
         if (DATE.fullmatch(node.get_text(' ', strip=True)) and
                 not node.find_parent(['blockquote', 'pre', 'code', 'li', 'table', 'figure'])):
@@ -432,6 +443,11 @@ def extract_text(soup, title='', author='', url=''):
     candidates = scope.select(BODY_SELECTORS)
     if match(BODY_SELECTORS, scope) or scope is recovered_body:
         candidates = [scope]
+    identity = url_identity(url)
+    if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
+        inner = scope.select('[data-gu-name="body"] .article-body-viewer-selector')
+        if len(inner) == 1 and editorial(inner[0]) and readable_prose(plain_text(inner[0])):
+            candidates = inner
     if candidates:
         # Some publications split the article among sibling body containers.
         # Read each outermost section once, inside the same semantic article.
