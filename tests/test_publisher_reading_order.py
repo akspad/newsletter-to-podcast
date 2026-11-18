@@ -18,6 +18,16 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_longreads_omits_newspack_recommendations_and_keeps_the_editorial_heading(self):
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <h2 class="article-section-title">More picks from the greenhouse</h2><p>{LAST}</p>
+        <div class="wp-block-newspack-blocks-homepage-articles wpnbha"><div>
+        <h2 class="article-section-title">More picks from the archives</h2>
+        <article class="type-post"><h3>Another story</h3></article></div></div></div></article>"""
+        url = 'https://longreads.com/2026/11/18/seed-trials/'
+        _, body = narrate(url, html)
+        self.assertEqual(body.split(), f'{FIRST} More picks from the greenhouse {LAST}'.split())
+
     def test_robin_sloan_keeps_short_linked_paragraph_and_removes_home_button(self):
         html = f"""<main><article><h1>Seed trials</h1><date-stamp>November 11, 2026</date-stamp>
         <p>{FIRST}</p><p>Examples <a href="/one">here</a>, <a href="/two">here</a>.</p>

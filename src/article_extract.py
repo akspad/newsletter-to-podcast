@@ -509,6 +509,15 @@ def extract_text(soup, title='', author='', url=''):
             # distinct sections and intentional repetition later in the story.
             if not deferred or text != deferred[-1]:
                 deferred.append(text)
+    identity = url_identity(url)
+    if identity and identity[1] in {'longreads.com', 'www.longreads.com'}:
+        # Strip the Newspack list while its cards still identify the heading.
+        for listing in scope.select('.entry-content .wp-block-newspack-blocks-homepage-articles.wpnbha '
+                                    '> div:has(> h2.article-section-title):has(> article.type-post)'):
+            if (not listing.find_parent(['blockquote', 'pre', 'code'])
+                    and all(match('h2.article-section-title, article.type-post', child)
+                            for child in listing.find_all(recursive=False))):
+                listing.decompose()
     # Select before cleanup removes the headline used to identify the article.
     for node in list(soup.select('article, .recommendations, .related-posts, .related-articles')):
         if node.parent is not None and (not editorial(node) or
@@ -521,7 +530,6 @@ def extract_text(soup, title='', author='', url=''):
     candidates = scope.select(BODY_SELECTORS)
     if match(BODY_SELECTORS, scope) or scope is recovered_body:
         candidates = [scope]
-    identity = url_identity(url)
     body_selector = None
     if identity:
         if identity[1] in {'theguardian.com', 'www.theguardian.com'}:
