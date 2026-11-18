@@ -241,6 +241,11 @@ def clean_tree(root, title, author, url=''):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     identity = url_identity(url)
+    if identity and identity[1] == 'blog.openstreetmap.org':
+        for menu in root.select('p.icl_post_in_other_langs.wpml-ls-statics-post_translations'):
+            if (menu.select_one('[role="navigation"] a.wpml-ls-link[hreflang]')
+                    and not menu.find_parent(['blockquote', 'pre', 'code'])):
+                menu.decompose()
     if identity and identity[1] == 'blog.cloudflare.com':
         for caption in root.select('.article-content figure.emdash-image > figcaption'):
             if editorial(caption) and caption.parent.find('img'):
