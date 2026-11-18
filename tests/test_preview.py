@@ -669,6 +669,45 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(f'attempt={failures + 1}', stderr.getvalue())
             self.assertNotIn('PRIVATE', stderr.getvalue())
 
+    async def test_silent_stream_retries_and_discards_partial_audio(self):
+        closed = asyncio.Event()
+
+        class Stalled:
+            async def stream(self):
+                try:
+                    yield {'type': 'audio', 'data': b'partial'}
+                    await asyncio.Event().wait()
+                finally:
+                    closed.set()
+
+        class Good:
+            async def stream(self):
+                yield {'type': 'audio', 'data': b'complete'}
+
+        with tempfile.TemporaryDirectory() as tmp, patch('preview.SPEECH_STALL_SECONDS', 0.02), \
+                patch('edge_tts.Communicate', side_effect=[Stalled(), Good()]) as calls, \
+                patch('preview.asyncio.sleep', AsyncMock()), patch('tts.duration', return_value=1):
+            path = Path(tmp) / 'speech.mp3'
+            await asyncio.wait_for(preview.narrate('Original text', 'en-US-AndrewNeural', path), 2)
+            self.assertTrue(closed.is_set())
+            self.assertEqual(calls.call_count, 2)
+            self.assertEqual(path.read_bytes(), b'complete')
+
+    async def test_audio_progress_renews_the_stall_timer(self):
+        class Progress:
+            async def stream(self):
+                for _ in range(7):
+                    await asyncio.sleep(0.03)
+                    yield {'type': 'audio', 'data': b'chunk'}
+
+        with tempfile.TemporaryDirectory() as tmp, patch('preview.SPEECH_STALL_SECONDS', 0.15), \
+                patch('edge_tts.Communicate', return_value=Progress()) as calls, \
+                patch('tts.duration', return_value=1):
+            path = Path(tmp) / 'speech.mp3'
+            await preview.narrate('Original text', 'en-US-AndrewNeural', path)
+            calls.assert_called_once()
+            self.assertEqual(path.read_bytes(), b'chunk' * 7)
+
     async def test_persistent_websocket_errors_stop_after_three_attempts(self):
         from edge_tts.exceptions import WebSocketError
         class Speech:
