@@ -276,6 +276,8 @@ def clean_tree(root, title, author, url=''):
             if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
                 widget.decompose()
     caption_selectors = {
+        'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
+        'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'earthsky.org': '.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption',
         'blogs.loc.gov': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
@@ -497,6 +499,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .bodycopy'
+        elif identity[1] in {'filfre.net', 'www.filfre.net'}:
+            body_selector = 'div.post.hentry > div.entry'
         elif identity[1] == 'blogs.kde.org' and match('article.post-content', scope):
             body_selector = ':scope > .jumbotron ~ .content-width'
         elif identity[1] == 'earthsky.org':

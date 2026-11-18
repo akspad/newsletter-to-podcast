@@ -18,6 +18,20 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_digital_antiquarian_keeps_captions_in_the_article_body(self):
+        html = f"""<div class="post hentry"><h2>Seed trials</h2><div class="entry">
+        <p>{FIRST}</p><div class="wp-caption"><a href="/tray"><img src="tray"></a>
+        <p class="wp-caption-text">A tray of seedlings photographed after rain.</p></div>
+        <div class="wp-caption" hidden><img src="unpublished">
+        <p class="wp-caption-text">Unpublished frame.</p></div><p>{LAST}</p>
+        <h4>Footnotes</h4><ol><li>The study began in March.</li></ol></div>
+        <p>Read another article.</p></div><aside><div class="wp-caption"><img src="ad">
+        <p class="wp-caption-text">A sponsored image.</p></div></aside>"""
+        _, body = narrate('https://www.filfre.net/2026/10/seed-trials/', html)
+        self.assertEqual(body.split(),
+                         f'{FIRST} A tray of seedlings photographed after rain. {LAST} '
+                         'Footnotes The study began in March.'.split())
+
     def test_inkscape_uses_brand_and_skips_placeholder_and_header_timestamp(self):
         html = f"""<head><title>Seed trials | Inkscape</title><meta name="author" content="None">
         <link rel="alternate" type="application/rss+xml" title="News Feed" href="/news/feed/"></head>
