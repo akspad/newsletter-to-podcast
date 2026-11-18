@@ -37,7 +37,7 @@ class ExtractionDiagnosticsTests(unittest.TestCase):
                 patch('security.public_destination', return_value=('private.example', 443, '93.184.216.34')):
             yield request
 
-    def run_failure(self, *, pub, post, source=None):
+    def run_failure(self, *, pub, post, source=None, empty_feed=False):
         """Exercise the pipeline's real catch/queue path; providers must stay untouched."""
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
                 'SITE_DIR': tmp+'/site', 'STATE_DIR': tmp+'/state', 'EPISODE_MODE': 'full',
@@ -56,7 +56,10 @@ class ExtractionDiagnosticsTests(unittest.TestCase):
             state = storage.load(settings)
             self.assertEqual(state['seen'], [])
             self.assertEqual(state['episodes'], [])
-            self.assertEqual(state['retry'], [{'pub': pub, 'post': post}])
+            retry = {'pub': pub, 'post': post}
+            if empty_feed:
+                retry['empty_feed_attempts'] = 1
+            self.assertEqual(state['retry'], [retry])
             outputs = Path(tmp+'/outputs').read_text()
             self.assertIn('failed_articles=1\n', outputs)
             self.assertIn('queued_articles=1\n', outputs)
@@ -79,7 +82,7 @@ class ExtractionDiagnosticsTests(unittest.TestCase):
                 with self.subTest(kind=kind, body=body):
                     pub, post = self.fixture(kind)
                     post['body_html'] = body
-                    log = self.run_failure(pub=pub, post=post)
+                    log = self.run_failure(pub=pub, post=post, empty_feed=(kind == 'feed'))
                     self.assertEqual(log, 'Episode failed (stage=extract reason=empty_article_text '
                                      f'step=validate_text source_kind={kind}); queued for retry.\n')
 
