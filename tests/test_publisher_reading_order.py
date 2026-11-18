@@ -83,3 +83,18 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertIn('By Lee, Ash.', intro)
         self.assertNotIn('Hidden', intro)
         self.assertNotIn('By ', narrate('https://www.w3.org/blog/notes/', html.replace('By:', 'Editors:'))[0])
+
+    def test_django_body_keeps_link_only_items_in_source_order(self):
+        items = ''.join(f'<li><a href="/idea/{i}/">Idea {i}</a></li>' for i in range(6))
+        html = f"""<main><h1>Notes</h1><div class="blog-entry-body"><p>{FIRST}</p>
+        <ol>{items}</ol><p>{LAST}</p></div><nav>Other news</nav></main>"""
+        _, body = narrate('https://www.djangoproject.com/weblog/2026/notes/', html)
+        self.assertEqual(body.split(), (FIRST + ' ' + ' '.join(f'Idea {i}' for i in range(6)) + ' ' + LAST).split())
+
+    def test_raspberry_pi_only_editorial_image_captions_are_retained(self):
+        html = f"""<article><h1>Notes</h1><div class="c-post-content__wysiwyg"><p>{FIRST}</p>
+        <div class="wp-block-image"><figure><img src="/one"><figcaption class="wp-element-caption">A useful diagram.</figcaption></figure></div>
+        <div class="wp-block-image" hidden><figure><img src="/two"><figcaption class="wp-element-caption">Hidden caption.</figcaption></figure></div>
+        <p>{LAST}</p></div></article>"""
+        _, body = narrate('https://www.raspberrypi.com/news/notes/', html)
+        self.assertEqual(body.split(), f'{FIRST} A useful diagram. {LAST}'.split())

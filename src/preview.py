@@ -12,6 +12,7 @@ from substack import SourceDownloadError
 from article_metadata import article_details
 from article_scope import readable_prose
 
+SPEECH_STALL_SECONDS = 20
 MAX_SECONDS = 60
 MAX_WORDS = 130
 MAX_EXCERPT_CHARS = 1000
@@ -154,13 +155,19 @@ async def narrate(text, voice, path):
         try:
             count = 0
             communication = edge_tts.Communicate(text, voice, proxy=os.environ.get("HTTPS_PROXY"))
-            with path.open("wb") as output:
-                async for item in communication.stream():
-                    if item["type"] == "audio":
-                        count += len(item["data"])
-                        if count > MAX_AUDIO_BYTES:
-                            raise ValueError("Preview audio exceeded its size limit.")
-                        output.write(item["data"])
+            # Allow a healthy stream to continue while audio arrives. A silent
+            # first or second attempt must leave time for a new connection.
+            stall_limit = SPEECH_STALL_SECONDS if attempt < 3 else None
+            async with asyncio.timeout(stall_limit) as stall:
+                with path.open("wb") as output:
+                    async for item in communication.stream():
+                        if item["type"] == "audio":
+                            count += len(item["data"])
+                            if count > MAX_AUDIO_BYTES:
+                                raise ValueError("Preview audio exceeded its size limit.")
+                            output.write(item["data"])
+                            if stall_limit and item["data"]:
+                                stall.reschedule(asyncio.get_running_loop().time() + stall_limit)
             if not count:
                 raise edge_tts.exceptions.NoAudioReceived("No speech returned")
             try:
@@ -173,7 +180,7 @@ async def narrate(text, voice, path):
             return
         except (edge_tts.exceptions.NoAudioReceived, edge_tts.exceptions.WebSocketError,
                 ClientConnectionError, ClientResponseError,
-                IncompleteSpeechError) as error:
+                IncompleteSpeechError, TimeoutError) as error:
             transient = not isinstance(error, ClientResponseError) or error.status == 429 or error.status >= 500
             if attempt == 3 or not transient:
                 raise

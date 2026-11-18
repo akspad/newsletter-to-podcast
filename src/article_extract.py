@@ -246,12 +246,17 @@ def clean_tree(root, title, author, url=''):
             if (menu.select_one('[role="navigation"] a.wpml-ls-link[hreflang]')
                     and not menu.find_parent(['blockquote', 'pre', 'code'])):
                 menu.decompose()
-    if identity and identity[1] == 'blog.cloudflare.com':
-        for caption in root.select('.article-content figure.emdash-image > figcaption'):
+    caption_selectors = {
+        'blog.cloudflare.com': '.article-content figure.emdash-image > figcaption',
+        'www.raspberrypi.com': '.c-post-content__wysiwyg .wp-block-image > figure > figcaption.wp-element-caption',
+    }
+    if identity and identity[1] in caption_selectors:
+        for caption in root.select(caption_selectors[identity[1]]):
             if editorial(caption) and caption.parent.find('img'):
                 figure = caption.parent
                 caption.name = 'p'
-                figure.insert_before(caption.extract())
+                container = figure.parent if 'wp-block-image' in figure.parent.get('class', []) else figure
+                container.insert_before(caption.extract())
     if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
         for card in root.select('.article-body-viewer-selector figure[data-spacefinder-role="richLink"]'):
             if card.select_one('[data-component="rich-link"] a[href]') and not card.find_parent('blockquote'):
@@ -449,10 +454,18 @@ def extract_text(soup, title='', author='', url=''):
     if match(BODY_SELECTORS, scope) or scope is recovered_body:
         candidates = [scope]
     identity = url_identity(url)
-    if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
-        inner = scope.select('[data-gu-name="body"] .article-body-viewer-selector')
-        if len(inner) == 1 and editorial(inner[0]) and readable_prose(plain_text(inner[0])):
-            candidates = inner
+    body_selector = None
+    if identity:
+        if identity[1] in {'theguardian.com', 'www.theguardian.com'}:
+            body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
+        elif identity[1] == 'www.djangoproject.com' and identity[2].startswith('/weblog/'):
+            body_selector = '.blog-entry-body'
+        elif identity[1] == 'www.raspberrypi.com' and identity[2].startswith('/news/'):
+            body_selector = '.c-post-content__wysiwyg'
+    if body_selector:
+        bodies = scope.select(body_selector)
+        if len(bodies) == 1 and editorial(bodies[0]) and readable_prose(plain_text(bodies[0])):
+            candidates = bodies
     if candidates:
         # Some publications split the article among sibling body containers.
         # Read each outermost section once, inside the same semantic article.
