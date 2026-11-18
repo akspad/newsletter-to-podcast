@@ -18,6 +18,22 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_loc_and_geolog_keep_editorial_photo_captions_in_place(self):
+        cases = [
+            ('blogs.loc.gov', '<figure class="wp-caption"><img src="tray">'
+             '<figcaption class="wp-caption-text">Seeds in March.</figcaption></figure>', 'Seeds in March.'),
+            ('blogs.egu.eu', '<figure class="wp-caption post-thumbnail"><img src="tray">'
+             '<figcaption class="featured_caption">Early growth.</figcaption></figure>'
+             '<div class="wp-caption"><a href="/photo"><img src="tray2"></a>'
+             '<p class="wp-caption-text">Seeds in April.</p></div>', 'Early growth. Seeds in April.'),
+        ]
+        for host, photo, expected in cases:
+            with self.subTest(host=host):
+                html = (f'<article><h1>Seeds</h1><div class="entry-content"><p>{FIRST}</p>{photo}'
+                        f'<div hidden>{photo}</div><aside>{photo}</aside><p>{LAST}</p></div></article>')
+                _, body = narrate(f'https://{host}/seed-trials/', html)
+                self.assertEqual(body.split(), f'{FIRST} {expected} {LAST}'.split())
+
     def test_webkit_author_line_caption_and_linked_code_examples(self):
         html = f"""<article><h1>Seeds</h1><div class="byline"><p class="date">May 18, 2026</p>
         <p class="author">by <span>Ash and Lee</span></p></div><div class="bodycopy"><p>{FIRST}</p>

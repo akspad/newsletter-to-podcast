@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 from email.utils import parseaddr, parsedate_to_datetime
 from html import escape
+from itertools import groupby
 from urllib.parse import urlencode, urljoin, urlparse
 
 from pathlib import Path
@@ -643,7 +644,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
     # Collapse source formatting whitespace without inserting gaps between
     # inline word parts. Comments and doctypes must keep their non-text types.
     for node in list(soup.find_all(string=True)):
-        if type(node) in (NavigableString, CData) and node.find_parent('pre') is None:
+        if type(node) in (NavigableString, CData) and node.find_parent(['pre', 'code']) is None:
             node.replace_with(re.sub(r'\s+', ' ', str(node)))
     for node in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'figcaption',
                                'div', 'section', 'article', 'ul', 'ol', 'pre', 'table', 'thead', 'tbody',
@@ -653,9 +654,21 @@ def html_to_text(html: str, *, title='', url='') -> str:
     for node in soup.find_all(['th', 'td']):
         node.insert_before(' ')
         node.insert_after(' ')
-    lines = [re.sub(r'\s+([,.;:!?)])', r'\1', ' '.join(line.split()))
-             for line in soup.get_text('', strip=False).splitlines()]
-    return '\n'.join(line for line in lines if line)
+    # Normalize prose across inline markup, but keep literal spacing within
+    # code. Removing the space in "<widget :size" changes the tag name.
+    parts = []
+    for literal, nodes in groupby(soup.strings, key=lambda node: node.find_parent(['pre', 'code']) is not None):
+        text = ''.join(nodes)
+        if not literal:
+            text = re.sub(r'[^\S\n]+', ' ', text)
+            text = re.sub(r' *\n[ \n]*', '\n', text)
+            text = re.sub(r' +([,.;:!?)])', r'\1', text)
+            if not parts:
+                text = text.lstrip()
+        parts.append(text)
+    if parts and not literal:
+        parts[-1] = parts[-1].rstrip()
+    return ''.join(parts)
 
 
 def has_audio(post) -> bool:
