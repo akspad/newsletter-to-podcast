@@ -285,6 +285,9 @@ def article_details(soup, url):
     # group so a multi-author byline isn't reduced to its first link.
     groups = [node for node in soup.select('.article-authors, .c-article-author, .single-article-meta .bylines')
               if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])]
+    if urlparse(url).hostname == 'blog.cloudflare.com':
+        groups.extend(node for node in scope.select('header p')
+                      if node.select_one('a[href^="/author/"] > bdi') and belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code']))
     if labels.get('author') is not None:
         groups.append(labels['author'])
     group = next((node for node in groups if any(parent is scope for parent in node.parents)),

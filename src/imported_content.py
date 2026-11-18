@@ -36,7 +36,7 @@ def earth_observatory_writer(root, url):
     return next(iter(writers)) if len(writers) == 1 else ''
 
 
-def clean_imported_widgets(root, url):
+def clean_imported_widgets(root, url, title=''):
     if earth_observatory_url(url):
         credits = [images for _, images, _ in earth_credits(root, url)]
         widgets = (
@@ -74,6 +74,30 @@ def clean_imported_widgets(root, url):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] == 'go.dev' and identity[2].startswith('/blog/'):
+        for article in root.select('#blog .Article[data-slug]'):
+            if (url_identity(article.get('data-slug'), url) != identity or not editorial(article)
+                    or article.find_parent(['blockquote', 'pre', 'code'])
+                    or not article.select_one(':scope > .markdown')):
+                continue
+            # Only discard the template header when it agrees with this feed entry.
+            heading = article.select_one(':scope > h1:not(.small)')
+            if not title or not heading or heading.get_text(' ', strip=True) != title:
+                continue
+            for node in article.select(':scope > h1.small:has(a[href="/blog/"]), :scope > p.author'):
+                node.decompose()
+            heading.decompose()
+            nav = article.find_next_sibling()
+            if nav and {'Article', 'prevnext'} <= set(nav.get('class', [])) and nav.select_one('a[href="/blog/all"]'):
+                nav.decompose()
+    if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
+        # The RSS excerpt ends with a standalone link back to this very article.
+        links = root.find_all('a', recursive=False, href=True)
+        if links:
+            link = links[-1]
+            if (url_identity(link['href'], url) == identity and link.get_text(strip=True) in
+                    {'Continue reading...', 'Continue reading…'} and not any(str(s).strip() for s in link.next_siblings)):
+                link.decompose()
     if not identity or identity[1] != 'arstechnica.com':
         return
     # Ars supplies an intentional RSS excerpt. Remove only its terminal pair
