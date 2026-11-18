@@ -278,6 +278,16 @@ def article_details(soup, url):
         byline = next((node for node in scope.select(
             ':scope > .jumbotron > .content-width > p.meta:has(a[href*="/authors/"])')
             if belongs_to_scope(node, scope)), None)
+    if requested and requested[1] in {'openculture.com', 'www.openculture.com'}:
+        for credit in scope.select('.recent_post > .alignleft > p.author'):
+            permalink = credit.select_one('a[title="Permalink"][href]')
+            if (permalink and url_identity(permalink['href'], url) == requested
+                    and belongs_to_scope(credit, scope) and credit.select_one('a[rel~="author"]')):
+                byline = credit
+                break
+        else:
+            if byline is not None and byline.select_one('a[href$="#respond"]'):
+                byline = None
     byline_name = byline_authors = ''
     if byline is not None:
         # Prefer an author link/name to a wrapper containing roles and dates.

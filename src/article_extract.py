@@ -4,6 +4,7 @@ from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, readable_prose, remove_resolved_footnote_backlinks, url_identity
+from imported_content import remove_openculture_endmatter
 from tts import speech_text
 
 
@@ -265,6 +266,10 @@ def clean_tree(root, title, author, url=''):
             for link in root.select(f'.post-content > span.nav-{label.lower()} > a[rel~="{rel}"][href]'):
                 if link.get_text(' ', strip=True) == label:
                     link.decompose()
+    if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
+        for body in root.select('.recent_post > .colorcontrast > .entry'):
+            if editorial(body):
+                remove_openculture_endmatter(body, url)
     if identity and identity[1] == 'inkscape.org' and identity[2].startswith('/news/'):
         for stamp in root.select('#content .wrapper > h1 + p.postdate'):
             label = ' '.join(stamp.stripped_strings)
@@ -505,6 +510,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = 'div.post.hentry > div.entry'
         elif identity[1] == 'blogs.kde.org' and match('article.post-content', scope):
             body_selector = ':scope > .jumbotron ~ .content-width'
+        elif identity[1] in {'openculture.com', 'www.openculture.com'}:
+            body_selector = '.recent_post > .colorcontrast > .entry'
         elif identity[1] == 'earthsky.org':
             body_selector = '.post-body > .post > .post-rich-text'
         elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')

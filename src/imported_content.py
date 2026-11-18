@@ -2,6 +2,8 @@
 import re
 from urllib.parse import urlsplit
 
+from tts import speech_text
+
 from article_scope import DATE, belongs_to_scope, editorial, url_identity
 
 
@@ -34,6 +36,43 @@ def earth_credits(root, url):
 def earth_observatory_writer(root, url):
     writers = {writer for _, _, writer in earth_credits(root, url)}
     return next(iter(writers)) if len(writers) == 1 else ''
+
+
+def remove_openculture_endmatter(body, url):
+    """Remove Open Culture's donation appeal and related-post navigation."""
+    identity = url_identity(url)
+    for paragraph in reversed(body.find_all('p', recursive=False)):
+        text = ' '.join(speech_text(paragraph.get_text()).split())
+        appeal = paragraph.find('i', recursive=False)
+        if (appeal and paragraph.select_one('a[href]')
+                and text == ' '.join(speech_text(appeal.get_text()).split())
+                and text.startswith('If you would like to support the mission of Open Culture, '
+                                    'consider making a donation to our site.')):
+            paragraph.decompose()
+            continue
+
+        label = paragraph.find('strong', recursive=False)
+        if (not label or text != 'Related Content'
+                or ' '.join(speech_text(label.get_text()).split()) != text):
+            continue
+        cards = []
+        for sibling in paragraph.next_siblings:
+            if not str(sibling).strip():
+                continue
+            if getattr(sibling, 'name', None) == 'p' and not sibling.get_text(strip=True) and not sibling.find(True):
+                continue
+            if getattr(sibling, 'name', None) != 'p':
+                break
+            link = sibling.select_one(':scope > a[rel~="bookmark"][href]')
+            target = url_identity(link['href'], url) if link else None
+            if (not target or target[1] != identity[1] or not target[2].endswith('.html') or target == identity
+                    or len(sibling.find_all('a')) != 1 or sibling.get_text(strip=True) != link.get_text(strip=True)):
+                break
+            cards.append(sibling)
+        if cards:
+            paragraph.decompose()
+            for card in cards:
+                card.decompose()
 
 
 def clean_imported_widgets(root, url, title=''):
@@ -74,6 +113,8 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
+        remove_openculture_endmatter(root, url)
     if identity and identity[1] == 'simonwillison.net':
         # The Atom feed appends a paragraph of category links after the story.
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
