@@ -265,7 +265,12 @@ def clean_tree(root, title, author, url=''):
             for link in root.select(f'.post-content > span.nav-{label.lower()} > a[rel~="{rel}"][href]'):
                 if link.get_text(' ', strip=True) == label:
                     link.decompose()
+    if identity and identity[1] == 'earthsky.org':
+        for widget in root.select('.post-rich-text > .ns-buttons.ns-inline-below'):
+            if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
+                widget.decompose()
     caption_selectors = {
+        'earthsky.org': '.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption',
         'blogs.loc.gov': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
                          '.entry-content > div.wp-caption > p.wp-caption-text'),
@@ -486,6 +491,11 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .bodycopy'
+        elif identity[1] == 'earthsky.org':
+            body_selector = '.post-body > .post > .post-rich-text'
+        elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')
+              and match('main#quarto-document-content.quarto-banner-title-block:has(> section.level2)', scope)):
+            candidates = [scope]
         elif identity[1] == 'www.nist.gov' and identity[2].startswith('/news-events/news/'):
             body_selector = '.nist-page__region--content .text-with-summary'
         elif identity[1] == 'www.djangoproject.com' and identity[2].startswith('/weblog/'):

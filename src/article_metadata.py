@@ -314,6 +314,12 @@ def article_details(soup, url):
             names_in_header = [clean(visible_text(link)) for link in header.select(
                 '.author-box .author-meta .author-name > a[href]') if editorial(link)]
             visible_authors = ', '.join(dict.fromkeys(filter(None, names_in_header))) or visible_authors
+    if requested and requested[1] == 'gds.blog.gov.uk' and scope.name == 'article':
+        attribution = scope.select_one(':scope > header .govuk-body-s:has(a[rel~="author"])')
+        if attribution and editorial(attribution):
+            authors = [re.split(r',\s+Head of\s+', name, maxsplit=1, flags=re.I)[0]
+                       for name in linked_byline_names(attribution)]
+            visible_authors = ', '.join(dict.fromkeys(authors)) or visible_authors
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
     if not author and pypi_post:
