@@ -198,6 +198,11 @@ def article_details(soup, url):
     if clean(feed_name).casefold() in {'rss', 'atom', 'feed', 'rss feed', 'atom feed',
                                       'recent entries', 'recent posts', 'latest posts'}:
         feed_name = ''
+    pypi_post = requested and requested[1] == 'blog.pypi.org' and requested[2].startswith('/posts/')
+    if pypi_post:
+        logo = soup.select_one('header .md-logo[data-md-component="logo"][title]')
+        if logo:
+            home_name = logo['title']
     publication = clean(meta('og:site_name') or names(article.get('publisher')) or
                         names(site) or names(article.get('isPartOf')) or meta('application-name') or
                         feed_name or home_name, 80)
@@ -299,6 +304,15 @@ def article_details(soup, url):
             visible_authors = clean(visible_text(group), 100)
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
+    if not author and pypi_post:
+        profiles = soup.select('.md-sidebar--post .md-post__authors .md-profile__description > strong > a[href]')
+        names_in_sidebar = []
+        for link in profiles:
+            name = clean(' '.join(str(t) for t in link.strings
+                                  if not any(explicitly_hidden(node) for node in t.parents)))
+            if name and name not in names_in_sidebar:
+                names_in_sidebar.append(name)
+        author = ', '.join(names_in_sidebar)
     if not author and scope.name == 'article' and host == 'blog.openstreetmap.org':
         # The selected article's own footer carries the WordPress author credit.
         authors = []

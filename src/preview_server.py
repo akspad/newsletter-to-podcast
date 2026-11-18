@@ -84,6 +84,9 @@ async def generate_audio(payload):
                                 r"(?: server=(?:vercel|cloudflare|cloudfront|fastly|nginx|other|unknown)"
                                 r" protection=(?:none|vercel_challenge|cloudflare_challenge)"
                                 r" retry_after=(?:[0-9]{1,6}|present|none))?", line) or
+                        re.fullmatch(r"speech_attempt attempt=[123] outcome=(?:completed|retry|cancelled|failed)"
+                                     r" first_audio=(?:none|\d{1,3}\.\ds) last_audio=(?:none|\d{1,3}\.\ds)"
+                                     r" elapsed=\d{1,3}\.\ds", line) or
                         re.fullmatch(r"preview_stage stage=(extract|speech|trim|validate)"
                                      r" status=(completed|failed|retry) elapsed=\d+\.\ds"
                                      r"(?: error_type=[A-Za-z][A-Za-z0-9_]{0,80})?(?: attempt=[123])?", line)):

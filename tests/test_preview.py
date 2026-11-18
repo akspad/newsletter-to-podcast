@@ -665,6 +665,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(audio.read_bytes(), b'COMPLETE')
             self.assertEqual(len(attempts), failures + 1)
             self.assertTrue(all(attempt == attempts[0] for attempt in attempts))
+            self.assertRegex(stderr.getvalue(), r'outcome=retry first_audio=\d+\.\ds last_audio=\d+\.\ds')
             self.assertIn('status=retry', stderr.getvalue())
             self.assertIn(f'attempt={failures + 1}', stderr.getvalue())
             self.assertNotIn('PRIVATE', stderr.getvalue())
@@ -708,6 +709,20 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             calls.assert_called_once()
             self.assertEqual(path.read_bytes(), b'chunk' * 7)
 
+    async def test_cancelled_attempt_reports_no_audio_after_metadata_only(self):
+        class Silent:
+            async def stream(self):
+                yield {'type': 'metadata', 'text': 'PRIVATE'}
+                yield {'type': 'audio', 'data': b''}
+                await asyncio.Event().wait()
+
+        with tempfile.TemporaryDirectory() as tmp, patch('edge_tts.Communicate', return_value=Silent()), \
+                patch('sys.stderr', new_callable=io.StringIO) as errors:
+            with self.assertRaises(TimeoutError):
+                await asyncio.wait_for(preview.narrate('PRIVATE', 'en-US-AndrewNeural', Path(tmp) / 'raw'), 0.05)
+        self.assertRegex(errors.getvalue(), r'attempt=1 outcome=cancelled first_audio=none last_audio=none')
+        self.assertNotIn('PRIVATE', errors.getvalue())
+
     async def test_persistent_websocket_errors_stop_after_three_attempts(self):
         from edge_tts.exceptions import WebSocketError
         class Speech:
@@ -719,6 +734,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 patch('preview.asyncio.sleep', AsyncMock()) as delay, patch('sys.stderr', errors):
             with self.assertRaises(WebSocketError):
                 await preview.narrate('An original article.', 'en-US-AndrewNeural', Path(tmp) / 'speech.mp3')
+        self.assertIn('attempt=3 outcome=failed first_audio=none last_audio=none', errors.getvalue())
         self.assertEqual(speak.call_count, 3)
         self.assertEqual([call.args[0] for call in delay.await_args_list], [1, 2])
         self.assertNotIn('PRIVATE', errors.getvalue())
@@ -817,9 +833,10 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(output.getvalue(), 'request_id=' + 'a' * 32 + ' ' + diagnostic.decode() + '\n')
 
     async def test_speech_diagnostics_and_actionable_error_reach_server_without_private_output(self):
-        diagnostic = b'preview_stage stage=speech status=failed elapsed=12.0s error_type=NoAudioReceived'
+        diagnostic = b'speech_attempt attempt=2 outcome=retry first_audio=none last_audio=none elapsed=20.0s'
         process = type('Process', (), {'pid': 98765, 'returncode': 4,
                        'communicate': AsyncMock(return_value=(None, diagnostic +
+                           b'\nspeech_attempt attempt=2 outcome=retry first_audio=PRIVATE last_audio=none elapsed=20.0s'
                            b'\npreview_stage stage=PRIVATE status=failed elapsed=1.0s\nSECRET text and provider URL\n')),
                        'wait': AsyncMock(return_value=0)})()
         output = io.StringIO()

@@ -152,6 +152,8 @@ async def narrate(text, voice, path):
     # Start a fresh communicator and file so partial audio cannot be duplicated.
     for attempt in (1, 2, 3):
         started = time.monotonic()
+        first_audio = last_audio = None
+        outcome = "failed"
         try:
             count = 0
             communication = edge_tts.Communicate(text, voice, proxy=os.environ.get("HTTPS_PROXY"))
@@ -161,12 +163,15 @@ async def narrate(text, voice, path):
             async with asyncio.timeout(stall_limit) as stall:
                 with path.open("wb") as output:
                     async for item in communication.stream():
-                        if item["type"] == "audio":
+                        if item["type"] == "audio" and item["data"]:
+                            last_audio = time.monotonic() - started
+                            if first_audio is None:
+                                first_audio = last_audio
                             count += len(item["data"])
                             if count > MAX_AUDIO_BYTES:
                                 raise ValueError("Preview audio exceeded its size limit.")
                             output.write(item["data"])
-                            if stall_limit and item["data"]:
+                            if stall_limit:
                                 stall.reschedule(asyncio.get_running_loop().time() + stall_limit)
             if not count:
                 raise edge_tts.exceptions.NoAudioReceived("No speech returned")
@@ -176,16 +181,26 @@ async def narrate(text, voice, path):
                 raise IncompleteSpeechError from error
             if not math.isfinite(seconds) or seconds <= 0 or seconds < minimum_audio_seconds(text):
                 raise IncompleteSpeechError
+            outcome = 'completed'
             stage_log('speech', 'completed', started, attempt=attempt)
             return
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
         except (edge_tts.exceptions.NoAudioReceived, edge_tts.exceptions.WebSocketError,
                 ClientConnectionError, ClientResponseError,
                 IncompleteSpeechError, TimeoutError) as error:
             transient = not isinstance(error, ClientResponseError) or error.status == 429 or error.status >= 500
             if attempt == 3 or not transient:
                 raise
+            outcome = 'retry'
             stage_log('speech', 'retry', started, error, attempt)
-            await asyncio.sleep(attempt)
+        finally:
+            first = 'none' if first_audio is None else f'{first_audio:.1f}s'
+            last = 'none' if last_audio is None else f'{last_audio:.1f}s'
+            print(f'speech_attempt attempt={attempt} outcome={outcome} first_audio={first} '
+                  f'last_audio={last} elapsed={time.monotonic() - started:.1f}s', file=sys.stderr)
+        await asyncio.sleep(attempt)
 
 
 def generate(payload, directory):
