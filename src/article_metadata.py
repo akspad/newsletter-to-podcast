@@ -298,6 +298,28 @@ def article_details(soup, url):
         if not visible_authors and not group.select('a, [itemprop~="name"]'):
             visible_authors = clean(visible_text(group), 100)
     author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    host = urlparse(url).hostname
+    if not author and scope.name == 'article' and host == 'blog.openstreetmap.org':
+        # The selected article's own footer carries the WordPress author credit.
+        authors = []
+        for link in scope.select(':scope > footer.entry-meta .by-author .vcard a[rel~="author"]'):
+            if any(explicitly_hidden(node) for node in (link, *link.parents)):
+                continue
+            name = clean(' '.join(str(t) for t in link.strings
+                                  if not any(explicitly_hidden(p) for p in t.parents)))
+            if name and name not in authors:
+                authors.append(name)
+        author = ', '.join(authors)
+    if not author and scope.name == 'article' and host in {'www.w3.org', 'w3.org'}:
+        for label in scope.select(':scope > section.meta dl > dt'):
+            if visible_text(label).strip().casefold().rstrip(':') != 'by':
+                continue
+            value = label.find_next_sibling()
+            if value and value.name == 'dd' and editorial(value):
+                authors = [clean(visible_text(li)) for li in value.select(':scope > ul > li') if editorial(li)]
+                author = ', '.join(filter(None, authors))
+                if author:
+                    break
     if not author or author.casefold() in {'nasa earth observatory', 'nasa science', 'nasa'}:
         author = earth_observatory_writer(scope, url) or author
     if author.casefold() in {'plos one editors', 'plos editors'}:

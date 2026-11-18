@@ -61,3 +61,25 @@ class PublisherReadingOrderTests(unittest.TestCase):
                          f'{FIRST} Next article: a quotation.'.split())
         for other, title in ((url, 'Different'), (url + '-other', 'Notes'), ('https://example.org/blog/notes', 'Notes')):
             self.assertIn('Blog Index', html_to_text(html, title=title, url=other))
+
+    def test_wordpress_footer_credit_and_language_menu(self):
+        html = f"""<article><h1>Notes</h1><div class="entry-content"><p>{FIRST} {LAST}</p>
+        <p>This post is also available in our library.</p>
+        <p class="icl_post_in_other_langs wpml-ls-statics-post_translations">Translation menu
+        <span role="navigation"><a class="wpml-ls-link" hreflang="es">Spanish</a></span></p></div>
+        <footer class="entry-meta"><span class="by-author"><span class="vcard">
+        <a rel="author">Ash<span hidden>Wrong</span></a><a hidden rel="author">Other</a>
+        </span></span></footer></article>"""
+        intro, body = narrate('https://blog.openstreetmap.org/notes/', html)
+        self.assertIn('By Ash.', intro)
+        self.assertNotIn('Wrong', intro)
+        self.assertEqual(body.split(), f'{FIRST} {LAST} This post is also available in our library.'.split())
+
+    def test_w3c_credit_stays_with_its_label(self):
+        html = f"""<article><h1>Notes</h1><section class="meta"><dl>
+        <dt>By:</dt><dd><ul><li hidden>Hidden</li><li>Lee</li><li>Ash</li></ul></dd>
+        <dt>Published:</dt><dd>Some date</dd></dl></section><p>{FIRST} {LAST}</p></article>"""
+        intro, _ = narrate('https://www.w3.org/blog/notes/', html)
+        self.assertIn('By Lee, Ash.', intro)
+        self.assertNotIn('Hidden', intro)
+        self.assertNotIn('By ', narrate('https://www.w3.org/blog/notes/', html.replace('By:', 'Editors:'))[0])
