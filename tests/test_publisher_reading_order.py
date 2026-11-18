@@ -18,6 +18,31 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_openculture_takes_author_from_its_footer_and_removes_template_endmatter(self):
+        url = 'https://www.openculture.com/2026/11/seed-trials.html'
+        appeal = ('<p><i>If you would like to sup&shy;port the mission of Open Culture, consider '
+                  '<a href="/donate">making a donation to our site</a>. Thank you!</i></p>')
+        related = ('<p><strong>Relat&shy;ed Content</strong></p>'
+                   '<p><a rel="bookmark" href="/2026/10/another.html">Recommended article</a></p>')
+        story = f'<p>{FIRST}</p>{appeal}<p>via Ash</p>{related}<p>{LAST}</p>'
+        html = f"""<div class="recent_post"><h1>Seed trials</h1>
+        <p class="byline"><a href="#respond">Leave a Comment</a></p>
+        <div class="colorcontrast"><div class="entry">{story}</div></div>
+        <div class="alignleft"><p class="author">by <a rel="author" href="/author/lee">Lee</a>
+        <a title="Permalink" href="{url}">Permalink</a></p></div></div>"""
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('By Lee.'), intro)
+        expected = f'{FIRST} via Ash {LAST}'.split()
+        self.assertEqual(body.split(), expected)
+        self.assertEqual(html_to_text(story, url=url).split(), expected)
+        unmatched, _ = narrate(url, html.replace('title="Permalink"', 'title="Other post"'))
+        self.assertNotIn('By ', unmatched)
+        for editorial in ('<blockquote>' + appeal + '</blockquote>',
+                          related.replace('rel="bookmark"', 'rel="citation"'),
+                          related.replace('>Recommended article</a>', '>Recommended article</a> explains the result.')):
+            with self.subTest(editorial=editorial):
+                self.assertEqual(html_to_text(editorial, url=url), html_to_text(editorial))
+
     def test_digital_antiquarian_keeps_captions_in_the_article_body(self):
         html = f"""<div class="post hentry"><h2>Seed trials</h2><div class="entry">
         <p>{FIRST}</p><div class="wp-caption"><a href="/tray"><img src="tray"></a>
