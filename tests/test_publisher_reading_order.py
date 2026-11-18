@@ -18,6 +18,39 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_pypi_post_identity_and_heading_links(self):
+        html = f"""<header><a class="md-logo" data-md-component="logo" title="Seed Journal"></a></header>
+        <aside class="md-sidebar--post"><nav><a href="/">Back to index</a><div class="md-post__authors">
+        <div class="md-profile__description"><strong><a href="/author/ash">Ash<span hidden>Other</span></a></strong>
+        Scientist</div></div></nav></aside>
+        <main><div class="md-content--post"><article><h1>Seeds</h1><p>{FIRST}</p>
+        <h2 id="data">Results<a class="headerlink" href="#data">¶</a></h2>
+        <p>The symbol <a class="headerlink" href="#data">¶</a> marks a paragraph.</p>
+        <p>{LAST}</p></article></div></main>"""
+        intro, body = narrate('https://blog.pypi.org/posts/seeds/', html)
+        self.assertEqual(intro, 'Seed Journal. Seeds. By Ash.')
+        self.assertEqual(body.split(), f'{FIRST} Results The symbol ¶ marks a paragraph. {LAST}'.split())
+
+    def test_nist_retains_visible_image_caption_and_credit_in_order(self):
+        html = f"""<main><h1>Seeds</h1><div class="nist-page__region--content"><div class="text-with-summary">
+        <p>{FIRST}</p><figure class="nist-image"><img src="sample"><figcaption class="nist-image__caption">
+        <div><p>The seeds after rain.</p></div><div>Credit: Ash</div></figcaption></figure>
+        <figure hidden class="nist-image"><img src="other"><figcaption class="nist-image__caption">
+        Hidden caption</figcaption></figure><p>{LAST}</p></div></div></main>"""
+        _, body = narrate('https://www.nist.gov/news-events/news/seeds', html)
+        self.assertEqual(body.split(), f'{FIRST} The seeds after rain. Credit: Ash {LAST}'.split())
+
+    def test_eff_drops_only_the_embedded_player_disclosure(self):
+        url = 'https://www.eff.org/deeplinks/seeds'
+        widget = ('<div class="mytube"><div class="mytubetrigger"></div><div class="mytubetext">'
+                  '<a href="/deeplinks/2008/02/embedded-video-and-your-privacy">Privacy info.</a> '
+                  'This embed will serve content from <a href="https://player.example">player.example</a></div></div>')
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>{widget}<p>{LAST}</p>', url=url).split(),
+                         f'{FIRST} {LAST}'.split())
+        for retained in ('<blockquote>' + widget + '</blockquote>', widget.replace('mytubetrigger', 'other'),
+                         widget.replace('This embed', 'We reported why this embed')):
+            self.assertIn('Privacy info.', html_to_text(retained, url=url))
+
     def test_coauthors_and_visible_image_caption(self):
         html = f"""<article><div class="post-content"><header><h1>Seedlings</h1><p>
         <span><a href="/author/ash/"><bdi>Ash</bdi></a></span>

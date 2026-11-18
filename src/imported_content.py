@@ -74,6 +74,15 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] in {'eff.org', 'www.eff.org'}:
+        for notice in root.select('.mytube > .mytubetext'):
+            if notice.find_parent(['blockquote', 'pre', 'code']) or not notice.parent.select_one(':scope > .mytubetrigger'):
+                continue
+            links = notice.select('a[href]')
+            if (len(links) == 2 and links[0].get_text(strip=True) == 'Privacy info.'
+                    and url_identity(links[0]['href'], url) == url_identity('/deeplinks/2008/02/embedded-video-and-your-privacy', url)
+                    and notice.get_text(' ', strip=True) == 'Privacy info. This embed will serve content from ' + links[1].get_text(strip=True)):
+                notice.decompose()
     if identity and identity[1] == 'go.dev' and identity[2].startswith('/blog/'):
         for article in root.select('#blog .Article[data-slug]'):
             if (url_identity(article.get('data-slug'), url) != identity or not editorial(article)

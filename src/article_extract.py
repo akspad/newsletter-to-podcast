@@ -246,7 +246,13 @@ def clean_tree(root, title, author, url=''):
             if (menu.select_one('[role="navigation"] a.wpml-ls-link[hreflang]')
                     and not menu.find_parent(['blockquote', 'pre', 'code'])):
                 menu.decompose()
+    if identity and identity[1] == 'blog.pypi.org':
+        for anchor in root.select('.md-content--post :is(h1,h2,h3,h4,h5,h6) > a.headerlink'):
+            heading_id = anchor.parent.get('id')
+            if heading_id and anchor.get('href') == '#' + heading_id and anchor.get_text(strip=True) == '¶':
+                anchor.decompose()
     caption_selectors = {
+        'www.nist.gov': '.text-with-summary figure.nist-image > figcaption.nist-image__caption',
         'blog.cloudflare.com': '.article-content figure.emdash-image > figcaption',
         'www.raspberrypi.com': '.c-post-content__wysiwyg .wp-block-image > figure > figcaption.wp-element-caption',
     }
@@ -254,7 +260,7 @@ def clean_tree(root, title, author, url=''):
         for caption in root.select(caption_selectors[identity[1]]):
             if editorial(caption) and caption.parent.find('img'):
                 figure = caption.parent
-                caption.name = 'p'
+                caption.name = 'div' if caption.find('p') else 'p'
                 container = figure.parent if 'wp-block-image' in figure.parent.get('class', []) else figure
                 container.insert_before(caption.extract())
     if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
@@ -458,6 +464,8 @@ def extract_text(soup, title='', author='', url=''):
     if identity:
         if identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
+        elif identity[1] == 'www.nist.gov' and identity[2].startswith('/news-events/news/'):
+            body_selector = '.nist-page__region--content .text-with-summary'
         elif identity[1] == 'www.djangoproject.com' and identity[2].startswith('/weblog/'):
             body_selector = '.blog-entry-body'
         elif identity[1] == 'www.raspberrypi.com' and identity[2].startswith('/news/'):
