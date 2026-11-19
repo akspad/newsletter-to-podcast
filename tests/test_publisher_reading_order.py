@@ -835,6 +835,24 @@ class PublisherReadingOrderTests(unittest.TestCase):
         _, body = narrate('https://www.sapiens.org/culture/seed-trials/', html)
         self.assertEqual(body.split(), f'A field study. Photo by Ash. {FIRST} A second tray. Photo by Ash. {LAST}'.split())
 
+    def test_sapiens_keeps_each_grid_caption_and_the_standfirst_but_not_archive_promo(self):
+        photos = ''.join(f'<div class="m-two-images__media"><figure class="c-image-video"><img src="{label}">'
+                         '<footer class="c-image-video__footer"><div class="c-media-caption">'
+                         f'<p>A {label} tray.</p></div><div class="c-media-credits">Photo by Lee.</div>'
+                         '</footer></figure></div>' for label in ('first', 'second'))
+        html = f'''<title>Seed trials</title><div class="c-article-content" data-article-content><div class="p-header-article">
+        <h1 class="p-header-article__title">Seed trials</h1><div class="p-header-article__standfirst">Opening context.</div>
+        </div><div class="m-article-img-header"><figure class="c-image-video"><img src="cover">
+        <footer class="c-image-video__footer"><div class="c-media-caption">The cover tray.</div></footer></figure></div>
+        <div class="c-modules"><div class="m-wysiwyg"><div class="wysiwyg">
+        <div class="paragraph-break">✽</div><p>{FIRST}</p></div></div><div class="m-two-images">{photos}</div>
+        <div class="m-pull-quote"><blockquote><p>To learn more, read on from the SAPIENS archive:
+        <a href="/culture/another/">A different story.</a></p></blockquote></div>
+        <blockquote>Short original quotation.</blockquote><p>{LAST}</p></div><div class="m-authors">Bio.</div></div>'''
+        _, body = narrate('https://www.sapiens.org/culture/seed-trials/', html)
+        self.assertEqual(body, f'Opening context. The cover tray. {FIRST} A first tray. Photo by Lee. A second tray. Photo by Lee. '
+                         f'Short original quotation. {LAST}')
+
     def test_longreads_omits_newspack_recommendations_and_keeps_the_editorial_heading(self):
         html = f"""<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
         <h2 class="article-section-title">More picks from the greenhouse</h2><p>{LAST}</p>

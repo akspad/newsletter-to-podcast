@@ -332,8 +332,23 @@ def clean_tree(root, title, author, url=''):
             if widget.select_one('a[href*="/home-of-the-future-awards-"]'):
                 widget.decompose()
     if identity and identity[1] in {'sapiens.org', 'www.sapiens.org'}:
+        for body in root.select('.c-article-content[data-article-content] > .c-modules'):
+            header = body.parent.select_one(':scope > .p-header-article')
+            headline = header.select_one(':scope > h1.p-header-article__title') if header else None
+            deck = header.select_one(':scope > .p-header-article__standfirst') if header else None
+            if headline and deck and heading_matches(heading_text(headline), title) and editorial(deck):
+                body.insert(0, deck.extract())
+            for divider in body.select('.m-wysiwyg > .wysiwyg > .paragraph-break'):
+                if divider.get_text(strip=True) == '✽':
+                    divider.decompose()
+            for card in body.select(':scope > .m-pull-quote'):
+                link = card.select_one('blockquote > p > a[href]')
+                target = url_identity(link['href'], url) if link else None
+                if (target and target[:2] == identity[:2] and target != identity and
+                        card.get_text(' ', strip=True).startswith('To learn more, read on from the SAPIENS archive:')):
+                    card.decompose()
         # SAPIENS puts its editorial caption and photo credit in a figure footer.
-        for footer in root.select('.c-article-content :is(.m-article-img-header, .m-image-video) '
+        for footer in root.select('.c-article-content :is(.m-article-img-header, .m-image-video, .m-two-images__media) '
                                   '> figure.c-image-video > footer.c-image-video__footer:has(> .c-media-caption)'):
             figure = footer.parent
             if editorial(figure) and figure.find('img'):
@@ -341,7 +356,18 @@ def clean_tree(root, title, author, url=''):
                 footer.attrs = {}
                 labels = footer.select(':scope > .c-media-caption, :scope > .c-media-credits')
                 footer.string = ' '.join(label.get_text().strip() for label in labels)
-                figure.parent.insert_before(footer.extract())
+                component = figure.parent
+                modules = (component.parent.select_one(':scope > .c-modules')
+                           if match('.c-article-content[data-article-content] > .m-article-img-header', component)
+                           else None)
+                if modules:
+                    deck = modules.select_one(':scope > .p-header-article__standfirst')
+                    if deck:
+                        deck.insert_after(footer.extract())
+                    else:
+                        modules.insert(0, footer.extract())
+                else:
+                    component.insert_before(footer.extract())
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
         for card in root.select('.roscoe-body > p > div.embed-relatedstory'):
             if card.select_one(':scope > a.embed-relatedstory-imagelink[href]') and not card.find_parent(
@@ -945,6 +971,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.roscoe-article-body > .roscoe-body'
         elif identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
             body_selector = '.collection-view > .collection-preamble > .essay__content'
+        elif identity[1] in {'sapiens.org', 'www.sapiens.org'}:
+            body_selector = '.c-article-content[data-article-content] > .c-modules'
         elif identity[1] in {'lithub.com', 'www.lithub.com'}:
             body_selector = '.story-content > .story-body'
         elif identity[1] in QUILLETTE_HOSTS and match('article.post', scope):
