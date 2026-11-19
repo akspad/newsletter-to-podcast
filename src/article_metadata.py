@@ -355,6 +355,11 @@ def article_details(soup, url):
             authors = [re.split(r',\s+Head of\s+', name, maxsplit=1, flags=re.I)[0]
                        for name in linked_byline_names(attribution)]
             visible_authors = ', '.join(dict.fromkeys(authors)) or visible_authors
+    if requested and requested[1] == 'web.dev' and requested[2].startswith('/blog/'):
+        author_names = [clean(visible_text(node), 100) for node in scope.select(
+            '.devsite-article-body > p > .wd-authors > .wd-author > div > span:first-child')
+            if belongs_to_scope(node, scope)]
+        visible_authors = ', '.join(dict.fromkeys(filter(None, author_names))) or visible_authors
     author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
     if not author and pypi_post:
