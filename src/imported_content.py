@@ -115,6 +115,13 @@ def clean_imported_widgets(root, url, title=''):
     identity = url_identity(url)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
         remove_openculture_endmatter(root, url)
+    if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
+        for paragraph in root.find_all('p', recursive=False):
+            images = paragraph.select(':scope > img.inpost')
+            markers = ''.join(paragraph.get_text().split())
+            if (images and markers == '[img][/img]' * len(images)
+                    and all(child.name in {'img', 'br'} for child in paragraph.find_all(recursive=False))):
+                paragraph.decompose()
     if identity and identity[1] == 'simonwillison.net':
         # The Atom feed appends a paragraph of category links after the story.
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)

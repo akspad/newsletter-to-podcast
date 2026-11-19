@@ -314,6 +314,8 @@ def clean_tree(root, title, author, url=''):
         'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
                          '.entry-content > div.wp-caption > p.wp-caption-text'),
         'webkit.org': 'article .bodycopy > figure > figcaption',
+        'smithsonianmag.com': '.articleWrap > figure.article-image > figcaption.caption',
+        'www.smithsonianmag.com': '.articleWrap > figure.article-image > figcaption.caption',
         'www.nist.gov': '.text-with-summary figure.nist-image > figcaption.nist-image__caption',
         'blog.cloudflare.com': '.article-content figure.emdash-image > figcaption',
         'www.raspberrypi.com': '.c-post-content__wysiwyg .wp-block-image > figure > figcaption.wp-element-caption',
@@ -323,6 +325,8 @@ def clean_tree(root, title, author, url=''):
             if editorial(caption) and caption.parent.find('img'):
                 figure = caption.parent
                 caption.name = 'div' if caption.find('p') else 'p'
+                if 'caption' in caption.get('class', []):
+                    caption['class'].remove('caption')
                 container = figure.parent if 'wp-block-image' in figure.parent.get('class', []) else figure
                 container.insert_before(caption.extract())
     if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:

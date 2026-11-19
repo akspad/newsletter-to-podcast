@@ -149,6 +149,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
 
     def test_wordpress_editorial_photo_captions_stay_in_place(self):
         cases = [
+            ('www.smithsonianmag.com', '<figure class="article-image"><img src="tray">'
+             '<figcaption class="caption">The tray at sunrise. <span class="credit">Photo by Lee.</span>'
+             '</figcaption></figure>', 'The tray at sunrise. Photo by Lee.'),
             ('www.astronomy.com', '<figure class="wp-block-image wp-lightbox-container"><img src="tray">'
              '<figcaption class="wp-element-caption">The robotic arm at rest.</figcaption></figure>',
              'The robotic arm at rest.'),
@@ -168,6 +171,8 @@ class PublisherReadingOrderTests(unittest.TestCase):
             with self.subTest(host=host):
                 html = (f'<article><h1>Seeds</h1><div class="entry-content"><p>{FIRST}</p>{photo}'
                         f'<div hidden>{photo}</div><aside>{photo}</aside><p>{LAST}</p></div></article>')
+                if host == 'www.smithsonianmag.com':
+                    html = html.replace('class="entry-content"', 'class="entry-content articleWrap"')
                 _, body = narrate(f'https://{host}/seed-trials/', html)
                 self.assertEqual(body.split(), f'{FIRST} {expected} {LAST}'.split())
 
