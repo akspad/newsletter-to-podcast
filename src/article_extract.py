@@ -445,6 +445,19 @@ def clean_tree(root, title, author, url=''):
                     and prompt.get_text(strip=True) == 'Check out similar blogs from the Zed team.'
                     and widget.select_one('a[href^="/blog/"]')):
                 widget.decompose()
+    if identity and identity[1] == 'simonwillison.net':
+        for card in root.select('.entry.entryPage > .beat > .beat-content > .beat-row1'):
+            label = card.select_one(':scope > a.beat-label.release[href="/elsewhere/release/"]')
+            release = card.select_one(':scope > .beat-title > a[href]')
+            summary = card.select_one(':scope > .beat-commit')
+            if label and release and summary and editorial(card) and not card.find_parent(['blockquote', 'pre', 'code']):
+                repeated = f'{label.get_text(strip=True)}: {release.get_text(strip=True)}'
+                if repeated == title and summary.get_text(strip=True):
+                    label.decompose()
+                    release.parent.decompose()
+                    if isinstance(summary.contents[0], str):
+                        value = summary.contents[0]
+                        value.replace_with(re.sub(r'^\s*—\s*', '', value))
     caption_selectors = {
         **dict.fromkeys({'geographyrealm.com', 'www.geographyrealm.com'},
                         'article .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
@@ -735,6 +748,8 @@ def extract_text(soup, title='', author='', url=''):
         elif (identity[1] == 'buttondown.com' and '/archive/' in identity[2]
               and match('article.email-body', scope)):
             body_selector = ':scope > .email-body-content'
+        elif identity[1] == 'dev.to' and match('article#article-show-container.crayons-article', scope):
+            body_selector = ':scope > .crayons-article__main > #article-body.crayons-article__body'
         elif identity[1] == 'www.internetsociety.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':

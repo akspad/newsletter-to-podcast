@@ -19,6 +19,25 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_dev_preview_keeps_internal_headings_and_ignores_neighboring_cards(self):
+        html = f"""<article id="article-show-container" class="crayons-article"><h1>Seed trials</h1>
+        <div class="crayons-article__main"><div id="article-body" class="crayons-article__body">
+        <p>{FIRST}</p><h2><a href="#result" name="result"></a>Results after rain</h2><p>{LAST}</p></div>
+        <aside><p>Suggested article.</p></aside></div></article>"""
+        self.assertEqual(narrate('https://dev.to/writer/seed-trials', html)[1],
+                         f'{FIRST} Results after rain {LAST}')
+
+    def test_simon_release_keeps_the_short_summary_after_the_title_is_announced_once(self):
+        html = f"""<title>Release: Seed trials</title><div class="entry entryPage">
+        <div class="beat"><div class="beat-content"><div class="beat-row1">
+        <a class="beat-label release" href="/elsewhere/release/">Release</a>
+        <span class="beat-title"><a href="https://example.test/release">Seed trials</a></span>
+        <span class="beat-commit">— Report from the garden.</span>
+        </div></div></div><p>{FIRST}</p><p>{LAST}</p></div>"""
+        intro, body = narrate('https://simonwillison.net/2026/Nov/11/seed-trials/', html)
+        self.assertIn('Release: Seed trials.', intro)
+        self.assertEqual(body, f'Report from the garden. {FIRST} {LAST}')
+
     def test_geography_realm_keeps_captions_and_paragraphs_after_removing_page_navigation(self):
         html = f"""<article><h1>Seed trials</h1><div class="entry-content">
         <div><strong>Browse by state:</strong><br><a href="#one">First</a> • <a href="#two">Second</a></div>
