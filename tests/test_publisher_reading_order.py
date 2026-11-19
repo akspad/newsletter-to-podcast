@@ -19,6 +19,20 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_mit_skips_a_repeated_caption_quote_but_keeps_its_photo_credit_and_original(self):
+        quote = '“The smallest seedlings grew best in the light,”'
+        image = f'''<div class="news-article--inline-image--descr">
+        <div class="news-article--inline-image--caption"><div>{quote} Lee says.</div></div>
+        <div class="news-article--inline-image--credits"><div>Credit: Ash</div></div></div>'''
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content news-article--content--body--inner">
+        <p>{FIRST}</p>{image}<div class="paragraph--type--content-block-text">
+        <p>{quote} she says.</p><p>{LAST}</p></div></div></article>'''
+        url = 'https://news.mit.edu/2026/seed-trials'
+        _, body = narrate(url, html)
+        self.assertEqual(body, f'{FIRST} Credit: Ash {quote} she says. {LAST}')
+        control = html.replace('light,” Lee says.', 'shade,” Lee says.')
+        self.assertIn('shade,” Lee says.', narrate(url, control)[1])
+
     def test_high_country_news_keeps_a_credit_and_nested_print_note_without_letter_prompt(self):
         html = f'''<article><h1>Seed trials</h1><div class="entry-content">
         <figure class="wp-block-image"><img src="tray"><figcaption><span class="image-credit">Credit: Lee</span></figcaption></figure>

@@ -268,6 +268,16 @@ def clean_tree(root, title, author, url=''):
             if (not box.find_parent(['blockquote', 'pre', 'code']) and box.select_one(':scope > h3.callout-box__hed')
                     and box.select_one(':scope > .callout-box__text a[href="https://www.propublica.org/tips/"]')):
                 box.decompose()
+    if identity and identity[1] == 'news.mit.edu':
+        for body in root.select('article .news-article--content--body--inner'):
+            prose = [' '.join(node.get_text().split()) for node in
+                     body.select('.paragraph--type--content-block-text p') if editorial(node)]
+            for caption in body.select('.news-article--inline-image--descr > .news-article--inline-image--caption'):
+                value = ' '.join(caption.get_text().split())
+                # The image template can repeat a complete quotation and change only its speaker label.
+                quote = re.fullmatch(r'(“[^”]+”)\s*(?:[A-Z][\w’.-]*(?: [A-Z][\w’.-]*)* (?:says|said|adds)\.)?', value)
+                if quote and any(text.startswith(quote[1]) for text in prose):
+                    caption.decompose()
     if identity and identity[1] == 'creativecommons.org':
         body = 'body.blog-post main > .content'
         for opening in root.select(body + ' > aside.opening:first-child'):
