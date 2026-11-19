@@ -22,6 +22,34 @@ PUB = {'base': 'https://fictional.example/feed', 'rss': True, 'name': 'Science N
 
 
 class SyndicationFooterTests(unittest.TestCase):
+    def test_mozilla_footer_accepts_only_the_same_locale_homepage(self):
+        url = 'https://blog.mozilla.org/en-US/mozilla/story/'
+        footer = FOOTER.replace('/story"', '/en-US/mozilla/story/"').replace(
+            'https://fictional.example', 'https://blog.mozilla.org/en-US/')
+        self.assertEqual(html_to_text(BODY + footer, title=TITLE, url=url),
+                         'A brief but legitimate quotation.')
+        for destination in ('/fr/', '/en-US/news/', '/en-US/?category=about'):
+            with self.subTest(destination=destination):
+                different_home = footer.replace('org/en-US/"', f'org{destination}"')
+                self.assertIn('appeared first on', html_to_text(BODY + different_home, title=TITLE, url=url))
+
+    def test_colossal_pitch_is_removed_only_with_the_matching_terminal_footer(self):
+        url = 'https://www.thisiscolossal.com/story'
+        footer = FOOTER.replace('The post', 'The article').replace('https://fictional.example', 'https://www.thisiscolossal.com')
+        pitch = ('Do stories and artists like this matter to you? Become a <a href="/members">Colossal Member</a> '
+                 'today and support independent arts publishing for as little as $7 per month. ')
+        combined = footer.replace('<p>', '<p>' + pitch, 1)
+        for markup in (footer, combined):
+            self.assertEqual(html_to_text(BODY + markup, title=TITLE, url=url),
+                             'A brief but legitimate quotation.')
+        for markup in (combined.replace('/members', '/outside-membership'),
+                       combined.replace('today and support', 'only if you want to support'),
+                       combined + '<p>Another brief observation.</p>',
+                       '<blockquote>' + combined + '</blockquote>',
+                       combined.replace('</p>', ' The argument continues.</p>')):
+            with self.subTest(markup=markup):
+                self.assertIn('Colossal Member', html_to_text(BODY + markup, title=TITLE, url=url))
+
     def test_identified_terminal_footer_leaves_a_short_quotation(self):
         self.assertEqual(html_to_text(BODY + FOOTER, title=TITLE, url=URL),
                          'A brief but legitimate quotation.')

@@ -4,7 +4,7 @@ from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
-from imported_content import HARVARD_HOSTS, OUTSIDE_HOSTS, remove_openculture_endmatter, remove_outside_newsletter
+from imported_content import COLOSSAL_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, remove_openculture_endmatter, remove_outside_newsletter
 from tts import speech_text
 
 
@@ -351,6 +351,8 @@ def clean_tree(root, title, author, url=''):
             if credit and editorial(credit):
                 body.insert(0, credit.extract())
     caption_selectors = {
+        **dict.fromkeys(COLOSSAL_HOSTS, 'article .entry-content > .entry-header '
+                        '> figure.colo-post-featured-image > figcaption.wp-element-caption'),
         **dict.fromkeys(HARVARD_HOSTS,
                         '.block-field-blocknodearticlebody > .field--name-body figure.caption.caption-img > figcaption'),
         'theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',
