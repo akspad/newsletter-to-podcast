@@ -658,6 +658,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
     identity = url_identity(url)
     if title and identity and identity[2]:
         colossal = identity[1] in COLOSSAL_HOSTS
+        entry_title = ' '.join(title.split())
         for paragraph in list(soup.find_all('p')):
             if paragraph.find_parent(['blockquote', 'pre', 'code', 'li', 'table']):
                 continue
@@ -671,14 +672,20 @@ def html_to_text(html: str, *, title='', url='') -> str:
             value = ' '.join(paragraph.get_text('', strip=False).split())
             if value.endswith(' .'):
                 value = value[:-2] + '.'
-            if (label != ' '.join(title.split()) or not publisher or
-                    url_identity(permalink.get('href'), url) != identity or
+            if (not publisher or url_identity(permalink.get('href'), url) != identity or
                     home is None or home[:2] != identity[:2] or home[3]):
                 continue
             localized_home = (identity[1] == 'blog.mozilla.org'
                               and re.fullmatch(r'/[a-z]{2}(?:-[a-z]{2})?', home[2], re.I)
                               and identity[2].startswith(home[2] + '/'))
-            if home[2] and not localized_home:
+            devblog_home = (identity[1] == 'devblogs.microsoft.com' and home[2] == '/oldnewthing'
+                            and identity[2].startswith('/oldnewthing/'))
+            if home[2] and not (localized_home or devblog_home):
+                continue
+            # The Old New Thing sometimes escapes inline code tags in the
+            # footer while the feed title already omits those tags.
+            if label != entry_title and not (
+                    devblog_home and re.sub(r'<code>([^<>]*)</code>', r'\1', label, flags=re.I) == entry_title):
                 continue
             if len(links) == 3:
                 member = links[0]

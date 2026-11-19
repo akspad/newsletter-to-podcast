@@ -19,6 +19,28 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_jim_nielsen_uses_the_page_title_publication_instead_of_the_feed_format(self):
+        html = f"""<title>Seed trials - Fictional Garden Notes</title>
+        <link rel="alternate" type="application/rss+xml" href="/feed.xml" title="RSS: XML Feed">
+        <meta name="author" content="Lee Writer">
+        <a href="/">Garden Notes</a><article><h1>Seed trials</h1>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>"""
+        intro, body = narrate('https://blog.jim-nielsen.com/2026/seed-trials/', html)
+        self.assertEqual(intro, 'Fictional Garden Notes. Seed trials. By Lee Writer.')
+        self.assertEqual(body, f'{FIRST} {LAST}')
+
+    def test_public_domain_review_keeps_collection_captions_and_source_links_in_order(self):
+        html = f"""<article><h1>Seed trials</h1><div class="collection-preamble">
+        <div class="essay__content entry-content"><p>{FIRST}</p>
+        <div class="essay__image"><div class="essay__center-content"><img src="/image">
+        <div class="essay__image__caption"><p>A tray after <em>rain</em> — <a href="/source">Source</a>.</p>
+        <p>Photograph by Ash.</p></div></div></div>
+        <div hidden class="essay__image"><div class="essay__center-content"><img src="/hidden">
+        <div class="essay__image__caption"><p>Hidden credit.</p></div></div></div>
+        <p>{LAST}</p></div></div></article>"""
+        _, body = narrate('https://publicdomainreview.org/collection/seed-trials', html)
+        self.assertEqual(body, f'{FIRST} A tray after rain — Source. Photograph by Ash. {LAST}')
+
     def test_smashing_caption_preserves_literal_code_and_omits_same_image_zoom_link(self):
         html = f"""<article><h1>Seed trials</h1><div class="c-garfield-the-cat"><p>{FIRST}</p>
         <figure><a href="/plot.png"><img src="/plot.png"></a><figcaption class="op-vertical-bottom">
