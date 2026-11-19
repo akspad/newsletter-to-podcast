@@ -239,6 +239,11 @@ def clean_tree(root, title, author, url=''):
         for category in root.select(layout + ' > .sub-head:has(a[href^="/blog/category/"])'):
             if category.get_text(' ', strip=True).startswith('Part of '):
                 category.decompose()
+    if identity and identity[1] == 'diff.wikimedia.org':
+        # Keep captions from the inner image blocks when the enclosing photo
+        # gallery would otherwise be pruned as an image.
+        for gallery in root.select('article .entry-content.wrapper-small > figure.wp-block-gallery.has-nested-images'):
+            gallery.name = 'div'
     if identity and identity[1] in {'reason.com', 'www.reason.com'} and identity[2].startswith('/volokh/'):
         for article in root.select('article.volokh-post'):
             permalink = article.select_one(':scope > header > h2.entry-title > a[href]')
@@ -697,6 +702,8 @@ def clean_tree(root, title, author, url=''):
     caption_selectors = {
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.w3.org': 'article > figure.component.component--image > figcaption',
+        'diff.wikimedia.org': ('article .entry-content.wrapper-small .wp-block-image figcaption.wp-element-caption, '
+                               'article .entry-content.wrapper-small .wp-block-jetpack-slideshow_slide > figure > figcaption'),
         **dict.fromkeys(STRONG_TOWNS_HOSTS, '.thought-leadership_wrap .mast-article-rich-text '
                         '> figure.w-richtext-figure-type-image > figcaption'),
         **dict.fromkeys({'hyperallergic.com', 'www.hyperallergic.com'}, 'article.gh-article > section.gh-content.is-body '

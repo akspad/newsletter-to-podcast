@@ -451,6 +451,16 @@ def clean_imported_widgets(root, url, title=''):
         clean_jstor_pull_quotes(root)
     if identity and identity[1] == 'www.bgs.ac.uk':
         remove_bgs_related_news(root)
+    if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
+        for timeline in root.select('aside.rsc-collbox.rsc-collbox-side'):
+            items = timeline.select(':scope > .rsc-collbox-body > ol.rsc-collbox-list > li.rsc-collbox-item')
+            if (timeline.select_one(':scope > .rsc-collbox-body > .rsc-collbox-title')
+                    and not timeline.find(['p', 'blockquote', 'figcaption'])
+                    and any(item.select_one(':scope > a.rsc-collbox-link[href]') for item in items)
+                    and any('is-current' in item.get('class', []) and
+                            item.select_one(':scope > span.rsc-collbox-link > .rsc-collbox-hed') for item in items)
+                    and all(item.select_one('.rsc-collbox-date') and item.select_one('.rsc-collbox-hed') for item in items)):
+                timeline.decompose()
     if identity and identity[1] == 'creativecommons.org':
         for listing in root.find_all('article', class_='posts', recursive=False):
             cards = listing.select(':scope > ul > li > article.post')

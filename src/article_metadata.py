@@ -450,7 +450,8 @@ def article_details(soup, url):
             if belongs_to_scope(link, scope)]
         visible_authors = ', '.join(dict.fromkeys(filter(None, writers))) or visible_authors
     if requested and requested[1] in STRONG_TOWNS_HOSTS and requested[2].startswith('/journal/'):
-        for headline in soup.select('.thought-leadership_wrap > section .mast-col > .heading-component > h1'):
+        for headline in soup.select('.thought-leadership_wrap > section .mast-col > .heading-component > h1, '
+                                    '.action-content_wrap > section.cc-action-content .mast-col > .heading-component > h1'):
             if not editorial(headline) or not heading_matches(heading_text(headline), title):
                 continue
             writers = [clean(visible_text(node), 100) for node in headline.parent.parent.select(

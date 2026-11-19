@@ -49,6 +49,42 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(html_to_text(body, title=title, url=url), f'{FIRST}\n{LAST}')
         self.assertIn('Seed trials', html_to_text(body, title='Other title', url=url))
 
+    def test_nieman_omits_related_news_timeline_without_losing_sidebar_prose(self):
+        url = 'https://www.niemanlab.org/2026/11/seed-trials/'
+        timeline = '''<aside class="rsc-collbox rsc-collbox-side"><div class="rsc-collbox-body">
+        <div class="rsc-collbox-title">More about seed testing</div><ol class="rsc-collbox-list">
+        <li class="rsc-collbox-item"><a class="rsc-collbox-link" href="/another/">
+        <span class="rsc-collbox-date">November 18</span><span class="rsc-collbox-hed">Another trial</span></a></li>
+        <li class="rsc-collbox-item is-current"><span class="rsc-collbox-link">
+        <span class="rsc-collbox-date">November 19</span><span class="rsc-collbox-hed">Seed trials</span></span></li>
+        </ol></div></aside>'''
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>{timeline}<p>{LAST}</p>', url=url), f'{FIRST}\n{LAST}')
+        control = timeline.replace('</aside>', '<p>Additional methods.</p></aside>')
+        self.assertIn('Additional methods.', html_to_text(control, url=url))
+
+    def test_wikimedia_keeps_standalone_gallery_and_slideshow_captions_in_order(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content wrapper-small"><p>{FIRST}</p>
+        <div class="wp-block-image"><figure><img src="/tray"><figcaption class="wp-element-caption">
+        Single image.</figcaption></figure></div>
+        <figure class="wp-block-gallery has-nested-images"><figure class="wp-block-image"><img src="/roots">
+        <figcaption class="wp-element-caption">Gallery image.</figcaption></figure></figure>
+        <div class="wp-block-jetpack-slideshow"><ul><li class="wp-block-jetpack-slideshow_slide">
+        <figure><img src="/leaves"><figcaption>Slideshow image.</figcaption></figure></li></ul>
+        <button>Pause slideshow</button></div><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://diff.wikimedia.org/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} Single image. Gallery image. Slideshow image. {LAST}')
+
+    def test_strong_towns_reads_byline_from_action_content_masthead(self):
+        html = f'''<title>Seed trials | Strong Towns</title><div class="action-content_wrap">
+        <section class="cc-action-content"><div class="mast-col"><div class="heading-component"><h1>Seed trials</h1></div>
+        <div class="w-dyn-list"><div class="w-dyn-items"><div class="w-dyn-item"><div class="row-component">
+        <div class="slot cc-column"><div class="mast-paragraph"><div>Ash Grower</div></div></div>
+        </div></div></div></div></div></section></div>
+        <article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        intro, body = narrate('https://www.strongtowns.org/journal/seed-trials/', html)
+        self.assertTrue(intro.endswith('By Ash Grower.'), intro)
+        self.assertEqual(body, f'{FIRST} {LAST}')
+
     def test_universal_hub_uses_the_confirmed_reprint_byline_and_skips_feed_controls(self):
         credit = ('<p><em>This article is republished from The Conversation. It was written by: '
                   '<a href="https://theconversation.com/profiles/lee">Lee Writer</a>.</em></p>')
