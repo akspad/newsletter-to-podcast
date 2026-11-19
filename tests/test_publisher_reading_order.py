@@ -19,6 +19,73 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_universal_hub_uses_the_confirmed_reprint_byline_and_skips_feed_controls(self):
+        credit = ('<p><em>This article is republished from The Conversation. It was written by: '
+                  '<a href="https://theconversation.com/profiles/lee">Lee Writer</a>.</em></p>')
+        body = (f'<div class="field-name-body"><div class="field-items"><div class="field-item">'
+                f'<p><em>By Lee Writer, Garden School</em></p><p>{FIRST}</p><p>{LAST}</p>{credit}</div></div></div>')
+        url = 'https://www.universalhub.com/2026/seed-trials'
+        intro, narrated = narrate(url, f'<article><h1>Seed trials</h1>{body}</article>')
+        self.assertTrue(intro.endswith('By Lee Writer.'))
+        self.assertTrue(narrated.startswith(FIRST))
+        payload = body + ('<div class="field-name-field-topics field-type-taxonomy-term-reference">Topics: Gardens</div>'
+                          '<div class="rrssb"><ul class="rrssb-buttons"><li><a href="mailto:">Email</a></li></ul></div>')
+        post = {'title': 'Seed trials', 'canonical_url': url, 'body_html': payload,
+                'publishedBylines': [{'name': 'The Conversation'}]}
+        full, text = Substack('').post_text({'rss': True}, post)
+        self.assertEqual(full['publishedBylines'], [{'name': 'Lee Writer'}])
+        self.assertTrue(text.startswith(FIRST))
+        self.assertNotIn('Topics:', text)
+        self.assertNotIn('Email', text)
+        _, unconfirmed = narrate(url, f'<article><h1>Seed trials</h1>{body.replace(credit, "")}</article>')
+        self.assertIn('Lee Writer, Garden School', unconfirmed)
+
+    def test_conversation_reads_all_names_in_the_articles_accessible_byline(self):
+        html = f'''<meta name="author" content="Ash Reporter"><article id="article"><h1>Seed trials</h1>
+        <aside class="content-sidebar"><section class="content-authors"><div class="content-authors-synopsis">
+        <button class="content-authors-toggle"><span class="nobr">Lee Writer</span>,
+        <span class="nobr">Ash Reporter</span>, <span class="nobr" hidden>Unshown Author</span>
+        <em>Garden School</em></button></div></section></aside>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        intro, body = narrate('https://theconversation.com/seed-trials-123456', html)
+        self.assertTrue(intro.endswith('By Lee Writer, Ash Reporter.'))
+        self.assertEqual(body, f'{FIRST} {LAST}')
+
+    def test_creative_commons_keeps_a_body_heading_matching_the_headline_suffix(self):
+        html = f'''<body class="blog-post"><main><h1>Seed trials: Results</h1><div class="content">
+        <p>{FIRST}</p><h2>Results</h2><p>{LAST}</p></div></main></body>'''
+        self.assertEqual(narrate('https://creativecommons.org/2026/11/19/seed-trials/', html)[1], f'{FIRST} Results {LAST}')
+
+    def test_lit_hub_omits_only_the_advertisement_widget(self):
+        html = f'''<title>Seed trials</title><div class="story-content"><div class="story-body">
+        <p>{FIRST}</p><div class="insert-post-ads"><span>Article continues after advertisement</span>
+        <script>insertAd()</script></div><p>{LAST}</p></div></div>'''
+        self.assertEqual(narrate('https://lithub.com/seed-trials/', html)[1], f'{FIRST} {LAST}')
+
+    def test_pluralistic_feed_omits_its_marked_index_and_keeps_destinations(self):
+        url = 'https://pluralistic.net/2026/11/19/seed-trials/'
+        body = f'''<h1 class="toch1">Today's links</h1><ul class="toc">
+        <li><a href="{url}#results">Results teaser</a></li></ul><h2 id="results">Results</h2><p>{FIRST}</p>'''
+        self.assertEqual(html_to_text(body, url=url), f'Results\n{FIRST}')
+        self.assertIn('Results teaser', html_to_text(body.replace('id="results"', 'id="different"'), url=url))
+
+    def test_plover_preview_keeps_the_story_fragment_across_a_trailing_slash_redirect(self):
+        requested = 'https://blog.plover.com/2026/09/22#seeds'
+        other = 'https://blog.plover.com/2026/09/22/'
+        html = f'''<div class="mainsection"><p><a class="storytitle" href="/other.html" name="different">
+        Another story</a></p><p>Some separate text about another post.</p></div>
+        <div class="mainsection"><p><a class="storytitle" href="/seeds.html" name="seeds">Seed trials</a></p>
+        <p>{FIRST}</p><p>{LAST}</p></div>'''
+
+        def redirected(client, *args, **kwargs):
+            client.last_url = other
+            return html
+
+        with patch.object(Substack, 'get', redirected):
+            intro, body = preview.article_text(requested).split('\n', 1)
+        self.assertIn('Seed trials.', intro)
+        self.assertEqual(body, f'{FIRST} {LAST}')
+
     def test_tim_bray_keeps_a_caption_anchored_to_an_article_image(self):
         html = f'''<title>Seed trials</title><h1>Seed trials</h1><div id="center-and-right"><div id="centercontent">
         <p>{FIRST}</p><div class="main-image"><a href="/large"><img src="tray"></a></div>

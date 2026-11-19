@@ -1,13 +1,12 @@
 """Find narration text in already-downloaded HTML; never fetch extra resources."""
 import re
 from html import unescape
-from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, remove_table_of_contents, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
-    remove_quillette_bookmarks, remove_webb_download_intro,
+    remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
     wyofile_feature,
 )
 from tts import speech_text
@@ -176,48 +175,6 @@ def remove_repeated_cover_deck(root, title):
             deck.decompose()
 
 
-def remove_table_of_contents(root, url):
-    """Remove marked section indexes, keeping their destination prose intact."""
-    contents = list(root.select('.toc, #toc, .table-of-contents, #table-of-contents'))
-    if not contents:
-        return
-    targets = {}
-    for node in root.select('[id], a[name]'):
-        for label in (node.get('id'), node.get('name') if node.name == 'a' else None):
-            if label:
-                targets.setdefault(label, []).append(node)
-    requested = url_identity(url)
-    for toc in contents:
-        if toc.parent is None or toc.find_parent(['blockquote', 'pre', 'code']):
-            continue
-
-        def section_link(link):
-            href = link.get('href', '').strip()
-            try:
-                fragment = unquote(urlsplit(href).fragment)
-            except ValueError:
-                return False
-            if not fragment or not (href.startswith('#') or
-                                    requested and url_identity(href, url) == requested):
-                return False
-            # A class on a wrapper containing the article itself is not an
-            # instruction to discard that wrapper and all its destination text.
-            return any(node.parent is not None and node is not toc and
-                       not any(parent is toc for parent in node.parents)
-                       for node in targets.get(fragment, []))
-
-        links = toc.select('a[href]')
-        if not links or not all(section_link(link) for link in links):
-            continue
-        heading = toc.find_previous_sibling()
-        if heading is not None and heading.name in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
-            label = heading.get_text(' ', strip=True).rstrip(':').casefold().replace('\u2019', "'")
-            if ('toch1' in heading.get('class', []) or
-                    label in ('contents', 'table of contents', 'on this page', "today's links")):
-                heading.decompose()
-        toc.decompose()
-
-
 def clean_tree(root, title, author, url=''):
     remove_resolved_footnote_backlinks(root, url)
     remove_substack_footnote_controls(root)
@@ -248,6 +205,10 @@ def clean_tree(root, title, author, url=''):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     identity = url_identity(url)
+    if identity and identity[1] in {'universalhub.com', 'www.universalhub.com'}:
+        opening, writer = universal_hub_writer(root, url)
+        if opening and writer == author:
+            opening.decompose()
     if identity and identity[1] == 'daily.jstor.org':
         for body in root.select('article > .entry-content'):
             clean_jstor_pull_quotes(body)
@@ -402,6 +363,9 @@ def clean_tree(root, title, author, url=''):
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
                 bio.decompose()
+        for ad in root.select('.story-content > .story-body > .insert-post-ads:has(> script)'):
+            if ad.get_text(strip=True) == 'Article continues after advertisement':
+                ad.decompose()
     if identity and identity[1] in {'universetoday.com', 'www.universetoday.com'}:
         for body in root.select('main.container > article > figure:has(img) + .article-content > .text'):
             figure = body.parent.find_previous_sibling()
@@ -827,7 +791,9 @@ def clean_tree(root, title, author, url=''):
         if node.find_parent(['blockquote', 'pre', 'code']):
             continue
         value = heading_text(node) if node.name in ('h1', 'h2', 'h3') else ' '.join(node.get_text(' ', strip=True).split())
-        if ((title and heading_matches(value[:160].strip(), title)) or
+        editorial_subheading = (identity and identity[1] == 'creativecommons.org' and node.name in ('h2', 'h3')
+                                and match('body.blog-post main > .content > *', node) and value != title)
+        if ((title and not editorial_subheading and heading_matches(value[:160].strip(), title)) or
                 (author and re.sub(r'^by\s+', '', value, flags=re.I)[:100].strip() == author)):
             node.decompose()
     for tags in list(root.select('.post-tags')):

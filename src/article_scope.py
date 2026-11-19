@@ -74,6 +74,48 @@ def plover_story_title(soup, url):
     return None
 
 
+def remove_table_of_contents(root, url):
+    """Remove marked section indexes, keeping their destination prose intact."""
+    contents = list(root.select('.toc, #toc, .table-of-contents, #table-of-contents'))
+    if not contents:
+        return
+    targets = {}
+    for node in root.select('[id], a[name]'):
+        for label in (node.get('id'), node.get('name') if node.name == 'a' else None):
+            if label:
+                targets.setdefault(label, []).append(node)
+    requested = url_identity(url)
+    for toc in contents:
+        if toc.parent is None or toc.find_parent(['blockquote', 'pre', 'code']):
+            continue
+
+        def section_link(link):
+            href = link.get('href', '').strip()
+            try:
+                fragment = unquote(urlsplit(href).fragment)
+            except ValueError:
+                return False
+            if not fragment or not (href.startswith('#') or
+                                    requested and url_identity(href, url) == requested):
+                return False
+            # A class on a wrapper containing the article itself is not an
+            # instruction to discard that wrapper and all its destination text.
+            return any(node.parent is not None and node is not toc and
+                       not any(parent is toc for parent in node.parents)
+                       for node in targets.get(fragment, []))
+
+        links = toc.select('a[href]')
+        if not links or not all(section_link(link) for link in links):
+            continue
+        heading = toc.find_previous_sibling()
+        if heading is not None and heading.name in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            label = heading.get_text(' ', strip=True).rstrip(':').casefold().replace('\u2019', "'")
+            if ('toch1' in heading.get('class', []) or
+                    label in ('contents', 'table of contents', 'on this page', "today's links")):
+                heading.decompose()
+        toc.decompose()
+
+
 def remove_resolved_footnote_backlinks(root, url=''):
     """Remove unmarked return controls only after verifying both footnote links."""
     identity = url_identity(url)

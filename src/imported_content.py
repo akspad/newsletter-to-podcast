@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 from tts import speech_text
 
-from article_scope import DATE, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
+from article_scope import DATE, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_table_of_contents, url_identity
 
 
 HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
@@ -18,6 +18,29 @@ QUILLETTE_HOSTS = {'quillette.com', 'www.quillette.com'}
 
 def guardian_author_label(name):
     return name.removesuffix(' Health policy editor') if isinstance(name, str) else name
+
+
+def universal_hub_writer(root, url):
+    identity = url_identity(url)
+    if not identity or identity[1] not in {'universalhub.com', 'www.universalhub.com'}:
+        return None, ''
+    if isinstance(root, str):
+        from bs4 import BeautifulSoup
+        root = BeautifulSoup(root, 'html.parser')
+    for body in root.select('.field-name-body > .field-items > .field-item'):
+        opening = body.find('p', recursive=False)
+        if not opening or not editorial(opening) or not opening.select_one(':scope > em:only-child'):
+            continue
+        name = re.fullmatch(r'By ([^,]{2,100}), .+', ' '.join(opening.get_text().split()))
+        if not name:
+            continue
+        for link in body.select('p > em > a[href]'):
+            profile = url_identity(link['href'], url)
+            if (profile and profile[1] == 'theconversation.com' and profile[2].startswith('/profiles/')
+                    and link.get_text(strip=True) == name[1] and editorial(link)
+                    and link.parent.get_text(' ', strip=True).startswith('This article is republished from The Conversation')):
+                return opening, name[1]
+    return None, ''
 
 
 def mit_news_author_label(name):
@@ -407,6 +430,16 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] in {'universalhub.com', 'www.universalhub.com'}:
+        opening, _ = universal_hub_writer(root, url)
+        if opening:
+            opening.decompose()
+        for node in root.find_all('div', recursive=False):
+            classes = set(node.get('class', []))
+            if ('field-type-taxonomy-term-reference' in classes and classes & {
+                    'field-name-field-topics', 'field-name-field-neighborhoods', 'field-name-field-free-tagging'}
+                    or 'rrssb' in classes and node.select_one('ul.rrssb-buttons > li > a[href]')):
+                node.decompose()
     if identity and identity[1] == 'daily.jstor.org':
         clean_jstor_pull_quotes(root)
     if identity and identity[1] == 'science.nasa.gov' and identity[2].startswith('/missions/webb/'):
@@ -445,6 +478,7 @@ def clean_imported_widgets(root, url, title=''):
         remove_loc_subscription(root)
     if identity and identity[1] == 'pluralistic.net':
         remove_pluralistic_footer(root)
+        remove_table_of_contents(root, url)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
         remove_openculture_endmatter(root, url)
     if identity and identity[1] in QUILLETTE_HOSTS:

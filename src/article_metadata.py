@@ -5,7 +5,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, freebsd_report_writer, guardian_author_label, open_culture_writer, wyofile_feature
+from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, freebsd_report_writer, guardian_author_label, open_culture_writer, universal_hub_writer, wyofile_feature
 from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, react_blog_credit, url_identity
 
 
@@ -409,6 +409,13 @@ def article_details(soup, url):
             visible_credit = ' '.join(str(text) for text in credit.strings
                                       if not any(explicitly_hidden(node) for node in text.parents))
             visible_authors = guardian_author_label(clean(visible_credit)) or visible_authors
+    if (requested and requested[1] in {'theconversation.com', 'www.theconversation.com'}
+            and scope.name == 'article' and scope.get('id') == 'article'):
+        authors = [clean(node.get_text()) for node in scope.select(
+            'aside.content-sidebar section.content-authors .content-authors-synopsis > '
+            'button.content-authors-toggle > span.nobr')
+            if not any(explicitly_hidden(parent) for parent in (node, *node.parents))]
+        visible_authors = ', '.join(dict.fromkeys(filter(None, authors))) or visible_authors
     if requested and requested[1] == 'projects.propublica.org' and scope.name == 'article':
         credit = scope.select_one(':scope > header.opener .opener__text > .opener__meta > p.opener__byline')
         if credit and editorial(credit) and clean(visible_text(credit)).casefold().startswith('by '):
@@ -437,6 +444,9 @@ def article_details(soup, url):
         _, react_author = react_blog_credit(soup, title)
         author = react_author or author
     host = urlparse(url).hostname
+    if host in {'universalhub.com', 'www.universalhub.com'}:
+        _, writer = universal_hub_writer(scope, url)
+        author = writer or author
     if host == 'freebsdfoundation.org':
         author = freebsd_report_writer(scope, url, title) or author
     if (not author and requested and host in {'publicdomainreview.org', 'www.publicdomainreview.org'}

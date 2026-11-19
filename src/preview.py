@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 from substack import SourceDownloadError
 from article_metadata import article_details
 from article_scope import readable_prose
@@ -110,6 +111,9 @@ def article_text(url):
     print(f"article_download status=completed elapsed={time.monotonic() - started:.1f}s", file=sys.stderr)
     soup = BeautifulSoup(html, "html.parser")
     resolved_url = source.last_url or url
+    requested, resolved = urlsplit(url), urlsplit(resolved_url)
+    if requested.hostname == resolved.hostname == 'blog.plover.com' and requested.fragment and not resolved.fragment:
+        resolved_url = resolved._replace(fragment=requested.fragment).geturl()
     publication, title, author, structured_body = article_details(soup, resolved_url)
     from article_extract import extract_text, extract_structured_text
     text = extract_text(soup, title, author, resolved_url)
