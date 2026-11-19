@@ -11,6 +11,11 @@ HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
 OUTSIDE_HOSTS = {'outsideonline.com', 'www.outsideonline.com'}
 COLOSSAL_HOSTS = {'thisiscolossal.com', 'www.thisiscolossal.com'}
 WYOFILE_HOSTS = {'wyofile.com', 'www.wyofile.com'}
+GUARDIAN_HOSTS = {'theguardian.com', 'www.theguardian.com'}
+
+
+def guardian_author_label(name):
+    return name.removesuffix(' Health policy editor') if isinstance(name, str) else name
 
 
 def wyofile_feature(root, title):

@@ -19,6 +19,39 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_guardian_keeps_one_lead_caption_and_does_not_announce_the_staff_role(self):
+        url = 'https://www.theguardian.com/society/seed-trials'
+        caption = '<figure><img src="/tray"><figcaption data-spacefinder-role="inline">A tray after rain.</figcaption></figure>'
+        html = f"""<article><h1>Seed trials</h1><aside><address data-component="meta-byline" data-gu-name="byline">
+        <a rel="author" href="/profile/lee">Lee Writer</a><span> Health policy editor</span></address></aside>
+        <div data-gu-name="media">{caption}{caption}</div>
+        <div data-gu-name="body"><div class="article-body-viewer-selector"><p>{FIRST}</p><p>{LAST}</p></div></div>
+        </article>"""
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('By Lee Writer.'), intro)
+        self.assertEqual(body, f'A tray after rain. {FIRST} {LAST}')
+        xml = f"""<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item>
+        <title>Seed trials</title><link>{url}</link><pubDate>Wed, 18 Nov 2026 13:57:06 GMT</pubDate>
+        <description><![CDATA[<p>{FIRST}</p>]]></description>
+        <dc:creator>Lee Writer Health policy editor</dc:creator></item></channel></rss>"""
+        source = Substack('')
+        pub = {'base': 'https://www.theguardian.com/society/rss', 'rss': True}
+        with patch.object(source, 'get', return_value=xml):
+            post, = source.recent_posts(pub)
+        self.assertEqual(post['publishedBylines'], [{'name': 'Lee Writer'}])
+
+    def test_propublica_keeps_editorial_captions_without_the_duplicate_cover_copy(self):
+        credit = '<span class="p-attribution__caption">Trial plots.</span> <span class="p-attribution__credit">Image by Lee.</span>'
+        html = f"""<article><h1>Seed trials</h1><div class="entry-header"><div class="p-opener">
+        <div class="p-opener__art-wrapper"><figure><img src="/cover">
+        <figcaption class="p-attribution screen-reader-text">{credit}</figcaption></figure></div>
+        <figcaption aria-hidden="true" class="p-attribution">{credit}</figcaption></div></div>
+        <div class="article-body"><div class="entry-content"><p>{FIRST}</p>
+        <figure class="wp-block-image"><img src="/plots"><figcaption class="attribution">After rain.</figcaption></figure>
+        <p>{LAST}</p></div></div></article>"""
+        _, body = narrate('https://www.propublica.org/article/seed-trials', html)
+        self.assertEqual(body, f'Trial plots. Image by Lee. {FIRST} After rain. {LAST}')
+
     def test_popular_science_featured_template_keeps_cover_and_inline_captions(self):
         html = f"""<article class="featured-template-post"><h1>Seed trials</h1>
         <figure class="featured-image"><img src="/lead"><figcaption class="article-featured-image-caption">

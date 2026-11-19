@@ -5,7 +5,7 @@ from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
-    COLOSSAL_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
+    COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, wyofile_feature,
 )
 from tts import speech_text
@@ -382,6 +382,27 @@ def clean_tree(root, title, author, url=''):
             if cover and editorial(cover) and editorial(body):
                 cover.name = 'div' if cover.find('p') else 'p'
                 body.insert(0, cover.extract())
+    if identity and identity[1] in GUARDIAN_HOSTS:
+        for media in root.select('article > [data-gu-name="media"]'):
+            bodies = media.parent.select('[data-gu-name="body"] .article-body-viewer-selector')
+            if len(bodies) != 1 or not editorial(bodies[0]):
+                continue
+            captions = {}
+            for caption in media.select('figure figcaption[data-spacefinder-role="inline"]'):
+                if editorial(caption) and caption.find_parent('figure').find('img'):
+                    text = ' '.join(caption.get_text(' ', strip=True).split())
+                    if text:
+                        captions.setdefault(text, caption)
+            for index, caption in enumerate(captions.values()):
+                caption.name = 'p'
+                bodies[0].insert(index, caption.extract())
+    if identity and identity[1] in {'propublica.org', 'www.propublica.org'}:
+        for body in root.select('article > .article-body > .entry-content'):
+            cover = body.parent.parent.select_one(
+                ':scope > .entry-header .p-opener__art-wrapper > figure:has(img) > figcaption.p-attribution')
+            if cover and editorial(cover) and editorial(body):
+                cover.name = 'p'
+                body.insert(0, cover.extract())
     if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2]:
         for deck in root.select('article.email-body > h1.subject + h2.description'):
             body = deck.find_next_sibling()
@@ -480,6 +501,8 @@ def clean_tree(root, title, author, url=''):
                         value = summary.contents[0]
                         value.replace_with(re.sub(r'^\s*—\s*', '', value))
     caption_selectors = {
+        **dict.fromkeys({'propublica.org', 'www.propublica.org'},
+                        'article > .article-body > .entry-content > figure.wp-block-image > figcaption.attribution'),
         **dict.fromkeys({'popsci.com', 'www.popsci.com'},
                         'article.featured-template-post .entry-content > .content-wrapper '
                         '> figure.wp-block-image > figcaption.wp-element-caption'),

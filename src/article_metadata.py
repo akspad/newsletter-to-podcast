@@ -5,7 +5,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from imported_content import WYOFILE_HOSTS, earth_observatory_writer, wyofile_feature
+from imported_content import GUARDIAN_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, wyofile_feature
 from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, url_identity
 
 
@@ -382,13 +382,13 @@ def article_details(soup, url):
             '.devsite-article-body > p > .wd-authors > .wd-author > div > span:first-child')
             if belongs_to_scope(node, scope)]
         visible_authors = ', '.join(dict.fromkeys(filter(None, author_names))) or visible_authors
-    if requested and requested[1] in {'theguardian.com', 'www.theguardian.com'}:
+    if requested and requested[1] in GUARDIAN_HOSTS:
         credit = scope.select_one('address[data-component="meta-byline"][data-gu-name="byline"]')
         if credit and credit.find_parent('article') is scope:
             # The publisher puts its article byline inside the metadata aside.
             visible_credit = ' '.join(str(text) for text in credit.strings
                                       if not any(explicitly_hidden(node) for node in text.parents))
-            visible_authors = clean(visible_credit) or visible_authors
+            visible_authors = guardian_author_label(clean(visible_credit)) or visible_authors
     if requested and requested[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'}:
         writers = [clean(visible_text(link)) for link in scope.select(
             'header > .singlebyline > a[id="author_link_top"][href*="/profiles/"]')

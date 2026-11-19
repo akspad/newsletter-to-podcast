@@ -18,8 +18,8 @@ import security
 from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
-    COLOSSAL_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer, harvard_feed_writer,
-    outside_account_name, remove_outside_newsletter, wyofile_feed_authors,
+    COLOSSAL_HOSTS, GUARDIAN_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
+    guardian_author_label, harvard_feed_writer, outside_account_name, remove_outside_newsletter, wyofile_feed_authors,
 )
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
@@ -454,6 +454,8 @@ class Substack:
             bylines = [name for name in bylines if not outside_account_name(name, link)]
             if (identity := url_identity(link)) and identity[1] in WYOFILE_HOSTS:
                 bylines = wyofile_feed_authors(bylines)
+            if identity and identity[1] in GUARDIAN_HOSTS:
+                bylines = [guardian_author_label(name) for name in bylines]
             if not bylines:
                 for node in item.findall('author'):
                     value = (node.text or '').strip()
@@ -622,7 +624,10 @@ class Substack:
                     cleaned_names = wyofile_feed_authors(names)
                     if cleaned_names != names:
                         bylines = [{'name': name} for name in cleaned_names]
-                if len(bylines) != len(original_bylines):
+                if identity and identity[1] in GUARDIAN_HOSTS:
+                    bylines = [{**byline, 'name': guardian_author_label(byline['name'])}
+                               if 'name' in byline else byline for byline in bylines]
+                if bylines != original_bylines:
                     post = {**post, 'publishedBylines': bylines}
             return post, html_to_text(post["body_html"], title=title, url=url)
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
