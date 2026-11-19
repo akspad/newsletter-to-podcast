@@ -4,7 +4,10 @@ from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
-from imported_content import COLOSSAL_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, remove_openculture_endmatter, remove_outside_newsletter
+from imported_content import (
+    COLOSSAL_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
+    remove_openculture_endmatter, remove_outside_newsletter, wyofile_feature,
+)
 from tts import speech_text
 
 
@@ -316,6 +319,27 @@ def clean_tree(root, title, author, url=''):
             if card.select_one(':scope > a.embed-relatedstory-imagelink[href]') and not card.find_parent(
                     ['blockquote', 'pre', 'code']):
                 card.decompose()
+    if identity and identity[1] in {'lithub.com', 'www.lithub.com'}:
+        for bio in root.select('.story-content > .bio-container:has(> .bio)'):
+            if not bio.find_parent(['blockquote', 'pre', 'code']):
+                bio.decompose()
+    if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2]:
+        for deck in root.select('article.email-body > h1.subject + h2.description'):
+            body = deck.find_next_sibling()
+            if (body and match('.email-body-content', body) and editorial(body) and editorial(deck)
+                    and heading_matches(heading_text(deck.find_previous_sibling()), title)):
+                body.insert(0, deck.extract())
+    if identity and identity[1] in WYOFILE_HOSTS:
+        feature = wyofile_feature(root, title)
+        if feature:
+            bodies = feature.parent.select(':scope > .main-content > article > .entry-content')
+            caption = feature.select_one(':scope > figure.post-thumbnail:has(img) > figcaption')
+            if len(bodies) == 1 and caption and editorial(caption) and editorial(bodies[0]):
+                caption.name = 'p'
+                bodies[0].insert(0, caption.extract())
+        for player in root.select('article > .entry-content > .article-summary:has(> .instaread-player-slot)'):
+            for label in player.select(':scope > p.instaread-disclaimer'):
+                label.decompose()
     if identity and identity[1] in {'mentalfloss.com', 'www.mentalfloss.com'}:
         for article in root.select('article#main-article'):
             bodies = article.select('.odesa-article-main .article-content')
@@ -351,6 +375,8 @@ def clean_tree(root, title, author, url=''):
             if credit and editorial(credit):
                 body.insert(0, credit.extract())
     caption_selectors = {
+        **dict.fromkeys(WYOFILE_HOSTS, 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption, '
+                        'article > .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
         **dict.fromkeys(COLOSSAL_HOSTS, 'article .entry-content > .entry-header '
                         '> figure.colo-post-featured-image > figcaption.wp-element-caption'),
         **dict.fromkeys(HARVARD_HOSTS,
@@ -586,10 +612,14 @@ def extract_text(soup, title='', author='', url=''):
             if not deferred or text != deferred[-1]:
                 deferred.append(text)
     identity = url_identity(url)
-    if identity and identity[1] in {'longreads.com', 'www.longreads.com'}:
+    if identity and identity[1] in {'longreads.com', 'www.longreads.com'} | WYOFILE_HOSTS:
         # Strip the Newspack list while its cards still identify the heading.
         for listing in scope.select('.entry-content .wp-block-newspack-blocks-homepage-articles.wpnbha '
                                     '> div:has(> h2.article-section-title):has(> article.type-post)'):
+            if identity[1] in WYOFILE_HOSTS:
+                heading = listing.select_one(':scope > h2.article-section-title')
+                if heading.get_text(' ', strip=True).casefold() != 'related':
+                    continue
             if (not listing.find_parent(['blockquote', 'pre', 'code'])
                     and all(match('h2.article-section-title, article.type-post', child)
                             for child in listing.find_all(recursive=False))):
@@ -618,6 +648,9 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.block-field-blocknodearticlebody > .field--name-body.field--type-text-with-summary'
         elif identity[1] in OUTSIDE_HOSTS:
             body_selector = '.article-template .js-body-content > .content-wrap.fp-contentTarget'
+        elif (identity[1] == 'buttondown.com' and '/archive/' in identity[2]
+              and match('article.email-body', scope)):
+            body_selector = ':scope > .email-body-content'
         elif identity[1] == 'www.internetsociety.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':

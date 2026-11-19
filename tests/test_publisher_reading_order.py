@@ -19,6 +19,66 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_lithub_keeps_the_source_credit_and_skips_the_sibling_author_card(self):
+        html = f"""<meta name="author" content="Lee Writer"><main><h1 class="entry-title">Seed trials</h1>
+        <div class="story-content"><div class="story-body entry-content"><p>{FIRST}</p><p>{LAST}</p>
+        <p>From <a href="/book">The seed journal</a>, published by arrangement.</p></div>
+        <div class="bio-container"><div class="bio"><p>Lee Writer teaches gardening.</p></div></div>
+        </div></main>"""
+        intro, body = narrate('https://lithub.com/seed-trials/', html)
+        self.assertIn('By Lee Writer.', intro)
+        self.assertEqual(body, f'{FIRST} {LAST} From The seed journal, published by arrangement.')
+
+    def test_wyofile_uses_signed_byline_and_captions_without_player_or_related_cards(self):
+        byline = 'Lee Writer, Ash Gardener, Jules Grower and Pat Seed'
+        html = f"""<meta name="author" content="Posting Account"><main class="site-main">
+        <div class="featured-image-above"><figure class="post-thumbnail"><img src="/lead.png">
+        <figcaption>A lead credit.</figcaption></figure><header class="entry-header">
+        <h1 class="entry-title">Seed trials</h1><div class="entry-meta"><span class="byline">by {byline}</span></div>
+        </header></div><div class="main-content"><article><div class="entry-content">
+        <div class="article-summary"><div class="instaread-player-slot"></div>
+        <p class="instaread-disclaimer">Play automatically generated audio.</p><p>Reported jointly.</p></div>
+        <p>{FIRST}</p><div class="wp-block-image"><figure><img src="/tray.png">
+        <figcaption class="wp-element-caption">A tray after rain.</figcaption></figure></div>
+        <p>{LAST}</p><div class="wp-block-newspack-blocks-homepage-articles wpnbha"><div>
+        <h2 class="article-section-title">RELATED</h2><article class="type-post"><h3>Other story</h3></article>
+        </div></div></div></article></div></main>"""
+        intro, body = narrate('https://wyofile.com/seed-trials/', html)
+        self.assertIn(f'By {byline}.', intro)
+        self.assertEqual(body, f'A lead credit. Reported jointly. {FIRST} A tray after rain. {LAST}')
+
+    def test_wyofile_feed_keeps_all_signed_writers_once_and_preserves_unrelated_creators(self):
+        url = 'https://wyofile.com/seed-trials/'
+        title = 'Seed trials'
+        signed = 'Lee Writer, Ash Gardener and Pat Seed'
+        authors = [f'by {signed}', 'Ash Gardener, Example Daily', 'Pat Seed']
+        xml = f"""<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item>
+        <title>{title}</title><link>{url}</link><pubDate>Wed, 18 Nov 2026 13:57:06 GMT</pubDate>
+        <description><![CDATA[<p>{FIRST}</p><p>The post <a href="{url}">{title}</a> appeared first on
+        <a href="https://wyofile.com">WyoFile </a>.</p>]]></description>
+        {''.join(f'<dc:creator>{name}</dc:creator>' for name in authors)}
+        </item></channel></rss>"""
+        sub = Substack('')
+        pub = {'base': 'https://wyofile.com/feed/', 'rss': True}
+        with patch.object(sub, 'get', return_value=xml):
+            post, = sub.recent_posts(pub)
+        self.assertEqual(post['publishedBylines'], [{'name': signed}])
+        cached = {**post, 'publishedBylines': [{'name': name} for name in authors]}
+        full, body = sub.post_text(pub, cached)
+        self.assertEqual(full['publishedBylines'], [{'name': signed}])
+        self.assertEqual(body, FIRST)
+        cached['publishedBylines'][-1] = {'name': 'Another Contributor'}
+        self.assertEqual(sub.post_text(pub, cached)[0]['publishedBylines'], cached['publishedBylines'])
+
+    def test_buttondown_keeps_the_subject_deck_and_inner_heading_but_skips_web_footer(self):
+        html = f"""<article class="email-body"><h1 class="subject">Seed trials</h1>
+        <h2 class="description">Field notes</h2><div class="email-body-content">
+        <p>{FIRST}</p><hr><h1>Volunteer update</h1><p>{LAST}</p>
+        <pre><code>model = &#60;Plant&#62;</code></pre></div>
+        <div class="email-body-web-footer"><p>Subscribe to these updates.</p></div></article>"""
+        _, body = narrate('https://buttondown.com/fictional/archive/trials/', html)
+        self.assertEqual(body, f'Field notes {FIRST} Volunteer update {LAST} model = <Plant>')
+
     def test_colossal_preview_keeps_the_featured_credit_once_before_the_prose(self):
         url = 'https://www.thisiscolossal.com/2026/11/seed-trials/'
         html = f"""<article><h1>Seed trials</h1><p class="byline"><a rel="author">Lee Writer</a></p>

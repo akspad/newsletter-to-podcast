@@ -4,12 +4,35 @@ from urllib.parse import urlsplit
 
 from tts import speech_text
 
-from article_scope import DATE, belongs_to_scope, editorial, url_identity
+from article_scope import DATE, belongs_to_scope, editorial, heading_matches, heading_text, url_identity
 
 
 HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
 OUTSIDE_HOSTS = {'outsideonline.com', 'www.outsideonline.com'}
 COLOSSAL_HOSTS = {'thisiscolossal.com', 'www.thisiscolossal.com'}
+WYOFILE_HOSTS = {'wyofile.com', 'www.wyofile.com'}
+
+
+def wyofile_feature(root, title):
+    """Find the featured header for this story, outside the article element."""
+    features = [
+        heading.parent.parent for heading in root.select(
+            'main.site-main > .featured-image-above > header.entry-header > h1.entry-title')
+        if editorial(heading) and heading_matches(heading_text(heading), title)
+    ]
+    return features[0] if len(features) == 1 else None
+
+
+def wyofile_feed_authors(names):
+    """Prefer the signed group credit over repeated individual creator tags."""
+    if len(names) > 1 and all(isinstance(name, str) for name in names) and names[0].lower().startswith('by '):
+        group = names[0][3:].strip()
+        members = re.split(r',\s+(?:and\s+)?|\s+and\s+', group)
+        if (len(members) == len(names) and all(members)
+                and all(label == member or label.startswith(member + ', ')
+                        for member, label in zip(members[1:], names[1:]))):
+            return [group]
+    return names
 
 
 def harvard_feed_body(root, url, title):
