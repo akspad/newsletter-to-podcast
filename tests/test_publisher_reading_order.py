@@ -19,6 +19,28 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_jstor_does_not_repeat_a_pull_quote_but_keeps_a_unique_one(self):
+        url = 'https://daily.jstor.org/seed-trials/'
+        text = 'Our smallest tray had more growth.'
+        widget = f'<aside class="pull-quote center"><div class="pull-quote__text">{text}</div></aside>'
+        body = f'<p>{FIRST}</p>{widget}<p>{text} {LAST}</p>'
+        page = f'<article><h1>Seed trials</h1><div class="entry-content">{body}</div></article>'
+        self.assertEqual(narrate(url, page)[1].count(text), 1)
+        self.assertEqual(html_to_text(body, url=url).count(text), 1)
+        self.assertIn(text, narrate(url, page.replace(f'{text} {LAST}', LAST))[1])
+        self.assertIn(text, html_to_text(body.replace(f'{text} {LAST}', LAST), url=url))
+
+    def test_simon_release_feed_skips_only_its_repeated_opening_heading(self):
+        url = 'https://simonwillison.net/2026/Nov/14/seed-trials/'
+        title = 'Release: seed-trials 1.0'
+        opening = '<p><strong>Release:</strong> <a href="https://github.com/example/seed-trials/releases/tag/v1">seed-trials 1.0</a></p>'
+        self.assertEqual(html_to_text(opening + f'<p>{FIRST}</p>', title=title, url=url), FIRST)
+        self.assertIn(title, html_to_text(opening, title=title, url=url))
+        self.assertIn(title, html_to_text(opening + f'<p>{FIRST}</p>', title='Different entry', url=url))
+        paragraph = '<p>This release adds a new measurement tool.</p>'
+        self.assertEqual(html_to_text(opening + paragraph, title='seed-trials 1.0', url=url),
+                         'This release adds a new measurement tool.')
+
     def test_webb_article_keeps_the_sibling_caption_and_removes_download_instructions(self):
         html = f'''<article><h1>Seed trials</h1><div class="usa-article-content"><div class="entry-content">
         <p>{FIRST}</p><div class="stma-image-wrapper"><img src="tray"></div>

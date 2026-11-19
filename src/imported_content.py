@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 from tts import speech_text
 
-from article_scope import DATE, belongs_to_scope, editorial, heading_matches, heading_text, url_identity
+from article_scope import DATE, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, url_identity
 
 
 HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
@@ -252,6 +252,22 @@ def open_culture_writer(body, url):
     return ''
 
 
+def clean_jstor_pull_quotes(body):
+    paragraphs = [' '.join(node.get_text().split()) for node in body.find_all('p')
+                  if editorial(node) and not node.find_parent(['aside', 'blockquote', 'pre', 'code'])]
+    for quote in body.select('aside.pull-quote'):
+        text = quote.select_one(':scope > .pull-quote__text')
+        if (not text or any(explicitly_hidden(node) for node in (text, *text.parents))
+                or quote.find_parent(['aside', 'blockquote', 'pre', 'code'])
+                or len(quote.find_all(recursive=False)) != 1):
+            continue
+        value = ' '.join(text.get_text().split())
+        if value and any(value in paragraph for paragraph in paragraphs):
+            quote.decompose()
+        elif value:
+            quote.name = 'div'
+
+
 def remove_quillette_bookmarks(body, url):
     for card in body.select('figure.kg-card.kg-bookmark-card'):
         link = card.select_one(':scope > a.kg-bookmark-container[href]')
@@ -391,6 +407,8 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] == 'daily.jstor.org':
+        clean_jstor_pull_quotes(root)
     if identity and identity[1] == 'science.nasa.gov' and identity[2].startswith('/missions/webb/'):
         clean_webb_rss(root, title)
     if identity and identity[1] in {'aeon.co', 'www.aeon.co'}:
@@ -464,6 +482,20 @@ def clean_imported_widgets(root, url, title=''):
                     and paragraph.get_text(strip=True) == links[0].get_text(strip=True) == 'Read more'):
                 paragraph.decompose()
     if identity and identity[1] == 'simonwillison.net':
+        opening = root.find('p', recursive=False)
+        if opening and title:
+            label = opening.find('strong', recursive=False)
+            release = opening.find('a', recursive=False, href=True)
+            target = url_identity(release['href'], url) if release else None
+            remainder = opening.find_next_sibling('p')
+            prior_text = ''.join(str(node).strip() for node in opening.previous_siblings)
+            duplicate = heading_matches(heading_text(opening), title) or (
+                release and heading_matches(release.get_text(strip=True), title)
+                and any(p.get_text(strip=True).startswith('This release ') for p in opening.find_next_siblings('p')))
+            if (not prior_text and label and label.get_text(strip=True) == 'Release:' and target
+                    and target[1] == 'github.com' and '/releases/tag/' in target[2]
+                    and duplicate and remainder and remainder.get_text(strip=True)):
+                opening.decompose()
         # The Atom feed appends a paragraph of category links after the story.
         # An omitted closing tag can put that template inside the last prose paragraph.
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)

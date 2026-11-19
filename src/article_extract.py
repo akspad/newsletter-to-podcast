@@ -5,7 +5,7 @@ from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
-    COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS,
+    COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
     remove_quillette_bookmarks, remove_webb_download_intro,
     wyofile_feature,
@@ -248,6 +248,9 @@ def clean_tree(root, title, author, url=''):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     identity = url_identity(url)
+    if identity and identity[1] == 'daily.jstor.org':
+        for body in root.select('article > .entry-content'):
+            clean_jstor_pull_quotes(body)
     if identity and identity[1] == 'react.dev' and identity[2].startswith('/blog/'):
         byline, writer = react_blog_credit(root, title)
         if byline and writer == author:
