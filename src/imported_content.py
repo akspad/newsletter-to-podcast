@@ -18,6 +18,12 @@ def guardian_author_label(name):
     return name.removesuffix(' Health policy editor') if isinstance(name, str) else name
 
 
+def mit_news_author_label(name):
+    if not isinstance(name, str):
+        return name
+    return re.sub(r'\s*\|\s*MIT News$', '', name).rstrip() or name
+
+
 def wyofile_feature(root, title):
     """Find the featured header for this story, outside the article element."""
     features = [

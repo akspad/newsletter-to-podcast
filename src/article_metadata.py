@@ -474,6 +474,17 @@ def article_details(soup, url):
                   heading_matches(title, clean(article.get('headline'))))
     if not isinstance(body, str) or not identified or not public_structured_article(article, references, base_url=url):
         body = ''
+    if (host == 'kottke.org' and requested == canonical_url and scope.name == 'div'
+            and 'post' in scope.get('class', []) and title
+            and not any(editorial(node) for node in scope.select('h1, h2, h3, .post-title'))):
+        # Untitled link posts can use a clipped copy of their opening as SEO
+        # metadata. Let the opening itself supply those words once.
+        first = scope.find('p', recursive=False)
+        clipped = re.sub(r'(?:\.{3}|…)\s*$', '', page_title).rstrip()
+        if first and editorial(first) and clipped and clipped != page_title:
+            opening = ' '.join(speech_text(first.get_text()).split())
+            if opening.startswith(clipped) and opening.startswith(title.rstrip('.…')):
+                title = ''
     return publication, title, author, body
 
 

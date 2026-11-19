@@ -19,6 +19,44 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_kottke_untitled_post_does_not_read_clipped_opening_as_a_title(self):
+        url = 'https://kottke.org/26/11/0054321-seed-trials'
+        quote = f'“{FIRST} {LAST}”'
+        schema = {'@type': 'BlogPosting', 'headline': quote[:64], 'url': url,
+                  'author': {'name': 'Lee Writer'}, 'publisher': {'name': 'Garden Notes'}}
+        html = f"""<title>{quote[:34]}...</title><link rel="canonical" href="{url}">
+        <script type="application/ld+json">{json.dumps(schema)}</script>
+        <div class="post"><div class="post-meta"><a href="{url}">Published today</a></div>
+        <p>{quote}</p></div>"""
+        self.assertEqual(narrate(url, html), ['Garden Notes. By Lee Writer.', quote])
+        titled = html.replace(f'<p>{quote}', f'<h2 class="post-title">Seed trials</h2><p>{quote}')
+        self.assertIn('Seed trials.', narrate(url, titled)[0])
+
+    def test_mit_news_feed_byline_omits_branding_and_keeps_specific_affiliations(self):
+        url = 'https://news.mit.edu/2026/seed-trials-1119'
+        names = ['Lee Writer | MIT News', 'Ash Gardener | School of Science']
+        expected = [{'name': 'Lee Writer'}, {'name': names[1]}]
+        rss = f"""<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item>
+        <title>Seed trials</title><link>{url}</link><pubDate>Wed, 18 Nov 2026 13:57:06 GMT</pubDate>
+        <description><![CDATA[<p>{FIRST}</p>]]></description>
+        {''.join(f'<dc:creator>{name}</dc:creator>' for name in names)}
+        </item></channel></rss>"""
+        atom = f"""<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Seed trials</title>
+        <link href="{url}"/><updated>2026-11-18T13:57:06Z</updated><content>{FIRST}</content>
+        {''.join(f'<author><name>{name}</name></author>' for name in names)}
+        </entry></feed>"""
+        source = Substack('')
+        pub = {'base': 'https://news.mit.edu/rss/feed', 'rss': True}
+        for feed in (rss, atom):
+            with patch.object(source, 'get', return_value=feed):
+                post, = source.recent_posts(pub)
+            self.assertEqual(post['publishedBylines'], expected)
+            legacy = {**post, 'publishedBylines': [{'name': name} for name in names]}
+            full, body = source.post_text(pub, legacy)
+            self.assertEqual(full['publishedBylines'], expected)
+            self.assertEqual(body, FIRST)
+            self.assertEqual(legacy['publishedBylines'][0]['name'], names[0])
+
     def test_pluralistic_keeps_the_article_license_but_skips_the_verified_site_footer(self):
         url = 'https://pluralistic.net/2026/11/19/seed-trials/'
         license_note = 'This article uses a Creative Commons Attribution 4.0 license.'

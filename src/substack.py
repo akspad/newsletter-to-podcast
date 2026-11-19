@@ -19,7 +19,8 @@ from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
-    guardian_author_label, harvard_feed_writer, outside_account_name, remove_outside_newsletter, wyofile_feed_authors,
+    guardian_author_label, harvard_feed_writer, mit_news_author_label, outside_account_name,
+    remove_outside_newsletter, wyofile_feed_authors,
 )
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
@@ -463,6 +464,8 @@ class Substack:
                     name = name.strip() or (value if '@' not in value else '')
                     if name and name not in bylines:
                         bylines.append(name)
+            if identity and identity[1] == 'news.mit.edu':
+                bylines = [mit_news_author_label(name) for name in bylines]
             if writer := harvard_feed_writer(html, link, title):
                 bylines = [writer]
             elif not bylines and (writer := earth_observatory_writer(html, link)):
@@ -506,6 +509,8 @@ class Substack:
                 body = atom_content(entry.find('a:summary', ns))
             authors = entry.findall('a:author', ns) or entry.findall('a:source/a:author', ns) or root.findall('a:author', ns)
             bylines = [name.strip() for author in authors if (name := author.findtext('a:name', namespaces=ns)) and name.strip()]
+            if (identity := url_identity(link)) and identity[1] == 'news.mit.edu':
+                bylines = [mit_news_author_label(name) for name in bylines]
             if not bylines and (writer := earth_observatory_writer(body, link)):
                 bylines = [writer]
             guid = entry.findtext("a:id", namespaces=ns) or link
@@ -626,6 +631,9 @@ class Substack:
                         bylines = [{'name': name} for name in cleaned_names]
                 if identity and identity[1] in GUARDIAN_HOSTS:
                     bylines = [{**byline, 'name': guardian_author_label(byline['name'])}
+                               if 'name' in byline else byline for byline in bylines]
+                if identity and identity[1] == 'news.mit.edu':
+                    bylines = [{**byline, 'name': mit_news_author_label(byline['name'])}
                                if 'name' in byline else byline for byline in bylines]
                 if bylines != original_bylines:
                     post = {**post, 'publishedBylines': bylines}
