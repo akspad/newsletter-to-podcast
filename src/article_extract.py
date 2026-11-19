@@ -917,6 +917,11 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.c-post-content__wysiwyg'
         elif identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
             body_selector = '.roscoe-article-body > .roscoe-body'
+        elif identity[1] in {'theparisreview.org', 'www.theparisreview.org'} and identity[2].startswith('/blog/'):
+            body_selector = 'section#content > .article-body-wrap > main.article-body.blog-body'
+            if match(body_selector, scope):
+                candidates = [scope]
+                body_selector = None
     if body_selector:
         bodies = scope.select(body_selector)
         if len(bodies) == 1 and editorial(bodies[0]) and (trusted_short_body or readable_prose(plain_text(bodies[0]))):
