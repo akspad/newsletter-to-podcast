@@ -22,6 +22,15 @@ PUB = {'base': 'https://fictional.example/feed', 'rss': True, 'name': 'Science N
 
 
 class SyndicationFooterTests(unittest.TestCase):
+    def test_propublica_project_recognizes_only_its_own_publisher_homepage(self):
+        url = 'https://projects.propublica.org/story/'
+        footer = FOOTER.replace('https://fictional.example', 'https://www.propublica.org').replace(
+            'Science Notes', 'ProPublica')
+        self.assertEqual(html_to_text(BODY + footer, title=TITLE, url=url), 'A brief but legitimate quotation.')
+        for control in (footer.replace('www.propublica.org', 'other.propublica.org'),
+                        footer.replace('ProPublica', 'Other outlet'), footer + '<p>Continuing the article.</p>'):
+            self.assertIn('appeared first on', html_to_text(BODY + control, title=TITLE, url=url))
+
     def test_old_new_thing_accepts_its_own_devblogs_homepage_and_preserves_query_identity(self):
         url = 'https://devblogs.microsoft.com/oldnewthing/story/?p=123/'
         footer = FOOTER.replace('/story"', '/oldnewthing/story/?p=123/"').replace(

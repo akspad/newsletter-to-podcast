@@ -19,6 +19,23 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_propublica_project_preserves_visible_static_deck_and_linked_contributors(self):
+        html = f'''<meta property="og:site_name" content="ProPublica"><main><article><header class="opener">
+        <div class="opener__text"><h1 class="opener__hed">Seed trials</h1><p class="opener__dek">{FIRST}</p>
+        <div class="opener__meta"><p class="opener__byline">by
+        <a href="https://www.propublica.org/people/lee">Lee Writer</a> and
+        <a href="https://www.propublica.org/people/ash">Ash Reporter</a></p></div></div></header>
+        <div class="p-grid-container"><section class="stat-row" aria-label="Totals">
+        <div class="stat"><span class="stat__value">5</span> <span class="stat__label">Trials completed</span></div>
+        </section><div class="wide-block"><div class="callout-box">
+        <h3 class="callout-box__hed">Send news tips</h3><div class="callout-box__text">
+        <a href="https://www.propublica.org/tips/">Contact our reporters</a></div></div></div>
+        <p>{LAST}</p></div></article></main>'''
+        url = 'https://projects.propublica.org/seed-trials/'
+        intro, body = narrate(url, html)
+        self.assertEqual(intro, 'ProPublica. Seed trials. By Lee Writer, Ash Reporter.')
+        self.assertEqual(body, f'{FIRST} Trials completed: 5. {LAST}')
+
     def test_internet_archive_uses_linked_masthead_and_keeps_inline_image_caption(self):
         html = f'''<meta property="og:site_name" content="Fictional Archive - Latest updates">
         <header><h1 class="site-title"><a href="/" rel="home">Fictional Archive</a></h1></header>

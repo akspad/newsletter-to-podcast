@@ -686,8 +686,10 @@ def html_to_text(html: str, *, title='', url='') -> str:
             value = ' '.join(paragraph.get_text('', strip=False).split())
             if value.endswith(' .'):
                 value = value[:-2] + '.'
+            propublica_project = (identity[1] == 'projects.propublica.org' and publisher == 'ProPublica'
+                                  and home == (identity[0], 'www.propublica.org', '', ()))
             if (not publisher or url_identity(permalink.get('href'), url) != identity or
-                    home is None or home[:2] != identity[:2] or home[3]):
+                    home is None or (home[:2] != identity[:2] and not propublica_project) or home[3]):
                 continue
             localized_home = (identity[1] == 'blog.mozilla.org'
                               and re.fullmatch(r'/[a-z]{2}(?:-[a-z]{2})?', home[2], re.I)

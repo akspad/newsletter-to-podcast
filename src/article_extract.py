@@ -250,6 +250,22 @@ def clean_tree(root, title, author, url=''):
         byline, writer = react_blog_credit(root, title)
         if byline and writer == author:
             byline.decompose()
+    if identity and identity[1] == 'projects.propublica.org':
+        for opener in root.select('article > header.opener'):
+            headline = opener.select_one('.opener__text > h1.opener__hed')
+            deck = opener.select_one('.opener__text > p.opener__dek')
+            if headline and deck and heading_matches(heading_text(headline), title) and editorial(deck):
+                opener.insert_before(deck.extract())
+        for stat in root.select('article > .p-grid-container > section.stat-row[aria-label="Totals"] > div.stat'):
+            value = stat.select_one(':scope > .stat__value')
+            label = stat.select_one(':scope > .stat__label')
+            if value and label and editorial(value) and editorial(label):
+                stat.name = 'p'
+                stat.string = f'{label.get_text(" ", strip=True)}: {value.get_text(" ", strip=True)}.'
+        for box in root.select('article > .p-grid-container > .wide-block > .callout-box'):
+            if (not box.find_parent(['blockquote', 'pre', 'code']) and box.select_one(':scope > h3.callout-box__hed')
+                    and box.select_one(':scope > .callout-box__text a[href="https://www.propublica.org/tips/"]')):
+                box.decompose()
     if identity and identity[1] == 'creativecommons.org':
         body = 'body.blog-post main > .content'
         for opening in root.select(body + ' > aside.opening:first-child'):

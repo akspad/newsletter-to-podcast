@@ -396,6 +396,15 @@ def article_details(soup, url):
             visible_credit = ' '.join(str(text) for text in credit.strings
                                       if not any(explicitly_hidden(node) for node in text.parents))
             visible_authors = guardian_author_label(clean(visible_credit)) or visible_authors
+    if requested and requested[1] == 'projects.propublica.org' and scope.name == 'article':
+        credit = scope.select_one(':scope > header.opener .opener__text > .opener__meta > p.opener__byline')
+        if credit and editorial(credit) and clean(visible_text(credit)).casefold().startswith('by '):
+            authors = []
+            for link in credit.select(':scope > a[href]'):
+                profile = url_identity(link['href'], url)
+                if profile and profile[1] == 'www.propublica.org' and profile[2].startswith('/people/'):
+                    authors.append(clean(visible_text(link)))
+            visible_authors = ', '.join(dict.fromkeys(filter(None, authors))) or visible_authors
     if requested and requested[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'}:
         writers = [clean(visible_text(link)) for link in scope.select(
             'header > .singlebyline > a[id="author_link_top"][href*="/profiles/"]')
