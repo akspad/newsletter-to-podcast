@@ -6,7 +6,8 @@ from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
-    remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, wyofile_feature,
+    remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
+    wyofile_feature,
 )
 from tts import speech_text
 
@@ -395,6 +396,9 @@ def clean_tree(root, title, author, url=''):
             if cover and editorial(cover) and editorial(body):
                 cover.name = 'div' if cover.find('p') else 'p'
                 body.insert(0, cover.extract())
+    if identity and identity[1] == 'pluralistic.net':
+        for body in root.select('article > .entry-content'):
+            remove_pluralistic_footer(body)
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
         for image in root.select('.entry-content > .hds-media.wp-block-image'):
             wrapper = image.select_one('.hds-media-wrapper:has(img)')
@@ -521,6 +525,8 @@ def clean_tree(root, title, author, url=''):
                         value = summary.contents[0]
                         value.replace_with(re.sub(r'^\s*—\s*', '', value))
     caption_selectors = {
+        **dict.fromkeys({'sciencedaily.com', 'www.sciencedaily.com'},
+                        '#story_text > #featured > figure.mainimg > figcaption'),
         **dict.fromkeys({'propublica.org', 'www.propublica.org'},
                         'article > .article-body > .entry-content > figure.wp-block-image > figcaption.attribution'),
         **dict.fromkeys({'popsci.com', 'www.popsci.com'},

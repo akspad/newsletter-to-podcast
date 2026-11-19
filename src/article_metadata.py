@@ -405,6 +405,10 @@ def article_details(soup, url):
             break
     author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
+    if not author and scope.name == 'article' and host == 'pluralistic.net':
+        credit = scope.select_one(':scope > footer.entry-footer .byline .author.vcard a[href*="/author/"]')
+        if credit and not any(explicitly_hidden(node) for node in (credit, *credit.parents)):
+            author = clean(credit.get_text(), 100)
     if not author and pypi_post:
         profiles = soup.select('.md-sidebar--post .md-post__authors .md-profile__description > strong > a[href]')
         names_in_sidebar = []

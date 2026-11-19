@@ -197,6 +197,20 @@ def remove_loc_subscription(body):
                 paragraph.decompose()
 
 
+def remove_pluralistic_footer(body):
+    for heading in body.find_all('h1', recursive=False):
+        divider = heading.find_previous_sibling()
+        if heading.get_text(strip=True) != 'How to get Pluralistic:' or not divider or divider.name != 'hr':
+            continue
+        tail = heading.find_next_siblings()
+        if (len(tail) >= 3 and all(node.name == 'p' for node in tail)
+                and re.fullmatch(r'ISSN: \d{4}-\d{3}[\dX]', tail[-1].get_text(strip=True))
+                and tail[-2].get_text(strip=True).startswith('READ CAREFULLY: By reading this, you agree')
+                and any(node.select_one('a[href="https://pluralistic.net/plura-list"]') for node in tail)):
+            for node in (divider, heading, *tail):
+                node.decompose()
+
+
 def clean_imported_widgets(root, url, title=''):
     if fields := harvard_feed_body(root, url, title):
         heading, body = fields
@@ -272,6 +286,8 @@ def clean_imported_widgets(root, url, title=''):
                 widget.decompose()
     if identity and identity[1] == 'blogs.loc.gov':
         remove_loc_subscription(root)
+    if identity and identity[1] == 'pluralistic.net':
+        remove_pluralistic_footer(root)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
         remove_openculture_endmatter(root, url)
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:

@@ -19,6 +19,31 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_pluralistic_keeps_the_article_license_but_skips_the_verified_site_footer(self):
+        url = 'https://pluralistic.net/2026/11/19/seed-trials/'
+        license_note = 'This article uses a Creative Commons Attribution 4.0 license.'
+        footer = ('<hr><h1>How to get Pluralistic:</h1>'
+                  '<p><a href="https://pluralistic.net/plura-list">Newsletter</a></p>'
+                  '<p>READ CAREFULLY: By reading this, you agree to the fictional site terms.</p>'
+                  '<p>ISSN: 1234-567X</p>')
+        markup = f'<p>{FIRST}</p><p>{LAST}</p><p>{license_note}</p>{footer}'
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content">{markup}</div>
+        <footer class="entry-footer"><span class="byline"><span class="author vcard">
+        <a href="/author/lee/">Lee Writer</a></span></span></footer></article>"""
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('By Lee Writer.'), intro)
+        self.assertEqual(body, f'{FIRST} {LAST} {license_note}')
+        self.assertEqual(html_to_text(markup, url=url), f'{FIRST}\n{LAST}\n{license_note}')
+        self.assertIn('Newsletter', html_to_text(markup + '<p>A substantive closing note.</p>', url=url))
+
+    def test_sciencedaily_keeps_the_illustration_caption_and_credit(self):
+        html = f"""<main><h1>Seed trials</h1><div id="story_text"><div id="featured">
+        <figure class="mainimg"><img src="/plots">
+        <figcaption>Testing the plots. Credit: Lee Writer.</figcaption></figure></div>
+        <p>{FIRST}</p><p>{LAST}</p></div></main>"""
+        self.assertEqual(narrate('https://www.sciencedaily.com/releases/2026/11/seed-trials.htm', html)[1],
+                         f'Testing the plots. Credit: Lee Writer. {FIRST} {LAST}')
+
     def test_cc_keeps_the_image_attribution_separately_from_page_license_boilerplate(self):
         html = f"""<body class="blog-post"><title>Seed trials</title><main><header><h1>Seed trials</h1>
         <figure><img src="/cover"><figcaption><p>Trial photos by Lee — <a href="/licenses/by/4.0/">CC BY 4.0</a>.</p>
