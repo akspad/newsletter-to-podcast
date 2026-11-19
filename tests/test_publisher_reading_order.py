@@ -465,6 +465,31 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertIn('By Lee Writer.', intro)
         self.assertEqual(body, f'{FIRST} {LAST} From The seed journal, published by arrangement.')
 
+    def test_lithub_keeps_prose_wrapped_in_the_layouts_ad_container(self):
+        html = f'''<h1 class="entry-title">Seed trials</h1><div class="story-content"><div class="story-body">
+        <p>{FIRST}</p><div class="pw-ad-scroll-container pw-clearfix"><div class="pw-ad-container-logo">
+        <script>ad()</script><p>The roots stayed close to the surface of the tray.</p></div></div>
+        <p>{LAST}</p></div><aside><p>Browse more reviews.</p></aside></div>'''
+        self.assertEqual(narrate('https://lithub.com/seed-trials/', html)[1],
+                         f'{FIRST} The roots stayed close to the surface of the tray. {LAST}')
+
+    def test_quillette_uses_the_visible_writer_and_keeps_only_the_public_teaser(self):
+        bookmark = '''<figure class="kg-card kg-bookmark-card"><a class="kg-bookmark-container" href="/extra/">
+        <div class="kg-bookmark-content"><div class="kg-bookmark-title">Another article</div></div></a></figure>'''
+        body = f'<p>{FIRST}</p>{bookmark}<p>{LAST}</p>'
+        html = f'''<article class="post"><header><h1>Seed trials</h1>
+        <a href="/author/lee/"><figure><figcaption class="sr-only">headshot</figcaption></figure></a>
+        <div><a href="/author/lee/">Lee Writer</a><a href="/author/other/">Other author</a></div>
+        <figure class="gh-feature-image"><img src="/tray"><figcaption>Seed tray.</figcaption></figure></header>
+        <section><div class="gh-content-fade">{body}</div><div><p>The rest is for paying subscribers.</p></div>
+        </section></article>'''
+        url = 'https://quillette.com/2026/11/17/seed-trials/'
+        intro, text = narrate(url, html)
+        self.assertIn('By Lee Writer.', intro)
+        self.assertEqual(text, f'Seed tray. {FIRST} {LAST}')
+        self.assertEqual(html_to_text(body, url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Another article', html_to_text(f'<blockquote>{bookmark}</blockquote>', url=url))
+
     def test_wyofile_uses_signed_byline_and_captions_without_player_or_related_cards(self):
         byline = 'Lee Writer, Ash Gardener, Jules Grower and Pat Seed'
         html = f"""<meta name="author" content="Posting Account"><main class="site-main">

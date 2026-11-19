@@ -13,6 +13,7 @@ COLOSSAL_HOSTS = {'thisiscolossal.com', 'www.thisiscolossal.com'}
 WYOFILE_HOSTS = {'wyofile.com', 'www.wyofile.com'}
 GUARDIAN_HOSTS = {'theguardian.com', 'www.theguardian.com'}
 OPEN_CULTURE_HOSTS = {'openculture.com', 'www.openculture.com'}
+QUILLETTE_HOSTS = {'quillette.com', 'www.quillette.com'}
 
 
 def guardian_author_label(name):
@@ -168,6 +169,16 @@ def open_culture_writer(body, url):
     return ''
 
 
+def remove_quillette_bookmarks(body, url):
+    for card in body.select('figure.kg-card.kg-bookmark-card'):
+        link = card.select_one(':scope > a.kg-bookmark-container[href]')
+        target = url_identity(link['href'], url) if link else None
+        if (target and target[1] in QUILLETTE_HOSTS and target != url_identity(url)
+                and link.select_one('.kg-bookmark-content > .kg-bookmark-title')
+                and not card.find_parent(['blockquote', 'pre', 'code'])):
+            card.decompose()
+
+
 def remove_openculture_endmatter(body, url):
     """Remove Open Culture's donation appeal and related-post navigation."""
     identity = url_identity(url)
@@ -321,6 +332,8 @@ def clean_imported_widgets(root, url, title=''):
         remove_pluralistic_footer(root)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
         remove_openculture_endmatter(root, url)
+    if identity and identity[1] in QUILLETTE_HOSTS:
+        remove_quillette_bookmarks(root, url)
     if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'} and identity[2].startswith('/picture-of-the-day/'):
         for link in root.select('p > a.more-link[href]'):
             teaser = link.select_one(':scope > .screen-reader-text')

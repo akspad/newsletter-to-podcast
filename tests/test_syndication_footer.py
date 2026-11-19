@@ -22,6 +22,15 @@ PUB = {'base': 'https://fictional.example/feed', 'rss': True, 'name': 'Science N
 
 
 class SyndicationFooterTests(unittest.TestCase):
+    def test_quanta_omits_periodless_syndication_credit_only_for_its_own_entry(self):
+        url = 'https://www.quantamagazine.org/story/'
+        footer = FOOTER.replace('https://fictional.example', 'https://www.quantamagazine.org').replace(
+            'appeared first on', 'first appeared on').replace('Science Notes</a>.', 'Quanta Magazine</a>')
+        self.assertEqual(html_to_text(BODY + footer, title=TITLE, url=url), 'A brief but legitimate quotation.')
+        for changed in (footer.replace('Quanta Magazine', 'Different site'),
+                        footer.replace('href="/story"', 'href="/another"'), footer + BODY):
+            self.assertIn('first appeared on', html_to_text(BODY + changed, title=TITLE, url=url))
+
     def test_propublica_project_recognizes_only_its_own_publisher_homepage(self):
         url = 'https://projects.propublica.org/story/'
         footer = FOOTER.replace('https://fictional.example', 'https://www.propublica.org').replace(

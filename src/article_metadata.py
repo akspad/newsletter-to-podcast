@@ -5,7 +5,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, open_culture_writer, wyofile_feature
+from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, open_culture_writer, wyofile_feature
 from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, react_blog_credit, url_identity
 
 
@@ -317,6 +317,13 @@ def article_details(soup, url):
         writer = byline.select_one(':scope > p.author')
         if writer and editorial(writer):
             byline = writer
+    if (requested and requested[1] in QUILLETTE_HOSTS and byline is not None and byline.name == 'a'
+            and byline.select_one('figcaption.sr-only')):
+        profile = url_identity(byline.get('href'), url)
+        if profile and profile[1] in QUILLETTE_HOSTS and profile[2].startswith('/author/'):
+            byline = next((link for link in scope.select('header a[href]')
+                           if url_identity(link['href'], url) == profile and editorial(link)
+                           and not link.find('figure') and visible_text(link).strip()), None)
     if byline is None and requested and requested[1] == 'blogs.kde.org' and scope.name == 'article':
         byline = next((node for node in scope.select(
             ':scope > .jumbotron > .content-width > p.meta:has(a[href*="/authors/"])')

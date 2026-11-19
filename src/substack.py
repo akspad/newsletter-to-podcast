@@ -715,6 +715,8 @@ def html_to_text(html: str, *, title='', url='') -> str:
             if label != entry_title and not (
                     devblog_home and re.sub(r'<code>([^<>]*)</code>', r'\1', label, flags=re.I) == entry_title):
                 continue
+            quanta_credit = (identity[1] in {'quantamagazine.org', 'www.quantamagazine.org'}
+                             and publisher == 'Quanta Magazine' and value == f'The post {label} first appeared on {publisher}')
             if len(links) == 3:
                 member = links[0]
                 footer = f' The article {label} appeared first on {publisher}.'
@@ -727,7 +729,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
                     continue
             elif (value not in {f'The post {label} appeared first on {publisher}.',
                                 f'The post {label} first appeared on {publisher}.'}
-                  and not (colossal and value == f'The article {label} appeared first on {publisher}.')):
+                  and not quanta_credit and not (colossal and value == f'The article {label} appeared first on {publisher}.')):
                 continue
             following_text = any(type(node) in (NavigableString, CData) and str(node).strip()
                                  and not any(parent is paragraph for parent in node.parents)

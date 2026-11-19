@@ -5,8 +5,9 @@ from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
-    COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
+    COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
+    remove_quillette_bookmarks,
     wyofile_feature,
 )
 from tts import speech_text
@@ -352,6 +353,13 @@ def clean_tree(root, title, author, url=''):
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
                 bio.decompose()
+    if identity and identity[1] in QUILLETTE_HOSTS:
+        for body in root.select('article.post > section > .gh-content-fade'):
+            remove_quillette_bookmarks(body, url)
+            cover = body.parent.parent.select_one(':scope > header > figure.gh-feature-image:has(img) > figcaption')
+            if cover and editorial(cover) and editorial(body):
+                cover.name = 'div' if cover.find('p') else 'p'
+                body.insert(0, cover.extract())
     if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'} and author:
         for bio in root.select('article > .entry-content > hr.wp-block-separator + p.wp-block-paragraph:last-child'):
             credit = bio.select_one(':scope > em > strong:first-child')
@@ -930,6 +938,10 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.c-post-content__wysiwyg'
         elif identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
             body_selector = '.roscoe-article-body > .roscoe-body'
+        elif identity[1] in {'lithub.com', 'www.lithub.com'}:
+            body_selector = '.story-content > .story-body'
+        elif identity[1] in QUILLETTE_HOSTS and match('article.post', scope):
+            body_selector = ':scope > section > .gh-content-fade'
         elif identity[1] in {'theparisreview.org', 'www.theparisreview.org'} and identity[2].startswith('/blog/'):
             body_selector = 'section#content > .article-body-wrap > main.article-body.blog-body'
             if match(body_selector, scope):
