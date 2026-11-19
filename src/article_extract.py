@@ -382,6 +382,13 @@ def clean_tree(root, title, author, url=''):
             if cover and editorial(cover) and editorial(body):
                 cover.name = 'div' if cover.find('p') else 'p'
                 body.insert(0, cover.extract())
+    if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
+        for image in root.select('.entry-content > .hds-media.wp-block-image'):
+            wrapper = image.select_one('.hds-media-wrapper:has(img)')
+            caption = wrapper.find('figcaption', recursive=False) if wrapper else None
+            if caption and editorial(caption):
+                caption.name = 'div' if caption.find('p') else 'p'
+                image.insert_before(caption.extract())
     if identity and identity[1] in GUARDIAN_HOSTS:
         for media in root.select('article > [data-gu-name="media"]'):
             bodies = media.parent.select('[data-gu-name="body"] .article-body-viewer-selector')
@@ -756,6 +763,13 @@ def extract_text(soup, title='', author='', url=''):
             if not deferred or text != deferred[-1]:
                 deferred.append(text)
     identity = url_identity(url)
+    trusted_short_body = False
+    if identity and identity[1] in {'filfre.net', 'www.filfre.net'}:
+        canonical = soup.select_one('link[rel~="canonical"][href]')
+        headlines = scope.select('div.post.hentry > h1.post-title')
+        trusted_short_body = (canonical is not None and url_identity(canonical['href'], url) == identity
+                              and len(headlines) == 1 and editorial(headlines[0])
+                              and heading_matches(heading_text(headlines[0]), title))
     if identity and identity[1] in {'longreads.com', 'www.longreads.com'} | WYOFILE_HOSTS:
         # Strip the Newspack list while its cards still identify the heading.
         for listing in scope.select('.entry-content .wp-block-newspack-blocks-homepage-articles.wpnbha '
@@ -827,7 +841,7 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.c-post-content__wysiwyg'
     if body_selector:
         bodies = scope.select(body_selector)
-        if len(bodies) == 1 and editorial(bodies[0]) and readable_prose(plain_text(bodies[0])):
+        if len(bodies) == 1 and editorial(bodies[0]) and (trusted_short_body or readable_prose(plain_text(bodies[0]))):
             candidates = bodies
     if candidates:
         # Some publications split the article among sibling body containers.

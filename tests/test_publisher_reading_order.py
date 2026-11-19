@@ -19,6 +19,36 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_filfre_rejects_a_link_only_post_without_filling_it_with_sidebar_text(self):
+        url = 'https://www.filfre.net/2026/11/seed-trials/'
+        html = f"""<title>Seed trials</title><link rel="canonical" href="{url}">
+        <div class="post hentry"><h1 class="post-title">Seed trials</h1><div class="entry">
+        <p><a href="/external">This week's results</a></p></div></div>
+        <div class="sidebar"><p>{FIRST} {LAST}</p></div>"""
+        with self.assertRaisesRegex(ValueError, 'too little readable text'):
+            narrate(url, html)
+
+    def test_nasa_removes_rss_metadata_modules_but_preserves_a_details_section_with_prose(self):
+        url = 'https://www.nasa.gov/testing/'
+        opening = ('<div class="wp-block-nasa-blocks-article-intro"><div class="article-header">'
+                   '<p class="label">2 min read</p><h1>Other story</h1></div></div>')
+        end = ('<div class="wp-block-nasa-blocks-credits-and-details"><h2>Share</h2>'
+               '<h2>Details</h2><div>Last Updated Tuesday</div><h2>Related Terms</h2></div>')
+        self.assertEqual(html_to_text(opening + f'<p>{FIRST}</p>' + end, url=url), FIRST)
+        self.assertIn(LAST, html_to_text(end.replace('</div>', f'<p>{LAST}</p></div>', 1), url=url))
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content">
+        <div class="hds-media wp-block-image"><div class="hds-media-wrapper">
+        <img src="/image"><figcaption>Observations after rain.</figcaption></div></div>
+        <p>{FIRST}</p><p>{LAST}</p></div></article>"""
+        self.assertEqual(narrate(url, html)[1], f'Observations after rain. {FIRST} {LAST}')
+
+    def test_experimental_history_preserves_prose_beside_the_editor_subscribe_widget(self):
+        url = 'https://www.experimental-history.com/p/seed-trials'
+        widget = ('<div class="subscription-widget-wrap-editor"><div class="subscription-widget show-subscribe">'
+                  '<p class="cta-caption">Follow the next trial</p></div></div>')
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>{widget}<p>{LAST}</p>', url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Follow the next trial', html_to_text('<blockquote>' + widget + '</blockquote>', url=url))
+
     def test_guardian_keeps_one_lead_caption_and_does_not_announce_the_staff_role(self):
         url = 'https://www.theguardian.com/society/seed-trials'
         caption = '<figure><img src="/tray"><figcaption data-spacefinder-role="inline">A tray after rain.</figcaption></figure>'

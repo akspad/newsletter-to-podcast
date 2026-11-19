@@ -252,6 +252,24 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
+        for wrapper in root.find_all('div', recursive=False):
+            if 'wp-block-nasa-blocks-article-intro' in wrapper.get('class', []):
+                read_time = wrapper.select('.article-header p.label')
+                if (len(read_time) == 1 and wrapper.select_one('.article-header h1')
+                        and re.fullmatch(r'\d+ min read', read_time[0].get_text(strip=True))
+                        and wrapper.find_all('p') == read_time):
+                    wrapper.decompose()
+            elif 'wp-block-nasa-blocks-credits-and-details' in wrapper.get('class', []):
+                headings = [tag.get_text(strip=True) for tag in wrapper.find_all(['h2', 'h3'])]
+                if (headings == ['Share', 'Details', 'Related Terms']
+                        and 'Last Updated' in wrapper.get_text(' ', strip=True)
+                        and not wrapper.select('p, .author, .byline, a[rel~="author"]')):
+                    wrapper.decompose()
+    if identity and identity[1] in {'www.experimental-history.com', 'experimental-history.com'}:
+        for widget in root.select('.subscription-widget-wrap-editor:has(.subscription-widget.show-subscribe)'):
+            if widget.select_one('p.cta-caption') and not widget.find_parent(['blockquote', 'pre', 'code']):
+                widget.decompose()
     if identity and identity[1] == 'blogs.loc.gov':
         remove_loc_subscription(root)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
