@@ -643,6 +643,9 @@ class Substack:
                 if identity and identity[1] == 'news.mit.edu':
                     bylines = [{**byline, 'name': mit_news_author_label(byline['name'])}
                                if 'name' in byline else byline for byline in bylines]
+                if identity and identity[1] == 'creativecommons.org':
+                    bylines = [{**byline, 'name': re.sub(r',(?=\S)', ', ', byline['name'])}
+                               if isinstance(byline.get('name'), str) else byline for byline in bylines]
                 if bylines != original_bylines:
                     post = {**post, 'publishedBylines': bylines}
             return post, html_to_text(post["body_html"], title=title, url=url)

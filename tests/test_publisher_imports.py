@@ -193,6 +193,9 @@ class PublisherWidgetTests(unittest.TestCase):
         categories = ('<p>Tags: <a href="/tags/botany">botany</a>, '
                       '<a href="https://simonwillison.net/tags/field-notes">field-notes</a></p>')
         self.assertEqual(html_to_text(PROSE + categories, url=url), html_to_text(PROSE))
+        unclosed = '<p>The seedlings grew well.'
+        self.assertEqual(html_to_text(unclosed + categories, url=url), 'The seedlings grew well.')
+        self.assertIn('Tags:', html_to_text(unclosed + categories + ' The article continues.', url=url))
         for markup, source in (
                 (categories, 'https://other.example/story'),
                 (categories + 'The article continues.', url),

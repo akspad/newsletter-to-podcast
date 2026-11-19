@@ -355,7 +355,12 @@ def clean_imported_widgets(root, url, title=''):
                 paragraph.decompose()
     if identity and identity[1] == 'simonwillison.net':
         # The Atom feed appends a paragraph of category links after the story.
+        # An omitted closing tag can put that template inside the last prose paragraph.
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
+        if getattr(paragraph, 'name', None) == 'p':
+            ending = next((node for node in reversed(paragraph.contents) if str(node).strip()), None)
+            if getattr(ending, 'name', None) == 'p':
+                paragraph = ending
         if getattr(paragraph, 'name', None) == 'p':
             links = paragraph.find_all('a', recursive=False, href=True)
             tags = [link.get_text(strip=True) for link in links]

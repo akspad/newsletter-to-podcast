@@ -19,6 +19,14 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_creative_commons_feed_spaces_exported_author_separators(self):
+        source = Substack('')
+        post = {'canonical_url': 'https://creativecommons.org/2026/10/02/seed-trials/', 'title': 'Seed trials',
+                'body_html': f'<p>{FIRST}</p>', 'publishedBylines': [{'name': 'Lee Writer,Ash Reporter'}]}
+        full, body = source.post_text({'rss': True}, post)
+        self.assertEqual(full['publishedBylines'], [{'name': 'Lee Writer, Ash Reporter'}])
+        self.assertEqual(body, FIRST)
+
     def test_propublica_project_preserves_visible_static_deck_and_linked_contributors(self):
         html = f'''<meta property="og:site_name" content="ProPublica"><main><article><header class="opener">
         <div class="opener__text"><h1 class="opener__hed">Seed trials</h1><p class="opener__dek">{FIRST}</p>
