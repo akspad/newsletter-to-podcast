@@ -251,6 +251,9 @@ def clean_tree(root, title, author, url=''):
     if identity and identity[1] == 'daily.jstor.org':
         for body in root.select('article > .entry-content'):
             clean_jstor_pull_quotes(body)
+    if identity and identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
+        for node in root.select('#pgContentWrap > .newsdate'):
+            node.decompose()
     if identity and identity[1] == 'react.dev' and identity[2].startswith('/blog/'):
         byline, writer = react_blog_credit(root, title)
         if byline and writer == author:
@@ -709,7 +712,8 @@ def clean_tree(root, title, author, url=''):
         'www.astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
         'experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
-        'earthsky.org': '.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption',
+        'earthsky.org': ('.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption, '
+                         '.post-rich-text > div.wp-block-image > figure > figcaption.wp-element-caption'),
         'www.futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'blogs.loc.gov': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
@@ -1006,6 +1010,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.article-content'
         elif identity[1] == 'earthsky.org':
             body_selector = '.post-body > .post > .post-rich-text'
+        elif identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
+            body_selector = '#pgContentWrap'
         elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')
               and match('main#quarto-document-content.quarto-banner-title-block:has(> section.level2)', scope)):
             candidates = [scope]

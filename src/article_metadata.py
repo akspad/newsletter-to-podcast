@@ -502,7 +502,9 @@ def article_details(soup, url):
                                    re.split(r',\s+and\s+', paragraphs[-1].get_text(' ', strip=True)))
         elif sidebar_byline and re.match(r'^By\s+', sidebar_byline.get_text(' ', strip=True)):
             author = sidebar_byline.get_text(' ', strip=True)
-    author = clean(author or meta('article:author', 'og:article:author'), 100)
+    author = clean(author or meta('article:author', 'og:article:author'), 240)
+    if host in {'calnewport.com', 'www.calnewport.com'} and publication == 'Cal Newport' and author == 'Study Hacks':
+        author = ''
     if host in WYOFILE_HOSTS and (feature := wyofile_feature(soup, title)):
         credit = feature.select_one('header.entry-header .entry-meta > span.byline')
         if credit and editorial(credit):

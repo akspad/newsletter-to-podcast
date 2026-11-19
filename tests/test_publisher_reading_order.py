@@ -19,6 +19,33 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_earthsky_keeps_inline_captions_inside_an_image_wrapper(self):
+        html = f'''<main><h1>Seed trials</h1><div class="post-body"><div class="post"><div class="post-rich-text">
+        <p>{FIRST}</p><div class="wp-block-image"><figure><img src="tray"><figcaption class="wp-element-caption">
+        Diagram by Lee.</figcaption></figure></div><p>{LAST}</p></div></div></div></main>'''
+        self.assertEqual(narrate('https://earthsky.org/space/seed-trials/', html)[1], f'{FIRST} Diagram by Lee. {LAST}')
+
+    def test_cal_newport_does_not_read_study_hacks_as_the_writers_name(self):
+        html = f'''<meta property="og:site_name" content="Cal Newport"><meta name="author" content="Study Hacks">
+        <article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        url = 'https://calnewport.com/seed-trials/'
+        self.assertEqual(narrate(url, html)[0], 'Cal Newport. Seed trials.')
+        self.assertEqual(narrate(url, html.replace('Study Hacks', 'Lee Writer'))[0], 'Cal Newport. Seed trials. By Lee Writer.')
+
+    def test_article_metadata_keeps_a_long_list_of_named_contributors(self):
+        writers = ('Lee Gardener, Ash Reporter, Jules Greenhouse, Morgan Planter, '
+                   'Drew Experimentalist, Charlie Coordinator, and Terry Botanist')
+        html = f'''<article><h1>Seed trials</h1><div class="byline">{writers}</div>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        self.assertTrue(narrate('https://garden.example/seed-trials/', html)[0].endswith(f'By {writers}.'))
+
+    def test_postgres_news_preserves_release_headings_and_lists_without_page_navigation(self):
+        html = f'''<title>Seed trials</title><div id="pgContentWrap"><h1>Seed trials</h1><div class="newsdate">Posted today</div>
+        <p>{FIRST}</p><h2>Results</h2><ul><li>Green shoots.</li><li>Wide leaves.</li></ul>
+        <p>{LAST}</p></div><p>Unrelated release archive.</p>'''
+        _, body = narrate('https://www.postgresql.org/about/news/seed-trials/', html)
+        self.assertEqual(body, f'{FIRST} Results Green shoots. Wide leaves. {LAST}')
+
     def test_jstor_does_not_repeat_a_pull_quote_but_keeps_a_unique_one(self):
         url = 'https://daily.jstor.org/seed-trials/'
         text = 'Our smallest tray had more growth.'
