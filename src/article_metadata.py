@@ -431,6 +431,16 @@ def article_details(soup, url):
         _, react_author = react_blog_credit(soup, title)
         author = react_author or author
     host = urlparse(url).hostname
+    if (not author and requested and host in {'publicdomainreview.org', 'www.publicdomainreview.org'}
+            and requested[2].startswith('/collection/')):
+        credit = scope.select_one('.collection-view > .collection-byline > .attribution:has(> a[href])')
+        if credit and editorial(credit):
+            link = credit.find('a', recursive=False)
+            profile = url_identity(link.get('href'), url)
+            name = clean(visible_text(link))
+            if (profile and profile[:2] == requested[:2] and profile[2].startswith('/contributor/')
+                    and clean(visible_text(credit)) == f'Text by {name}'):
+                author = name
     if host in OPEN_CULTURE_HOSTS and author.casefold() in {'', 'oc', 'open culture'}:
         section = scope.select_one('.recent_post > .colorcontrast > .entry')
         if section and belongs_to_scope(section, scope):

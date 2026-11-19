@@ -393,6 +393,10 @@ def clean_tree(root, title, author, url=''):
                     label.decompose()
                     listing.decompose()
     if identity and identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
+        for notice in root.select('.collection-preamble .essay__image__wrapper > .undownloaded-image'):
+            if (notice.get_text(' ', strip=True) == 'Scroll through the whole page to download all images before printing.'
+                    and not notice.find_parent(['blockquote', 'pre', 'code'])):
+                notice.decompose()
         for image in root.select('.collection-preamble > .essay__content > .essay__image:has(img)'):
             caption = image.select_one(':scope > .essay__center-content > .essay__image__caption')
             if caption and editorial(caption) and not caption.find_parent(['blockquote', 'pre', 'code']):
@@ -939,6 +943,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.c-post-content__wysiwyg'
         elif identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
             body_selector = '.roscoe-article-body > .roscoe-body'
+        elif identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
+            body_selector = '.collection-view > .collection-preamble > .essay__content'
         elif identity[1] in {'lithub.com', 'www.lithub.com'}:
             body_selector = '.story-content > .story-body'
         elif identity[1] in QUILLETTE_HOSTS and match('article.post', scope):

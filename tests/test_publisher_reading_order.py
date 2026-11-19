@@ -418,6 +418,21 @@ class PublisherReadingOrderTests(unittest.TestCase):
         _, body = narrate('https://publicdomainreview.org/collection/seed-trials', html)
         self.assertEqual(body, f'{FIRST} A tray after rain — Source. Photograph by Ash. {LAST}')
 
+    def test_public_domain_review_reads_the_collection_writer_and_image_grid_captions(self):
+        html = f'''<div class="collection-view" role="main"><h1>Seed trials</h1>
+        <div class="collection-byline"><div class="attribution">Text by <a href="/contributor/lee/">Lee Writer</a></div></div>
+        <div class="collection-preamble"><div class="essay__content"><p>{FIRST}</p>
+        <div class="essay__multi-image"><div class="essay__image__wrapper"><img src="tray">
+        <span class="undownloaded-image">Scroll through the whole page to download all images before printing.</span></div>
+        <div class="essay__multi-image__caption"><p>Three trays after the storm.</p></div></div>
+        <p>For details, see <a href="/source">the notebook</a>.</p><p>{LAST}</p></div></div>
+        <p>Browse another collection.</p></div>'''
+        url = 'https://publicdomainreview.org/collection/seed-trials'
+        intro, body = narrate(url, html)
+        self.assertIn('By Lee Writer.', intro)
+        self.assertEqual(body, f'{FIRST} Three trays after the storm. For details, see the notebook. {LAST}')
+        self.assertNotIn('By Lee Writer.', narrate(url, html.replace('/contributor/lee/', '/collections/lee/'))[0])
+
     def test_smashing_caption_preserves_literal_code_and_omits_same_image_zoom_link(self):
         html = f"""<article><h1>Seed trials</h1><div class="c-garfield-the-cat"><p>{FIRST}</p>
         <figure><a href="/plot.png"><img src="/plot.png"></a><figcaption class="op-vertical-bottom">
