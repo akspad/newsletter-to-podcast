@@ -19,6 +19,35 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_webb_article_keeps_the_sibling_caption_and_removes_download_instructions(self):
+        html = f'''<article><h1>Seed trials</h1><div class="usa-article-content"><div class="entry-content">
+        <p>{FIRST}</p><div class="stma-image-wrapper"><img src="tray"></div>
+        <figcaption class="hds-caption"><div>A tray at dusk.</div><div>Credit: Lee.</div></figcaption>
+        <p>{LAST}</p><h2 class="wp-block-heading">Downloads &amp; Related Information</h2>
+        <p>The following sections contain links to download this article's images and videos.</p>
+        </div></div></article>'''
+        _, body = narrate('https://science.nasa.gov/missions/webb/seed-trials/', html)
+        self.assertEqual(body, f'{FIRST} A tray at dusk. Credit: Lee. {LAST}')
+
+    def test_webb_rss_prunes_export_widgets_but_retains_unique_hero_and_inline_image_credits(self):
+        url = 'https://science.nasa.gov/missions/webb/seed-trials/'
+        title = 'Seed trials'
+        caption = ('<figcaption class="hds-caption"><div class="hds-caption-text">Tray at dusk.</div>'
+                   '<div class="hds-credits">Credit: Lee.</div></figcaption>')
+        hero_caption = caption.replace('Credit: Lee.', 'Credits: Credit: Lee.')
+        payload = f'''<div class="wp-block-nasa-blocks-secondary-navigation"><nav>Mission links</nav></div>
+        <div class="wp-block-nasa-blocks-article-hero-header"><p>5 Min Read</p><h1>{title}</h1>{hero_caption}
+        <figcaption class="hds-caption">A unique hero credit.</figcaption></div><p>{FIRST}</p>
+        <div class="wp-block-image"><figure><img src="tray">{caption}</figure></div><p>{LAST}</p>
+        <div class="wp-block-nasa-blocks-featured-link-list"><h2>Related Multimedia</h2>More photos</div>
+        <h2>Related Links</h2><p>More Webb: <a href="/one">News</a> | <a href="/two">Science</a></p>
+        <p>A final look at the <a href="/report">research report</a>.</p>
+        <div class="wp-block-nasa-blocks-topic-cards"><h2>Related Topics</h2>Other stories</div>'''
+        text = html_to_text(payload, title=title, url=url)
+        self.assertEqual(text.split(), f'A unique hero credit. {FIRST} Tray at dusk. Credit: Lee. {LAST} '
+                         'A final look at the research report.'.split())
+        self.assertIn('5 Min Read', html_to_text(payload, title=title, url=url.replace('/webb/', '/other/')))
+
     def test_mit_skips_a_repeated_caption_quote_but_keeps_its_photo_credit_and_original(self):
         quote = '“The smallest seedlings grew best in the light,”'
         image = f'''<div class="news-article--inline-image--descr">

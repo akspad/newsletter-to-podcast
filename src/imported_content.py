@@ -182,6 +182,60 @@ def earth_observatory_writer(root, url):
     return next(iter(writers)) if len(writers) == 1 else ''
 
 
+def remove_webb_download_intro(body):
+    for heading in body.find_all('h2', class_='wp-block-heading', recursive=False):
+        intro = heading.find_next_sibling()
+        if (heading_text(heading) == 'Downloads & Related Information' and intro and intro.name == 'p'
+                and intro.get_text(' ', strip=True).replace('’', "'").startswith(
+                    "The following sections contain links to download this article's images and videos")):
+            heading.decompose()
+            intro.decompose()
+
+
+def clean_webb_rss(body, title):
+    """Retain mission prose and editorial images from NASA's exported page blocks."""
+    def caption_key(node):
+        description = node.select_one(':scope > .hds-caption-text')
+        credit = node.select_one(':scope > .hds-credits')
+        if description and credit:
+            return (' '.join(description.get_text(' ', strip=True).split()),
+                    ' '.join(credit.get_text(' ', strip=True).split()).removeprefix('Credits: '))
+        return tuple(node.get_text(' ', strip=True).split())
+
+    inline = {caption_key(node) for node in body.select('.wp-block-image figcaption.hds-caption') if editorial(node)}
+    remove_webb_download_intro(body)
+    for widget in body.find_all('div', recursive=False):
+        classes = widget.get('class', [])
+        headings = [heading_text(h) for h in widget.select('h1, h2, h3')]
+        if 'wp-block-nasa-blocks-article-hero-header' in classes and title and any(
+                heading_matches(heading_text(h), title) for h in widget.select('h1')):
+            # A responsive hero can repeat the inline caption. Keep a unique hero credit in its own block.
+            for caption in widget.select('figcaption.hds-caption'):
+                key = caption_key(caption)
+                if key and key not in inline and editorial(caption):
+                    inline.add(key)
+                    widget.insert_before(caption.extract())
+            widget.decompose()
+        elif 'wp-block-nasa-blocks-secondary-navigation' in classes and widget.find('nav'):
+            widget.decompose()
+        elif 'wp-block-nasa-blocks-featured-link-list' in classes and headings[:1] == ['Related Multimedia']:
+            related = widget.find_next_sibling()
+            if related and related.name == 'h2' and heading_text(related) == 'Related Links':
+                for paragraph in related.find_next_siblings():
+                    if paragraph.name != 'p' or not paragraph.find('a', href=True):
+                        break
+                    labels = ''.join(str(node) for node in paragraph.strings if not node.find_parent('a'))
+                    if not re.fullmatch(r'More [^:]+:\s*(?:\|\s*)*', labels.strip()):
+                        break
+                    paragraph.decompose()
+                related.decompose()
+            widget.decompose()
+        elif 'wp-block-nasa-blocks-credits-and-details' in classes and headings == ['Share', 'Details', 'Related Terms']:
+            widget.decompose()
+        elif 'wp-block-nasa-blocks-topic-cards' in classes and headings[:1] == ['Related Topics']:
+            widget.decompose()
+
+
 def open_culture_writer(body, url):
     identity = url_identity(url)
     if not identity or identity[1] not in OPEN_CULTURE_HOSTS:
@@ -337,6 +391,8 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] == 'science.nasa.gov' and identity[2].startswith('/missions/webb/'):
+        clean_webb_rss(root, title)
     if identity and identity[1] in {'aeon.co', 'www.aeon.co'}:
         ending = next((node for node in reversed(root.contents) if str(node).strip()), None)
         if getattr(ending, 'name', None) == 'p':

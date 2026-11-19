@@ -7,7 +7,7 @@ from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
-    remove_quillette_bookmarks,
+    remove_quillette_bookmarks, remove_webb_download_intro,
     wyofile_feature,
 )
 from tts import speech_text
@@ -495,6 +495,12 @@ def clean_tree(root, title, author, url=''):
             if caption and editorial(caption):
                 caption.name = 'div' if caption.find('p') else 'p'
                 image.insert_before(caption.extract())
+        if identity[1] == 'science.nasa.gov' and identity[2].startswith('/missions/webb/'):
+            for body in root.select('article .usa-article-content > .entry-content'):
+                remove_webb_download_intro(body)
+                for caption in body.select(':scope > .stma-image-wrapper + figcaption.hds-caption'):
+                    if editorial(caption) and caption.find_previous_sibling().find('img'):
+                        caption.name = 'div'
     if identity and identity[1] in GUARDIAN_HOSTS:
         for media in root.select('article > [data-gu-name="media"]'):
             bodies = media.parent.select('[data-gu-name="body"] .article-body-viewer-selector')
