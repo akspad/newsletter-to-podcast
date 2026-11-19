@@ -19,6 +19,12 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_damn_interesting_keeps_feed_teaser_without_repeating_its_linked_title(self):
+        url = 'https://www.damninteresting.com/seed-trials/'
+        label = f'<p><b><a href="{url}">Seed trials</a></b>:</p>'
+        self.assertEqual(html_to_text(label + f'<p>{FIRST}</p>', title='Seed trials', url=url), FIRST)
+        self.assertIn('Seed trials', html_to_text(label, title='Seed trials', url=url))
+
     def test_nasa_keeps_captions_when_wordpress_nests_an_image_inside_a_paragraph(self):
         html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
         <p class="wp-block-paragraph"><div class="hds-media wp-block-image"><div class="hds-media-wrapper">
@@ -220,6 +226,8 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <a href="/different">Different trials</a><div class="byline">Lee Grower</div></div></div></div>'''
         self.assertEqual(html_to_text(f'<p>{FIRST}</p>{related}<p>{LAST}</p>', url=url), f'{FIRST}\n{LAST}')
         self.assertIn('Lee Grower', html_to_text(f'<blockquote>{related}</blockquote>', url=url))
+        page = f'<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>{related}<p>{LAST}</p></div></article>'
+        self.assertEqual(narrate(url, page)[1], f'{FIRST} {LAST}')
 
     def test_bgs_feed_omits_tag_links_and_keeps_webinar_registration(self):
         url = 'https://www.bgs.ac.uk/news/seed-trials/'

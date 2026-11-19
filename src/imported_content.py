@@ -295,6 +295,15 @@ def open_culture_writer(body, url):
     return ''
 
 
+def remove_jstor_recommendations(root):
+    for recommendations in root.select('.daily-explore.story-list.more-to-explore'):
+        heading = recommendations.select_one(':scope > h2.story-list-header')
+        if (heading and heading_text(heading) == 'More to Explore'
+                and recommendations.select_one(':scope > .article-tease .article-tease__text .byline')
+                and not recommendations.find_parent(['blockquote', 'pre', 'code'])):
+            recommendations.decompose()
+
+
 def clean_jstor_pull_quotes(body):
     paragraphs = [' '.join(node.get_text().split()) for node in body.find_all('p')
                   if editorial(node) and not node.find_parent(['aside', 'blockquote', 'pre', 'code'])]
@@ -462,12 +471,13 @@ def clean_imported_widgets(root, url, title=''):
                 node.decompose()
     if identity and identity[1] == 'daily.jstor.org':
         clean_jstor_pull_quotes(root)
-        for recommendations in root.select('.daily-explore.story-list.more-to-explore'):
-            heading = recommendations.select_one(':scope > h2.story-list-header')
-            if (heading and heading_text(heading) == 'More to Explore'
-                    and recommendations.select_one(':scope > .article-tease .article-tease__text .byline')
-                    and not recommendations.find_parent(['blockquote', 'pre', 'code'])):
-                recommendations.decompose()
+        remove_jstor_recommendations(root)
+    if identity and identity[1] in {'damninteresting.com', 'www.damninteresting.com'} and title:
+        opening = root.find('p', recursive=False)
+        link = opening.select_one(':scope > b > a[href]') if opening else None
+        if (link and url_identity(link['href'], url) == identity and heading_text(link) == title
+                and ''.join(opening.stripped_strings) == f'{title}:' and opening.find_next_sibling('p')):
+            opening.decompose()
     if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2] and title:
         headline = root.find('h1', recursive=False)
         if headline and heading_text(headline) == title:
