@@ -19,6 +19,19 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_colossal_preview_keeps_the_featured_credit_once_before_the_prose(self):
+        url = 'https://www.thisiscolossal.com/2026/11/seed-trials/'
+        html = f"""<article><h1>Seed trials</h1><p class="byline"><a rel="author">Lee Writer</a></p>
+        <div class="entry-content"><div class="entry-header">
+        <figure class="colo-post-featured-image"><img src="/tray.jpg">
+        <figcaption class="wp-element-caption">All images courtesy of <strong>Ash</strong></figcaption></figure>
+        </div><p>{FIRST}</p><p>{LAST}</p><aside><figure class="colo-post-featured-image">
+        <img src="/ad.jpg"><figcaption class="wp-element-caption">Advertisement caption</figcaption>
+        </figure></aside></div></article>"""
+        intro, body = narrate(url, html)
+        self.assertIn('By Lee Writer.', intro)
+        self.assertEqual(body, f'All images courtesy of Ash {FIRST} {LAST}')
+
     def test_paris_review_uses_the_visible_headline_beside_the_article_body(self):
         url = 'https://www.theparisreview.org/blog/2026/11/19/seed-trials/'
         schema = {'@type': 'Article', 'url': url, 'headline': 'A gardener&#8217;s notebook',

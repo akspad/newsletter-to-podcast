@@ -9,6 +9,7 @@ from article_scope import DATE, belongs_to_scope, editorial, url_identity
 
 HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
 OUTSIDE_HOSTS = {'outsideonline.com', 'www.outsideonline.com'}
+COLOSSAL_HOSTS = {'thisiscolossal.com', 'www.thisiscolossal.com'}
 
 
 def harvard_feed_body(root, url, title):

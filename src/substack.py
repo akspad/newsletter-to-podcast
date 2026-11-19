@@ -18,7 +18,7 @@ import security
 from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
-    OUTSIDE_HOSTS, clean_imported_widgets, earth_observatory_writer, harvard_feed_writer,
+    COLOSSAL_HOSTS, OUTSIDE_HOSTS, clean_imported_widgets, earth_observatory_writer, harvard_feed_writer,
     outside_account_name, remove_outside_newsletter,
 )
 
@@ -649,21 +649,40 @@ def html_to_text(html: str, *, title='', url='') -> str:
     # and a terminal paragraph. Never infer a footer from words alone.
     identity = url_identity(url)
     if title and identity and identity[2]:
+        colossal = identity[1] in COLOSSAL_HOSTS
         for paragraph in list(soup.find_all('p')):
             if paragraph.find_parent(['blockquote', 'pre', 'code', 'li', 'table']):
                 continue
             links = paragraph.find_all('a')
-            if len(links) != 2:
+            if len(links) != 2 and not (colossal and len(links) == 3):
                 continue
-            label, publisher = (speech_label.get_text('', strip=False) for speech_label in links)
+            permalink, homepage = links[-2:]
+            label, publisher = (link.get_text('', strip=False) for link in (permalink, homepage))
             label, publisher = ' '.join(label.split()), ' '.join(publisher.split())
-            home = url_identity(links[1].get('href'), url)
+            home = url_identity(homepage.get('href'), url)
             value = ' '.join(paragraph.get_text('', strip=False).split())
             if (label != ' '.join(title.split()) or not publisher or
-                    value not in {f'The post {label} appeared first on {publisher}.',
-                                  f'The post {label} first appeared on {publisher}.'} or
-                    url_identity(links[0].get('href'), url) != identity or
-                    home is None or home[:2] != identity[:2] or home[2] or home[3]):
+                    url_identity(permalink.get('href'), url) != identity or
+                    home is None or home[:2] != identity[:2] or home[3]):
+                continue
+            localized_home = (identity[1] == 'blog.mozilla.org'
+                              and re.fullmatch(r'/[a-z]{2}(?:-[a-z]{2})?', home[2], re.I)
+                              and identity[2].startswith(home[2] + '/'))
+            if home[2] and not localized_home:
+                continue
+            if len(links) == 3:
+                member = links[0]
+                footer = f' The article {label} appeared first on {publisher}.'
+                if not (url_identity(member.get('href'), url) == url_identity('/members', url)
+                        and ' '.join(member.get_text().split()) == 'Colossal Member'
+                        and value.endswith(footer)
+                        and re.fullmatch(r'Do stories and artists like this matter to you\? Become a Colossal Member '
+                                         r'today and support independent arts publishing for as little as '
+                                         r'\$\d+(?:\.\d{2})? per month\.', value[:-len(footer)])):
+                    continue
+            elif (value not in {f'The post {label} appeared first on {publisher}.',
+                                f'The post {label} first appeared on {publisher}.'}
+                  and not (colossal and value == f'The article {label} appeared first on {publisher}.')):
                 continue
             following_text = any(type(node) in (NavigableString, CData) and str(node).strip()
                                  and not any(parent is paragraph for parent in node.parents)
