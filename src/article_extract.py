@@ -291,9 +291,14 @@ def clean_tree(root, title, author, url=''):
             if link.get_text(' ', strip=True) == 'To the blog home page':
                 link.decompose()
     if identity and identity[1] in {'popsci.com', 'www.popsci.com'}:
-        for body in root.select('article > .article-content-featured-image + .entry-content'):
-            featured = body.find_previous_sibling()
-            caption = featured.select_one('figure:has(img) > figcaption.article-featured-image-caption')
+        for body in root.select('article > .article-content-featured-image + .entry-content, '
+                                'article.featured-template-post > section.featured-template-content > .entry-content'):
+            if body.parent.name == 'section':
+                caption = body.parent.parent.select_one(
+                    ':scope > figure.featured-image:has(img) > figcaption.article-featured-image-caption')
+            else:
+                featured = body.find_previous_sibling()
+                caption = featured.select_one('figure:has(img) > figcaption.article-featured-image-caption')
             if caption and editorial(caption) and editorial(body):
                 caption.name = 'div' if caption.find('p') else 'p'
                 credit = caption.select_one(':scope > .article-featured-image-caption-credits')
@@ -475,6 +480,9 @@ def clean_tree(root, title, author, url=''):
                         value = summary.contents[0]
                         value.replace_with(re.sub(r'^\s*—\s*', '', value))
     caption_selectors = {
+        **dict.fromkeys({'popsci.com', 'www.popsci.com'},
+                        'article.featured-template-post .entry-content > .content-wrapper '
+                        '> figure.wp-block-image > figcaption.wp-element-caption'),
         **dict.fromkeys({'geographyrealm.com', 'www.geographyrealm.com'},
                         'article .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
         **dict.fromkeys({'construction-physics.com', 'www.construction-physics.com'},

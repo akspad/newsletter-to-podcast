@@ -19,6 +19,17 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_popular_science_featured_template_keeps_cover_and_inline_captions(self):
+        html = f"""<article class="featured-template-post"><h1>Seed trials</h1>
+        <figure class="featured-image"><img src="/lead"><figcaption class="article-featured-image-caption">
+        <span class="article-featured-image-caption-credits">Image by Lee.</span></figcaption></figure>
+        <section class="featured-template-content"><div class="entry-content"><div class="content-wrapper">
+        <p>{FIRST}</p><figure class="wp-block-image"><img src="/tray">
+        <figcaption class="wp-element-caption">A tray after rain.</figcaption></figure><p>{LAST}</p>
+        </div></div></section></article>"""
+        self.assertEqual(narrate('https://www.popsci.com/science/seed-trials/', html)[1],
+                         f'Image by Lee. {FIRST} A tray after rain. {LAST}')
+
     def test_quanta_keeps_figure_caption_and_credit_between_body_modules(self):
         html = f"""<title>Seed trials</title><main><div class="post"><div class="has-tombstone">
         <div class="acf-content"><div class="post__content">{FIRST}</div></div>
