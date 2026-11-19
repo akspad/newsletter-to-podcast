@@ -138,7 +138,7 @@ def editorial(node, *, allow_hidden=False):
 def heading_text(node):
     """Read a headline without nested dates, bylines or print-only metadata."""
     ignored = {id(child) for child in node.select(
-        'time, .byline, .post-meta, .post-metadata, .whenprint, .when, '
+        'time, .byline, .post-meta, .post-metadata, .whenprint, .when, devsite-actions, '
         '[itemprop~="datePublished"], [itemprop~="dateModified"]')}
     return ' '.join(' '.join(str(text) for text in node.strings
                             if not any(id(parent) in ignored for parent in text.parents)).split())

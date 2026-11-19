@@ -18,6 +18,28 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_webdev_uses_the_visible_title_and_author_card(self):
+        html = f"""<article><h1 class="devsite-page-title">Seed trials<devsite-actions hidden>
+        <span>Save this page</span></devsite-actions></h1><div class="devsite-article-body entry-content">
+        <p><div class="wd-authors"><div class="wd-author"><div><span>Lee</span>
+        <span class="wd-author__title">Technical Writer</span></div></div>
+        <div class="wd-author" hidden><div><span>Other author</span></div></div>
+        </div></p><p>{FIRST}</p><p>{LAST}</p></div></article>"""
+        intro, _ = narrate('https://web.dev/blog/seed-trials', html)
+        self.assertEqual(intro, 'web.dev. Seed trials. By Lee.')
+
+    def test_mental_floss_keeps_lead_and_inline_photo_credits_in_order(self):
+        html = f"""<article id="main-article"><h1>Seed trials</h1>
+        <figure><div data-lead-image="true"><picture><img src="tray"></picture></div>
+        <div><figcaption>Lead photo by Lee.</figcaption></div></figure>
+        <div class="odesa-article-main"><div class="entry-content article-content"><p>{FIRST}</p>
+        <figure><div><picture><img src="another"></picture></div>
+        <div><figcaption>Another photo by Ash.</figcaption></div></figure>
+        <figure hidden><div><img src="hidden"></div><div><figcaption>Hidden caption.</figcaption></div></figure>
+        <p>{LAST}</p></div></div></article>"""
+        _, body = narrate('https://www.mentalfloss.com/history/seed-trials', html)
+        self.assertEqual(body.split(), f'Lead photo by Lee. {FIRST} Another photo by Ash. {LAST}'.split())
+
     def test_nieman_keeps_prose_inside_paragraphs_that_start_with_a_related_story_card(self):
         card = ('<div class="embed-relatedstory"><a class="embed-relatedstory-imagelink" href="/other">Photo</a>'
                 '<div class="embed-relatedstory-headline">A different story</div></div>')

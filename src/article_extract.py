@@ -316,6 +316,21 @@ def clean_tree(root, title, author, url=''):
             if card.select_one(':scope > a.embed-relatedstory-imagelink[href]') and not card.find_parent(
                     ['blockquote', 'pre', 'code']):
                 card.decompose()
+    if identity and identity[1] in {'mentalfloss.com', 'www.mentalfloss.com'}:
+        for article in root.select('article#main-article'):
+            bodies = article.select('.odesa-article-main .article-content')
+            if len(bodies) != 1 or not editorial(bodies[0]):
+                continue
+            body = bodies[0]
+            for caption in body.select(':scope > figure > div > figcaption'):
+                figure = caption.parent.parent
+                if editorial(caption) and figure.find('img'):
+                    caption.name = 'p'
+                    figure.insert_before(caption.extract())
+            lead = article.select_one('figure:has(> [data-lead-image]) > div > figcaption')
+            if lead and editorial(lead) and lead.parent.parent.find('img'):
+                lead.name = 'p'
+                body.insert(0, lead.extract())
     caption_selectors = {
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
