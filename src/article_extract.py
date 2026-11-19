@@ -323,6 +323,14 @@ def clean_tree(root, title, author, url=''):
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
                 bio.decompose()
+    if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'} and author:
+        for bio in root.select('article > .entry-content > hr.wp-block-separator + p.wp-block-paragraph:last-child'):
+            credit = bio.select_one(':scope > em > strong:first-child')
+            if (credit and editorial(bio) and not bio.find_parent(['blockquote', 'pre', 'code'])
+                    and credit.get_text(strip=True) == author
+                    and bio.get_text(' ', strip=True).startswith(f'{author} is a staff writer at Astronomy,')
+                    and bio.get_text(strip=True) == credit.parent.get_text(strip=True)):
+                bio.decompose()
     if identity and identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
         for image in root.select('.collection-preamble > .essay__content > .essay__image:has(img)'):
             caption = image.select_one(':scope > .essay__center-content > .essay__image__caption')
@@ -456,6 +464,11 @@ def clean_tree(root, title, author, url=''):
                     caption['class'].remove('caption')
                 container = figure.parent if 'wp-block-image' in figure.parent.get('class', []) else figure
                 container.insert_before(caption.extract())
+    if identity and identity[1] == 'www.raspberrypi.com' and identity[2].startswith('/news/'):
+        for caption in root.select('.c-post-content__wysiwyg > figure.wp-block-embed-youtube > figcaption.wp-element-caption'):
+            if editorial(caption) and caption.parent.select_one(':scope > .wp-block-embed__wrapper iframe[src]'):
+                caption.parent.insert_before(caption.extract())
+                caption.name = 'p'
     if identity and identity[1] in {'theguardian.com', 'www.theguardian.com'}:
         for card in root.select('.article-body-viewer-selector figure[data-spacefinder-role="richLink"]'):
             if card.select_one('[data-component="rich-link"] a[href]') and not card.find_parent('blockquote'):

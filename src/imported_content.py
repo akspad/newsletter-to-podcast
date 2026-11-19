@@ -137,8 +137,16 @@ def earth_observatory_writer(root, url):
 def remove_openculture_endmatter(body, url):
     """Remove Open Culture's donation appeal and related-post navigation."""
     identity = url_identity(url)
-    for paragraph in reversed(body.find_all('p', recursive=False)):
+    paragraphs = body.find_all('p', recursive=False)
+    for paragraph in reversed(paragraphs):
         text = ' '.join(speech_text(paragraph.get_text()).split())
+        if (paragraph is paragraphs[-1]
+                and text.startswith('Based in Seoul, Colin Marshall writes and broadcasts on cities, language, and culture.')
+                and paragraph.select_one('em > a[href="http://blog.colinmarshall.org/"]')
+                and paragraph.select_one('a[href="https://colinmarshall.substack.com/"]')
+                and 'Follow him on the social network' in text):
+            paragraph.decompose()
+            continue
         appeal = paragraph.find('i', recursive=False)
         if (appeal and paragraph.select_one('a[href]')
                 and text == ' '.join(speech_text(appeal.get_text()).split())
@@ -148,7 +156,7 @@ def remove_openculture_endmatter(body, url):
             continue
 
         label = paragraph.find('strong', recursive=False)
-        if (not label or text != 'Related Content'
+        if (not label or text not in {'Related Content', 'Related Content:'}
                 or ' '.join(speech_text(label.get_text()).split()) != text):
             continue
         cards = []
@@ -159,13 +167,15 @@ def remove_openculture_endmatter(body, url):
                 continue
             if getattr(sibling, 'name', None) != 'p':
                 break
-            link = sibling.select_one(':scope > a[rel~="bookmark"][href]')
+            link = sibling.select_one(':scope > a[href]')
             target = url_identity(link['href'], url) if link else None
             if (not target or target[1] != identity[1] or not target[2].endswith('.html') or target == identity
+                    or ('bookmark' not in link.get('rel', []) and
+                        (text != 'Related Content:' or not re.fullmatch(r'/\d{4}/\d{2}/[^/]+\.html', target[2])))
                     or len(sibling.find_all('a')) != 1 or sibling.get_text(strip=True) != link.get_text(strip=True)):
                 break
             cards.append(sibling)
-        if cards:
+        if cards and ('bookmark' in cards[0].a.get('rel', []) or len(cards) >= 2):
             paragraph.decompose()
             for card in cards:
                 card.decompose()

@@ -19,6 +19,33 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_astronomy_removes_a_terminal_staff_bio_but_keeps_quoted_text(self):
+        bio = '<p class="wp-block-paragraph"><em><strong>Lee Writer</strong> is a staff writer at Astronomy, based here.</em></p>'
+        html = f"""<meta name="author" content="Lee Writer"><article><h1>Seed trials</h1>
+        <div class="entry-content"><p>{FIRST}</p><blockquote>{bio}</blockquote><p>{LAST}</p>
+        <hr class="wp-block-separator">{bio}</div></article>"""
+        _, body = narrate('https://www.astronomy.com/science/seed-trials/', html)
+        self.assertEqual(body.count('staff writer'), 1)
+        self.assertTrue(body.endswith(LAST))
+
+    def test_openculture_strips_the_plain_link_related_list_in_both_paths(self):
+        url = 'https://www.openculture.com/2026/11/seed-trials.html'
+        links = ('<p><strong>Related Content:</strong></p><p><a href="/2026/01/a.html">Another story</a></p>'
+                 '<p><a href="/2026/02/b.html">A prior story</a></p>')
+        markup = f'<p>{FIRST}</p><p>{LAST}</p>{links}'
+        html = f'<title>Seed trials</title><div class="recent_post"><div class="colorcontrast"><div class="entry">{markup}</div></div></div>'
+        self.assertEqual(narrate(url, html)[1], f'{FIRST} {LAST}')
+        self.assertEqual(html_to_text(markup, url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Related Content:', html_to_text(markup.rsplit('<p>',1)[0], url=url))
+
+    def test_raspberry_pi_keeps_the_video_caption_without_the_embed(self):
+        html = f"""<article><h1>Seed trials</h1><div class="c-post-content__wysiwyg"><p>{FIRST}</p>
+        <figure class="wp-block-embed-youtube"><div class="wp-block-embed__wrapper"><iframe src="/player"></iframe></div>
+        <figcaption class="wp-element-caption">A demonstration after rain.</figcaption></figure>
+        <p>{LAST}</p></div></article>"""
+        self.assertEqual(narrate('https://www.raspberrypi.com/news/seed-trials/', html)[1],
+                         f'{FIRST} A demonstration after rain. {LAST}')
+
     def test_jim_nielsen_uses_the_page_title_publication_instead_of_the_feed_format(self):
         html = f"""<title>Seed trials - Fictional Garden Notes</title>
         <link rel="alternate" type="application/rss+xml" href="/feed.xml" title="RSS: XML Feed">
