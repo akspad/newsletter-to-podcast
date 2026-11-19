@@ -19,6 +19,22 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_high_country_news_keeps_a_credit_and_nested_print_note_without_letter_prompt(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content">
+        <figure class="wp-block-image"><img src="tray"><figcaption><span class="image-credit">Credit: Lee</span></figcaption></figure>
+        <p>{FIRST}</p><p class="wp-block-paragraph"><em>We welcome reader letters. Email </em>High Country News
+        <a href="mailto:editor@hcn.org">our editors</a> or submit a <a href="/feedback/contact-us">letter</a>.
+        See our <a href="/policies/lte">policy</a>.<p class="wp-block-paragraph">{LAST}</p></div></article>'''
+        _, body = narrate('https://www.hcn.org/articles/seed-trials/', html)
+        self.assertEqual(body, f'Credit: Lee {FIRST} {LAST}')
+
+    def test_aeon_feed_omits_the_duplicate_credit_and_matching_read_on_link(self):
+        url = 'https://aeon.co/essays/seed-trials'
+        ending = f'<p><em>- by Lee Writer</em></p><p><a href="{url}">Read on Aeon</a></p>'
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>{ending}', url=url), FIRST)
+        self.assertIn('Read on Aeon', html_to_text(f'<p>{FIRST}</p>{ending}<p>{LAST}</p>', url=url))
+        self.assertIn('Read on Aeon', html_to_text(ending.replace('seed-trials', 'other-story'), url=url))
+
     def test_hyperallergic_preserves_ghost_image_captions_in_article_order(self):
         html = f'''<article class="gh-article"><h1>Seed trials</h1><section class="gh-content is-body">
         <figure class="kg-image-card"><img src="one"><figcaption>Tray one.</figcaption></figure><p>{FIRST}</p>

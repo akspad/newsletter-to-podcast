@@ -337,6 +337,18 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] in {'aeon.co', 'www.aeon.co'}:
+        ending = next((node for node in reversed(root.contents) if str(node).strip()), None)
+        if getattr(ending, 'name', None) == 'p':
+            link = ending.find('a', recursive=False, href=True)
+            if (link and url_identity(link['href'], url) == identity
+                    and ending.get_text(' ', strip=True) == link.get_text(strip=True) == 'Read on Aeon'):
+                credit = ending.find_previous_sibling()
+                if credit and credit.name == 'p' and (name := credit.find('em', recursive=False)):
+                    label = ' '.join(name.get_text().split())
+                    if label == ' '.join(credit.get_text().split()) and re.fullmatch(r'- by [^\d.!?:;]{2,100}', label):
+                        credit.decompose()
+                ending.decompose()
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
         for wrapper in root.find_all('div', recursive=False):
             if 'wp-block-nasa-blocks-article-intro' in wrapper.get('class', []):

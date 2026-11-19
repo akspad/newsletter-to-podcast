@@ -616,6 +616,18 @@ def clean_tree(root, title, author, url=''):
                 if (label == 'Republish' or
                         label.startswith(('Spread the word.', 'Republish This Story'))):
                     widget.decompose()
+        for paragraph in root.select('article .entry-content p.wp-block-paragraph:has(> a[href="mailto:editor@hcn.org"])'):
+            opening = paragraph.find('em', recursive=False)
+            links = paragraph.find_all('a', recursive=False)
+            if (opening and opening.get_text(strip=True) == 'We welcome reader letters. Email'
+                    and not paragraph.find_parent(['blockquote', 'pre', 'code'])
+                    and [url_identity(link.get('href'), url) for link in links] ==
+                    [None, url_identity('/feedback/contact-us', url), url_identity('/policies/lte', url)]
+                    and all(node.name in {'p', 'a', 'em'} for node in paragraph.find_all(recursive=False))):
+                # WordPress sometimes omits the closing tag before the print-edition note.
+                for following in paragraph.find_all('p', recursive=False):
+                    paragraph.insert_before(following.extract())
+                paragraph.decompose()
     if identity and identity[1] in {'damninteresting.com', 'www.damninteresting.com'}:
         for article in root.select('article'):
             seen = set()
@@ -638,7 +650,8 @@ def clean_tree(root, title, author, url=''):
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '
-                        'article .entry-content .wp-block-image > figure > figcaption.wp-element-caption'),
+                        'article .entry-content .wp-block-image > figure > figcaption.wp-element-caption, '
+                        'article .entry-content > figure.wp-block-image > figcaption:has(> .image-credit)'),
         **dict.fromkeys({'damninteresting.com', 'www.damninteresting.com'},
                         'article > figure.entry-image > figcaption'),
         **dict.fromkeys({'sciencedaily.com', 'www.sciencedaily.com'},
