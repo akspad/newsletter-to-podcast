@@ -301,6 +301,10 @@ class PublisherReadingOrderTests(unittest.TestCase):
         </div></article>"""
         _, body = narrate('https://www.geographyrealm.com/seed-trials/', html)
         self.assertEqual(body, f'First {FIRST} A map of the trial plots. Second {LAST}')
+        see_also = html.replace('>Related</h2>', ' id="h-see-also">See Also</h2>')
+        url = 'https://www.geographyrealm.com/seed-trials/'
+        self.assertEqual(narrate(url, see_also)[1], body)
+        self.assertIn('See Also', narrate(url, see_also.replace('id="h-see-also"', 'id="editorial"'))[1])
 
     def test_construction_physics_keeps_substack_caption_and_removes_feed_permalink_button(self):
         url = 'https://www.construction-physics.com/p/seed-trials'
@@ -312,6 +316,20 @@ class PublisherReadingOrderTests(unittest.TestCase):
         feed = f'<p>{FIRST}</p><p><a href="{url}">Read more</a></p>'
         self.assertEqual(html_to_text(feed, url=url), FIRST)
         self.assertIn('Read more', html_to_text(feed.replace('/seed-trials', '/other'), url=url))
+
+    def test_substack_footnotes_keep_prose_without_paired_reference_numbers(self):
+        ref = ('<a class="footnote-anchor" data-component-name="FootnoteAnchorToDOM" '
+               'id="footnote-anchor-1" href="#footnote-1">1</a>')
+        note = ('<div class="footnote" data-component-name="FootnoteToDOM"><a class="footnote-number" '
+                'contenteditable="false" id="footnote-1" href="#footnote-anchor-1">1</a>'
+                f'<div class="footnote-content"><p>{LAST}</p></div></div>')
+        body = f'<p>{FIRST}{ref}</p>{note}'
+        url = 'https://www.construction-physics.com/p/seed-trials'
+        page = f'<article><h1>Seed trials</h1><div class="body markup">{body}</div></article>'
+        self.assertEqual(narrate(url, page)[1], f'{FIRST} {LAST}')
+        self.assertEqual(html_to_text(body), f'{FIRST}\n{LAST}')
+        for control in (body.replace('href="#footnote-1"', 'href="#different-note"'), f'<blockquote>{body}</blockquote>'):
+            self.assertIn(FIRST + '1', html_to_text(control))
 
     def test_astronomy_removes_a_terminal_staff_bio_but_keeps_quoted_text(self):
         bio = '<p class="wp-block-paragraph"><em><strong>Lee Writer</strong> is a staff writer at Astronomy, based here.</em></p>'

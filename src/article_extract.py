@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
@@ -219,6 +219,7 @@ def remove_table_of_contents(root, url):
 
 def clean_tree(root, title, author, url=''):
     remove_resolved_footnote_backlinks(root, url)
+    remove_substack_footnote_controls(root)
     for block, _ in article_labels(root, title):
         block.decompose()
     # RebelMouse recommendation widgets can sit inside the article body.
@@ -374,7 +375,9 @@ def clean_tree(root, title, author, url=''):
             for listing in body.select(':scope > h2.wp-block-heading + ul.wp-block-list:last-child'):
                 label = listing.find_previous_sibling()
                 items = listing.find_all(recursive=False)
-                if editorial(listing) and items and label.get_text(strip=True) == 'Related' and all(
+                link_section = (label.get_text(strip=True) == 'Related' or
+                                label.get('id') == 'h-see-also' and label.get_text(strip=True) == 'See Also')
+                if editorial(listing) and link_section and items and all(
                         child.name == 'li' and child.select_one(':scope > a[href]')
                         and child.get_text(strip=True) == child.a.get_text(strip=True)
                         and (target := url_identity(child.a['href'], url)) and target[:2] == identity[:2]

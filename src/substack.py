@@ -16,7 +16,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 from pathlib import Path
 import security
 from monitoring import ExtractionError, set_extraction_step
-from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, url_identity
+from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
     guardian_author_label, harvard_feed_writer, mit_news_author_label, open_culture_writer, outside_account_name,
@@ -664,6 +664,7 @@ def html_to_text(html: str, *, title='', url='') -> str:
     clean_imported_widgets(soup, url, title)
     remove_nieman_footnote_controls(soup, url)
     remove_resolved_footnote_backlinks(soup, url)
+    remove_substack_footnote_controls(soup)
     # Drop Substack's subscribe/share widgets and embedded buttons; they aren't article text.
     for el in soup.select('head, script, style, nav, template, noscript, form, button, input, select, textarea, '
                           'svg, audio, video, iframe, .subscription-widget-wrap, .button-wrapper, '

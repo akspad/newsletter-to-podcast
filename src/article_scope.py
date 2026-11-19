@@ -141,6 +141,28 @@ def remove_nieman_footnote_controls(root, url):
             marker.decompose()
 
 
+def remove_substack_footnote_controls(root):
+    """Remove paired Substack reference numbers while keeping each note's prose."""
+    references = root.select('a.footnote-anchor[data-component-name="FootnoteAnchorToDOM"][id][href]')
+    if not references:
+        return
+    notes = {}
+    for link in root.select('.footnote[data-component-name="FootnoteToDOM"]:has(> .footnote-content) '
+                            '> a.footnote-number[contenteditable="false"][id][href]'):
+        notes.setdefault('#' + link['id'], []).append(link)
+    for ref in references:
+        targets = notes.get(ref['href'], [])
+        if len(targets) != 1 or targets[0].parent is None:
+            continue
+        back = targets[0]
+        number = ref.get_text(strip=True)
+        if (number.isdecimal() and back.get_text(strip=True) == number and back['href'] == '#' + ref['id']
+                and ref.find_parent('article') is back.find_parent('article')
+                and all(editorial(link) and not link.find_parent(['blockquote', 'pre', 'code']) for link in (ref, back))):
+            ref.decompose()
+            back.decompose()
+
+
 def explicitly_hidden(node):
     if node.has_attr('hidden') or node.get('aria-hidden', '').casefold() == 'true':
         return True
