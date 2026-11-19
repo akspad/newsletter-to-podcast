@@ -230,6 +230,16 @@ def clean_tree(root, title, author, url=''):
     if identity and identity[1] == 'www.bgs.ac.uk':
         for main in root.select('main'):
             remove_bgs_related_news(main)
+    if identity and identity[1] in {'reason.com', 'www.reason.com'} and identity[2].startswith('/volokh/'):
+        for article in root.select('article.volokh-post'):
+            permalink = article.select_one(':scope > header > h2.entry-title > a[href]')
+            body = article.select_one(':scope > .entry-content')
+            if permalink and body and url_identity(permalink['href'], url) == identity:
+                deck = permalink.parent.select_one(':scope > p.entry-subtitle')
+                if deck and editorial(deck):
+                    opening = body.find('p', recursive=False)
+                    if not opening or ' '.join(opening.get_text().split()) != ' '.join(deck.get_text().split()):
+                        body.insert(0, deck.extract())
     if identity and identity[1] == 'blogs.kde.org':
         for form in root.select('article.post-content form.listmonk-form[action="https://newsletter.kde.org/subscription/form"]'):
             prompt = form.find_previous_sibling()
@@ -533,6 +543,14 @@ def clean_tree(root, title, author, url=''):
         for player in root.select('article > .entry-content > .article-summary:has(> .instaread-player-slot)'):
             for label in player.select(':scope > p.instaread-disclaimer'):
                 label.decompose()
+            for prompt in player.select(':scope > p:has(> a[href^="mailto:"])'):
+                link = prompt.select_one(':scope > a[href^="mailto:"]')
+                address = link.get_text(strip=True)
+                if (address.endswith('@wyofile.com') and link.get('href') == f'mailto:{address}'
+                        and re.fullmatch(r'Do you have questions about this story\? Or information to share\? '
+                                         r'Reach out to .+ at ' + re.escape(address) + r'\.',
+                                         ' '.join(prompt.get_text().split()))):
+                    prompt.decompose()
     if identity and identity[1] in {'mentalfloss.com', 'www.mentalfloss.com'}:
         for article in root.select('article#main-article'):
             bodies = article.select('.odesa-article-main .article-content')
@@ -568,6 +586,10 @@ def clean_tree(root, title, author, url=''):
             if credit and editorial(credit):
                 body.insert(0, credit.extract())
     if identity and identity[1] in {'smashingmagazine.com', 'www.smashingmagazine.com'}:
+        for summary in root.select('.article__content .c-garfield-the-cat > .c-garfield-summary '
+                                   '> section.article__summary[aria-label="Quick summary"]'):
+            if editorial(summary):
+                summary.name = 'p'
         for caption in root.select('.c-garfield-the-cat > figure > figcaption'):
             if not editorial(caption):
                 continue
@@ -638,6 +660,17 @@ def clean_tree(root, title, author, url=''):
                 for following in paragraph.find_all('p', recursive=False):
                     paragraph.insert_before(following.extract())
                 paragraph.decompose()
+        for prompt in root.select('article .entry-content p.wp-block-paragraph > em:has(> a[href="mailto:editor@hcn.org"])'):
+            label = prompt.find_previous_sibling()
+            brand = prompt.previous_sibling
+            if (label and label.name == 'em' and label.get_text(strip=True) == 'We welcome reader letters. Email'
+                    and isinstance(brand, str) and brand.strip() == 'High Country News'
+                    and not prompt.find_parent(['blockquote', 'pre', 'code'])
+                    and [url_identity(link.get('href'), url) for link in prompt.find_all('a', recursive=False)] ==
+                    [None, url_identity('/feedback/contact-us', url), url_identity('/policies/lte', url)]):
+                label.decompose()
+                brand.extract()
+                prompt.decompose()
     if identity and identity[1] in {'damninteresting.com', 'www.damninteresting.com'}:
         for article in root.select('article'):
             seen = set()

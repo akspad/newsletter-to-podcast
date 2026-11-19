@@ -248,7 +248,8 @@ def article_details(soup, url):
         value = clean(heading_text(node))
         # Some sites put Markdown emphasis into social/SEO metadata. Compare
         # without those markers, then read the visible heading as plain text.
-        return any(heading_matches(value, raw) for raw in (structured, social, page_title))
+        return any(heading_matches(value, raw) or heading_matches(value, unescape(raw))
+                   for raw in (structured, social, page_title))
     if not headings:
         # Nonsemantic collection layouts can place h1 outside article/main.
         # Require a metadata match so unrelated site branding cannot win.
@@ -263,6 +264,10 @@ def article_details(soup, url):
     preferred_headings = [node for node in headings if any(parent is preliminary_scope for parent in node.parents)]
     heading = next((node for node in headings if matches_heading(node)),
                    labels.get('title') or next(iter(preferred_headings or headings), None))
+    if requested and requested[1] in {'reason.com', 'www.reason.com'} and requested[2].startswith('/volokh/'):
+        permalink = preliminary_scope.select_one(':scope > header > h2.entry-title > a[href]')
+        if permalink and editorial(permalink) and url_identity(permalink['href'], url) == requested:
+            heading = permalink
     if (requested and requested[1] in {'theparisreview.org', 'www.theparisreview.org'}
             and requested[2].startswith('/blog/')):
         # The article headline is a sibling of main, and the schema can
@@ -402,6 +407,20 @@ def article_details(soup, url):
             '.devsite-article-body > p > .wd-authors > .wd-author > div > span:first-child')
             if belongs_to_scope(node, scope)]
         visible_authors = ', '.join(dict.fromkeys(filter(None, author_names))) or visible_authors
+    if requested and requested[1] == 'zed.dev' and requested[2].startswith('/blog/'):
+        for header in soup.select('main header:has(h1)'):
+            if not editorial(header) or not heading_matches(heading_text(header.h1), title):
+                continue
+            authors = []
+            for link in header.select('.flex.flex-wrap > a[href]:has(img[alt])'):
+                label = link.select_one('p.text-sm')
+                name = clean(visible_text(label), 100) if label and editorial(label) else ''
+                if name and any(clean(img['alt'], 100) == name for img in link.select('img[alt]')):
+                    authors.append(name)
+            authors = list(dict.fromkeys(authors))
+            if len(authors) > 1:
+                visible_authors = ', '.join(authors)
+            break
     if requested and requested[1] in GUARDIAN_HOSTS:
         credit = scope.select_one('address[data-component="meta-byline"][data-gu-name="byline"]')
         if credit and credit.find_parent('article') is scope:

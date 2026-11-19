@@ -202,6 +202,12 @@ class PublisherReadingOrderTests(unittest.TestCase):
         See our <a href="/policies/lte">policy</a>.<p class="wp-block-paragraph">{LAST}</p></div></article>'''
         _, body = narrate('https://www.hcn.org/articles/seed-trials/', html)
         self.assertEqual(body, f'Credit: Lee {FIRST} {LAST}')
+        emphasized = html.replace('<a href="mailto:editor@hcn.org">', '<em> at <a href="mailto:editor@hcn.org">')
+        emphasized = emphasized.replace('>policy</a>.<p', '>policy</a>.</em><p')
+        self.assertEqual(narrate('https://www.hcn.org/articles/seed-trials/', emphasized)[1],
+                         f'Credit: Lee {FIRST} {LAST}')
+        control = emphasized.replace('/policies/lte', '/about/editor')
+        self.assertIn('We welcome reader letters.', narrate('https://www.hcn.org/articles/seed-trials/', control)[1])
 
     def test_aeon_feed_omits_the_duplicate_credit_and_matching_read_on_link(self):
         url = 'https://aeon.co/essays/seed-trials'
@@ -750,6 +756,19 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(body.count('Large preview'), 1)
         self.assertIn(LAST, body)
 
+    def test_smashing_preserves_complete_quick_summary_including_leading_text(self):
+        summary = 'Thousands of trials helped us understand how seedlings react when the light changes.'
+        html = f'''<article><h1>Seed trials</h1><div class="article__content"><div class="c-garfield-the-cat">
+        <div class="c-garfield-summary"><section aria-label="Quick summary" class="article__summary">
+        <span aria-hidden="true" class="summary__heading" id="article__start"></span>{summary}
+        We also tested <code>seed()</code> before starting the growing trial.</section></div>
+        <p>{FIRST}</p><p>{LAST}</p></div></div></article>'''
+        _, body = narrate('https://smashingmagazine.com/2026/11/seed-trials/', html)
+        self.assertTrue(body.startswith(summary), body)
+        self.assertEqual(body.count(summary), 1)
+        self.assertIn('seed()', body)
+        self.assertTrue(body.endswith(LAST), body)
+
     def test_strong_towns_uses_authors_beside_matching_headline_and_ignores_bio_card(self):
         html = f"""<title>Seed trials | Strong Towns</title><main><div class="thought-leadership_wrap">
         <section><div class="mast-col"><div class="heading-component"><h1>Seed trials</h1></div>
@@ -777,6 +796,40 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <div><a href="/blog/recommended">A recommended story</a></div></div></div></article></main>"""
         _, body = narrate('https://zed.dev/blog/seed-trials', html)
         self.assertEqual(body, f'{FIRST} Harvest by season Related Posts A phrase that belongs in the article. {LAST}')
+
+    def test_zed_uses_all_photo_label_authors_from_the_matching_article_header(self):
+        html = f'''<meta name="author" content="Lee Writer"><main><header><h1>Seed trials</h1>
+        <div class="flex flex-wrap"><a href="https://github.com/lee">
+        <img alt="Lee Writer"><p class="text-sm">Lee Writer</p></a>
+        <a href="/team#ash"><img alt="Ash Editor"><p class="text-sm">Ash Editor</p></a>
+        <a href="/subscribe"><img alt="Mail"><p class="text-sm">Subscribe</p></a></div></header>
+        <article><div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article></main>'''
+        intro, body = narrate('https://zed.dev/blog/seed-trials', html)
+        self.assertTrue(intro.endswith('By Lee Writer, Ash Editor.'), intro)
+        self.assertEqual(body, f'{FIRST} {LAST}')
+
+    def test_reason_reads_the_article_permalink_as_headline_and_deck_once(self):
+        url = 'https://reason.com/volokh/2026/11/19/seed-trials/'
+        deck = 'The latest experiment used new equipment.'
+        html = f'''<title>Seed trials</title><article class="volokh-post"><header>
+        <h2 class="entry-title"><a href="{url}">Seed trials</a><p class="entry-subtitle">{deck}</p>
+        <p class="meta"><span class="byline"><a rel="author" href="/author/lee">Lee Writer</a></span></p>
+        </h2></header><div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('Seed trials. By Lee Writer.'), intro)
+        self.assertEqual(body, f'{deck} {FIRST} {LAST}')
+        repeated = html.replace(f'<p>{FIRST}', f'<p>{deck}</p><p>{FIRST}')
+        self.assertEqual(narrate(url, repeated)[1], body)
+
+    def test_visible_heading_matches_encoded_schema_outside_the_article(self):
+        url = 'https://www.geographyrealm.com/seed-trials/'
+        schema = {'@type': 'BlogPosting', 'headline': 'Lee&#8217;s trials', 'url': url}
+        html = f'''<script type="application/ld+json">{json.dumps(schema)}</script>
+        <div><h1>Lee’s trials</h1></div><article><div class="entry-content"><p>{FIRST}</p>
+        <p>{LAST}</p></div></article>'''
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('Lee’s trials.'), intro)
+        self.assertEqual(body, f'{FIRST} {LAST}')
 
     def test_lithub_keeps_the_source_credit_and_skips_the_sibling_author_card(self):
         html = f"""<meta name="author" content="Lee Writer"><main><h1 class="entry-title">Seed trials</h1>
@@ -821,7 +874,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <h1 class="entry-title">Seed trials</h1><div class="entry-meta"><span class="byline">by {byline}</span></div>
         </header></div><div class="main-content"><article><div class="entry-content">
         <div class="article-summary"><div class="instaread-player-slot"></div>
-        <p class="instaread-disclaimer">Play automatically generated audio.</p><p>Reported jointly.</p></div>
+        <p class="instaread-disclaimer">Play automatically generated audio.</p><p>Reported jointly.</p>
+        <p>Do you have questions about this story? Or information to share? Reach out to Lee Writer at
+        <a href="mailto:lee@wyofile.com">lee@wyofile.com</a>.</p></div>
         <p>{FIRST}</p><div class="wp-block-image"><figure><img src="/tray.png">
         <figcaption class="wp-element-caption">A tray after rain.</figcaption></figure></div>
         <p>{LAST}</p><div class="wp-block-newspack-blocks-homepage-articles wpnbha"><div>
