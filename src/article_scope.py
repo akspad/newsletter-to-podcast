@@ -388,7 +388,7 @@ def article_scope(soup, title='', url=''):
         own_prose = [p for p in main.select('p') if not p.find_parent('article') and editorial(p)]
         matched = any(heading_matches(heading_text(h), title) and not h.find_parent('article')
                       for h in main.select('h1') if editorial(h))
-        own_body = any(not node.find_parent('article') and editorial(node)
+        own_body = any(node.name != 'article' and not node.find_parent('article') and editorial(node)
                        for node in main.select(BODY_SELECTORS))
         # A short deck outside a semantic article isn't the main story body.
         inside_prose = max((score(node)[3] for node in articles

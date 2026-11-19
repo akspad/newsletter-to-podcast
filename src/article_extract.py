@@ -1028,6 +1028,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .jumbotron ~ .content-width'
         elif identity[1] == 'blog.rust-lang.org':
             body_selector = 'section.white[id] > div > div.post'
+        elif identity[1] in {'jvns.ca', 'www.jvns.ca'} and identity[2].startswith('/blog/') and match('article.hentry', scope):
+            body_selector = ':scope > main'
         elif identity[1] in {'eff.org', 'www.eff.org'} and identity[2].startswith('/deeplinks/') and match('article.node--blog--full', scope):
             body_selector = ':scope > .node__content > .field--name-body > .field__items > .field__item'
         elif identity[1] in {'openculture.com', 'www.openculture.com'}:

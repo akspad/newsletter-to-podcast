@@ -344,6 +344,19 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(narrate('https://blog.rust-lang.org/2026/11/19/seed-trials/', html)[1],
                          f'{FIRST} Stabilized APIs Tray::seed Tray::water {LAST}')
 
+    def test_julia_evans_keeps_inline_code_and_its_adjacent_punctuation(self):
+        html = f'''<article class="hentry"><header><h1>Seed trials</h1><p>19 November 2026</p></header>
+        <main><p>{FIRST}</p><h2>The first run</h2><p>The <code>seed</code>'s first run took an hour.</p>
+        <pre><code><span>seed</span> --dry-run</code></pre><p>{LAST}</p></main>
+        <footer><p>More articles and newsletter links</p></footer></article>'''
+        self.assertEqual(narrate('https://jvns.ca/blog/2026/11/19/seed-trials/', html)[1],
+                         f"{FIRST} The first run The seed's first run took an hour. seed --dry-run {LAST}")
+
+    def test_main_with_external_heading_does_not_discard_an_explicit_article_body(self):
+        html = f'''<title>Seed trials</title><main><header><h1>Seed trials</h1><p>Lee Writer</p></header>
+        <article class="entry-content"><p>{FIRST}</p><p>{LAST}</p></article></main>'''
+        self.assertEqual(narrate('https://garden.example/seed-trials', html)[1], f'{FIRST} {LAST}')
+
     def test_kde_skips_its_listmonk_prompt_and_preserves_editorial_newsletter_prose(self):
         html = f'''<article class="post-content"><h1>Seed trials</h1><div class="jumbotron"></div>
         <div class="content-width"><p>{FIRST}</p><h2>Newsletter findings</h2><p>{LAST}</p>
