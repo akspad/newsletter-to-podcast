@@ -449,6 +449,10 @@ def clean_imported_widgets(root, url, title=''):
                 node.decompose()
     if identity and identity[1] == 'daily.jstor.org':
         clean_jstor_pull_quotes(root)
+    if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2] and title:
+        headline = root.find('h1', recursive=False)
+        if headline and heading_text(headline) == title:
+            headline.decompose()
     if identity and identity[1] == 'www.bgs.ac.uk':
         remove_bgs_related_news(root)
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:

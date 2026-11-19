@@ -471,6 +471,12 @@ def article_details(soup, url):
             author = clean(visible_text(credit))
     if host in {'universalhub.com', 'www.universalhub.com'}:
         _, writer = universal_hub_writer(scope, url)
+        if not writer and not author and 'node-story' in scope.get('class', []):
+            link = scope.select_one(':scope > .content > .submitted-by > a.username[href^="/users/"]')
+            if link and editorial(link):
+                name = clean(visible_text(link))
+                if name and clean(visible_text(link.parent)).startswith(f'By {name} on '):
+                    writer = name
         author = writer or author
     if host == 'freebsdfoundation.org':
         author = freebsd_report_writer(scope, url, title) or author

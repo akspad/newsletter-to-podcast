@@ -209,6 +209,19 @@ def clean_tree(root, title, author, url=''):
         opening, writer = universal_hub_writer(root, url)
         if opening and writer == author:
             opening.decompose()
+        for story in root.select('article.node-story.view-mode-full > .content'):
+            photo = story.select_one(':scope > .field-name-field-top-photo:has(img)')
+            caption = photo.find_next_sibling() if photo else None
+            body = story.select_one(':scope > .field-name-body > .field-items > .field-item')
+            if caption and body and match('.field-name-field-caption', caption) and editorial(caption):
+                body.insert(0, caption.extract())
+    if identity and identity[1] in STRONG_TOWNS_HOSTS and identity[2].startswith('/journal/'):
+        for wrapper in root.select('.action-content_wrap'):
+            body = wrapper.select_one(':scope > section .mast-article-rich-text.w-richtext')
+            caption = wrapper.select_one(':scope > .mast-section .img-component:has(img) + div '
+                                         '> .rich-text-component.mast-mt-xs > .mast-rich-text.w-richtext')
+            if body and caption and editorial(body) and editorial(caption):
+                body.insert(0, caption.extract())
     if identity and identity[1] == 'daily.jstor.org':
         for body in root.select('article > .entry-content'):
             clean_jstor_pull_quotes(body)
@@ -373,7 +386,8 @@ def clean_tree(root, title, author, url=''):
                         card.get_text(' ', strip=True).startswith('To learn more, read on from the SAPIENS archive:')):
                     card.decompose()
         # SAPIENS puts its editorial caption and photo credit in a figure footer.
-        for footer in root.select('.c-article-content :is(.m-article-img-header, .m-image-video, .m-two-images__media) '
+        for footer in root.select('.c-article-content :is(.m-article-img-header, .m-image-video, '
+                                  '.m-two-images__media, .m-text-insert-image__media) '
                                   '> figure.c-image-video > footer.c-image-video__footer:has(> .c-media-caption)'):
             figure = footer.parent
             if editorial(figure) and figure.find('img'):
@@ -444,13 +458,21 @@ def clean_tree(root, title, author, url=''):
             for listing in body.select(':scope > h2.wp-block-heading + ul.wp-block-list:last-child'):
                 label = listing.find_previous_sibling()
                 items = listing.find_all(recursive=False)
+                more_articles = (label.get('id') == 'h-more-geography-articles-of-interest' and
+                                 label.get_text(strip=True) == 'More Geography Articles of Interest')
                 link_section = (label.get_text(strip=True) == 'Related' or
-                                label.get('id') == 'h-see-also' and label.get_text(strip=True) == 'See Also')
-                if editorial(listing) and link_section and items and all(
-                        child.name == 'li' and child.select_one(':scope > a[href]')
-                        and child.get_text(strip=True) == child.a.get_text(strip=True)
-                        and (target := url_identity(child.a['href'], url)) and target[:2] == identity[:2]
-                        and target != identity for child in items):
+                                label.get('id') == 'h-see-also' and label.get_text(strip=True) == 'See Also' or
+                                more_articles)
+                links = [child.select_one(':scope > a[href]') if child.name == 'li' else None for child in items]
+                if not link_section or not editorial(listing) or not links or not all(
+                        link and item.get_text(strip=True) == link.get_text(strip=True) for item, link in zip(items, links)):
+                    continue
+                targets = [url_identity(link['href'], url) for link in links]
+                local = [bool(target and target[:2] == identity[:2] and target != identity) for target in targets]
+                label_only = more_articles and any(local) and all(
+                    same_site or (target is None and link['href'].replace("'", '’') == link.get_text(strip=True))
+                    for link, target, same_site in zip(links, targets, local))
+                if all(local) or label_only:
                     label.decompose()
                     listing.decompose()
     if identity and identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
@@ -1027,7 +1049,10 @@ def extract_text(soup, title='', author='', url=''):
         elif identity[1] in OUTSIDE_HOSTS:
             body_selector = '.article-template .js-body-content > .content-wrap.fp-contentTarget'
         elif identity[1] in STRONG_TOWNS_HOSTS and identity[2].startswith('/journal/'):
-            body_selector = '.thought-leadership_wrap .mast-article-rich-text.w-richtext'
+            body_selector = ':is(.thought-leadership_wrap, .action-content_wrap) .mast-article-rich-text.w-richtext'
+        elif (identity[1] in {'universalhub.com', 'www.universalhub.com'}
+              and match('article.node-story.view-mode-full', scope)):
+            body_selector = ':scope > .content > .field-name-body > .field-items > .field-item'
         elif identity[1] == 'creativecommons.org' and scope.name == 'main' and match('body.blog-post main', scope):
             body_selector = ':scope > .content'
         elif (identity[1] == 'buttondown.com' and '/archive/' in identity[2]

@@ -85,6 +85,53 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertTrue(intro.endswith('By Ash Grower.'), intro)
         self.assertEqual(body, f'{FIRST} {LAST}')
 
+    def test_strong_towns_action_content_keeps_cover_caption_and_omits_bio_card(self):
+        html = f'''<title>Seed trials</title><div class="action-content_wrap">
+        <div class="mast-section"><div class="img-component"><img src="/seed"></div><div>
+        <div class="rich-text-component mast-mt-xs"><div class="mast-rich-text w-richtext">
+        <p>View of the seed tray.</p></div></div></div></div>
+        <section><div class="mast-article-rich-text w-richtext"><p>{FIRST}</p><p>{LAST}</p></div>
+        <div class="mast-card"><p>The author grows plants for a living.</p></div></section></div>'''
+        self.assertEqual(narrate('https://www.strongtowns.org/journal/seed-trials/', html)[1],
+                         f'View of the seed tray. {FIRST} {LAST}')
+
+    def test_universal_hub_keeps_article_caption_link_and_submitted_byline(self):
+        html = f'''<article class="node-story view-mode-full"><h1>Seed trials</h1><div class="content">
+        <span class="submitted-by">By <a class="username" href="/users/lee">Lee</a> on Tuesday</span>
+        <div class="field-name-field-top-photo"><img src="/seed"></div>
+        <div class="field-name-field-caption"><p>Two varieties of seed.</p></div>
+        <div class="field-name-body"><div class="field-items"><div class="field-item">
+        <p>{FIRST}</p><p><a href="/report">The published report.</a></p><p>{LAST}</p></div></div></div>
+        <div class="field-name-field-topics">Topics: Gardens</div></div>
+        <section class="comments">By <a class="username" href="/users/ash">Ash</a> on Friday</section></article>'''
+        intro, body = narrate('https://www.universalhub.com/2026/seed-trials', html)
+        self.assertTrue(intro.endswith('By Lee.'), intro)
+        self.assertEqual(body, f'Two varieties of seed. {FIRST} The published report. {LAST}')
+
+    def test_sapiens_reads_the_caption_of_an_image_in_prose(self):
+        html = f'''<title>Seed trials</title><div class="c-article-content" data-article-content><div class="c-modules">
+        <p>{FIRST}</p><div class="m-text-insert-image__media"><figure class="c-image-video"><img src="/seed">
+        <footer class="c-image-video__footer"><div class="c-media-caption"><p>The seed tray.</p></div>
+        <div class="c-media-credits">Photo by Lee.</div></footer></figure></div><p>{LAST}</p></div></div>'''
+        self.assertEqual(narrate('https://www.sapiens.org/archaeology/seed-trials/', html)[1],
+                         f'{FIRST} The seed tray. Photo by Lee. {LAST}')
+
+    def test_buttondown_omits_exact_exported_subject_and_keeps_other_headings(self):
+        body = f'<h3>Announcement</h3><p>{FIRST}</p><h1>Seed trials</h1><h2>Results</h2><p>{LAST}</p>'
+        url = 'https://buttondown.com/garden/archive/seed-trials/'
+        self.assertEqual(html_to_text(body, title='Seed trials', url=url), f'Announcement\n{FIRST}\nResults\n{LAST}')
+        self.assertIn('Seed trials at night', html_to_text(body.replace('Seed trials', 'Seed trials at night'),
+                                                         title='Seed trials', url=url))
+
+    def test_geographyrealm_skips_related_link_list_with_one_exported_label_as_url(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <h2 class="wp-block-heading">Related resources:</h2><p>{LAST}</p>
+        <h2 class="wp-block-heading" id="h-more-geography-articles-of-interest">More Geography Articles of Interest</h2>
+        <ul class="wp-block-list"><li><a href="Soil: a Gardener's Guide">Soil: a Gardener’s Guide</a></li>
+        <li><a href="/leaves/">More Leaves</a></li></ul></div></article>'''
+        self.assertEqual(narrate('https://www.geographyrealm.com/seed-trials/', html)[1],
+                         f'{FIRST} Related resources: {LAST}')
+
     def test_universal_hub_uses_the_confirmed_reprint_byline_and_skips_feed_controls(self):
         credit = ('<p><em>This article is republished from The Conversation. It was written by: '
                   '<a href="https://theconversation.com/profiles/lee">Lee Writer</a>.</em></p>')
