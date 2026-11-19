@@ -255,6 +255,13 @@ def clean_imported_widgets(root, url, title=''):
                     and url_identity(links[1]['href']) == url_identity('https://mastodon.social/@jimniels')
                     and url_identity(links[2]['href']) == url_identity('https://bsky.app/profile/jim-nielsen.com')):
                 paragraph.decompose()
+    if identity and identity[1] in {'construction-physics.com', 'www.construction-physics.com'}:
+        paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
+        if getattr(paragraph, 'name', None) == 'p':
+            links = paragraph.select(':scope > a[href]')
+            if (len(links) == 1 and url_identity(links[0]['href'], url) == identity
+                    and paragraph.get_text(strip=True) == links[0].get_text(strip=True) == 'Read more'):
+                paragraph.decompose()
     if identity and identity[1] == 'simonwillison.net':
         # The Atom feed appends a paragraph of category links after the story.
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)

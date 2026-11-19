@@ -331,6 +331,28 @@ def clean_tree(root, title, author, url=''):
                     and bio.get_text(' ', strip=True).startswith(f'{author} is a staff writer at Astronomy,')
                     and bio.get_text(strip=True) == credit.parent.get_text(strip=True)):
                 bio.decompose()
+    if identity and identity[1] in {'geographyrealm.com', 'www.geographyrealm.com'}:
+        for body in root.select('article .entry-content'):
+            targets = {'#' + h['id'] for h in body.select(':scope > h2[id]')}
+            for index in body.select(':scope > div:has(> strong)'):
+                label = index.strong
+                links = index.select(':scope > a[href]')
+                other_text = ''.join(str(node) for node in index.find_all(string=True)
+                                     if node.find_parent(['a', 'strong']) is None)
+                if (editorial(index) and label.get_text(strip=True) == 'Browse by state:' and len(links) >= 2
+                        and all(link['href'] in targets for link in links)
+                        and not other_text.strip(' •\t\r\n')):
+                    index.decompose()
+            for listing in body.select(':scope > h2.wp-block-heading + ul.wp-block-list:last-child'):
+                label = listing.find_previous_sibling()
+                items = listing.find_all(recursive=False)
+                if editorial(listing) and items and label.get_text(strip=True) == 'Related' and all(
+                        child.name == 'li' and child.select_one(':scope > a[href]')
+                        and child.get_text(strip=True) == child.a.get_text(strip=True)
+                        and (target := url_identity(child.a['href'], url)) and target[:2] == identity[:2]
+                        and target != identity for child in items):
+                    label.decompose()
+                    listing.decompose()
     if identity and identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
         for image in root.select('.collection-preamble > .essay__content > .essay__image:has(img)'):
             caption = image.select_one(':scope > .essay__center-content > .essay__image__caption')
@@ -424,6 +446,10 @@ def clean_tree(root, title, author, url=''):
                     and widget.select_one('a[href^="/blog/"]')):
                 widget.decompose()
     caption_selectors = {
+        **dict.fromkeys({'geographyrealm.com', 'www.geographyrealm.com'},
+                        'article .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
+        **dict.fromkeys({'construction-physics.com', 'www.construction-physics.com'},
+                        '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption'),
         **dict.fromkeys({'smashingmagazine.com', 'www.smashingmagazine.com'},
                         '.c-garfield-the-cat > figure:has(img) > figcaption'),
         **dict.fromkeys(WYOFILE_HOSTS, 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption, '

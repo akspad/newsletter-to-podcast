@@ -19,6 +19,29 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_geography_realm_keeps_captions_and_paragraphs_after_removing_page_navigation(self):
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content">
+        <div><strong>Browse by state:</strong><br><a href="#one">First</a> • <a href="#two">Second</a></div>
+        <h2 id="one">First</h2><p>{FIRST}</p>
+        <div class="wp-block-image"><figure><img src="/plot.png">
+        <figcaption class="wp-element-caption">A map of the trial plots.</figcaption></figure></div>
+        <h2 id="two">Second</h2><p>{LAST}</p><h2 class="wp-block-heading">Related</h2>
+        <ul class="wp-block-list"><li><a href="/another-story/">Another story</a></li></ul>
+        </div></article>"""
+        _, body = narrate('https://www.geographyrealm.com/seed-trials/', html)
+        self.assertEqual(body, f'First {FIRST} A map of the trial plots. Second {LAST}')
+
+    def test_construction_physics_keeps_substack_caption_and_removes_feed_permalink_button(self):
+        url = 'https://www.construction-physics.com/p/seed-trials'
+        html = f"""<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
+        <p>{FIRST}</p><div class="captioned-image-container"><figure><img src="/image">
+        <figcaption class="image-caption">A plot after rain.</figcaption></figure></div><p>{LAST}</p>
+        </div></div></article>"""
+        self.assertEqual(narrate(url, html)[1], f'{FIRST} A plot after rain. {LAST}')
+        feed = f'<p>{FIRST}</p><p><a href="{url}">Read more</a></p>'
+        self.assertEqual(html_to_text(feed, url=url), FIRST)
+        self.assertIn('Read more', html_to_text(feed.replace('/seed-trials', '/other'), url=url))
+
     def test_astronomy_removes_a_terminal_staff_bio_but_keeps_quoted_text(self):
         bio = '<p class="wp-block-paragraph"><em><strong>Lee Writer</strong> is a staff writer at Astronomy, based here.</em></p>'
         html = f"""<meta name="author" content="Lee Writer"><article><h1>Seed trials</h1>
