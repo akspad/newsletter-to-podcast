@@ -650,6 +650,8 @@ def clean_tree(root, title, author, url=''):
                         '> figure.kg-image-card > figcaption'),
         **dict.fromkeys(OUTSIDE_HOSTS, '.article-template .js-body-content > .content-wrap.fp-contentTarget '
                         '> figure.pom-image-wrap > figcaption.pom-caption'),
+        **dict.fromkeys({'theparisreview.org', 'www.theparisreview.org'}, 'section#content > .article-body-wrap '
+                        '> main.article-body.blog-body > div.wp-caption > p.wp-caption-text'),
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '

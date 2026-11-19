@@ -659,12 +659,14 @@ class PublisherReadingOrderTests(unittest.TestCase):
     def test_paris_review_keeps_editorial_div_between_prose_and_quotation(self):
         html = f'''<h1>Seed trials</h1><section id="content" role="main"><div class="article-body-wrap">
         <main class="article-body blog-body"><p>{FIRST}</p>
+        <div class="wp-caption"><img src="tray"><p class="wp-caption-text">Tray photograph by Lee.</p></div>
         <div id="message-list_test"><div aria-roledescription="message"><div><div draggable="false">
         <div>One source is <a href="/diary"><em>A gardener’s diary</em></a>.</div>
         </div></div></div></div><blockquote>The plants bent toward the light.</blockquote>
         <p>{LAST}</p></main><aside><p>Unrelated subscription</p></aside></div></section>'''
         _, body = narrate('https://www.theparisreview.org/blog/2026/11/19/seed-trials/', html)
-        self.assertEqual(body, f'{FIRST} One source is A gardener’s diary. The plants bent toward the light. {LAST}')
+        self.assertEqual(body, f'{FIRST} Tray photograph by Lee. One source is A gardener’s diary. '
+                         f'The plants bent toward the light. {LAST}')
 
     def test_harvard_preview_keeps_the_inline_caption_and_linked_scores_in_order(self):
         html = f"""<article class="node--type-article"><h1>Seed trials</h1>
