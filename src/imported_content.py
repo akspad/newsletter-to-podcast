@@ -7,6 +7,78 @@ from tts import speech_text
 from article_scope import DATE, belongs_to_scope, editorial, url_identity
 
 
+HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
+OUTSIDE_HOSTS = {'outsideonline.com', 'www.outsideonline.com'}
+
+
+def harvard_feed_body(root, url, title):
+    """Identify the Drupal node exported as an RSS description."""
+    identity = url_identity(url)
+    if not identity or identity[1] not in HARVARD_HOSTS or not title:
+        return None
+    heading = root.find('span', class_='field--name-title', recursive=False)
+    bodies = [body for body in root.find_all('div', class_='field--name-body', recursive=False)
+              if 'field--type-text-with-summary' in body.get('class', []) and editorial(body)]
+    if (heading and editorial(heading) and ' '.join(heading.get_text().split()) == ' '.join(title.split())
+            and len(bodies) == 1 and bodies[0].get_text(strip=True)):
+        return heading, bodies[0]
+    return None
+
+
+def harvard_writer_link(body, url):
+    from bs4 import NavigableString
+
+    label = body.next_sibling
+    link = label.next_sibling if isinstance(label, NavigableString) and str(label).strip() == 'by' else None
+    if getattr(link, 'name', None) == 'a' and editorial(link):
+        person = url_identity(link.get('href'), url)
+        name = ' '.join(link.get_text().split())
+        if (person and person[1] in HARVARD_HOSTS and re.fullmatch(r'/writer/[^/]+', person[2])
+                and '@' not in name and 0 < len(name) <= 100):
+            return link, name
+    return None
+
+
+def harvard_feed_writer(html, url, title):
+    identity = url_identity(url)
+    if not identity or identity[1] not in HARVARD_HOSTS:
+        return ''
+    from bs4 import BeautifulSoup
+
+    fields = harvard_feed_body(BeautifulSoup(html, 'html.parser'), url, title)
+    if fields and (writer := harvard_writer_link(fields[1], url)):
+        return writer[1]
+    return ''
+
+
+def remove_outside_newsletter(body, url):
+    """Discard the end-of-story newsletter template in the page or feed."""
+    paragraph = body.find_all('p', recursive=False)
+    if not paragraph:
+        return
+    paragraph = paragraph[-1]
+    if not editorial(paragraph) or any(
+            (sibling.get_text(strip=True) if getattr(sibling, 'name', None) else str(sibling).strip())
+            for sibling in paragraph.next_siblings):
+        return
+    links = paragraph.select('a[href]')
+    if (len(links) == 2
+            and ' '.join(paragraph.get_text().split()).startswith('Want more Outside health stories?')
+            and [url_identity(link['href'], url) for link in links] == [
+                url_identity('https://hub.outsideinc.com/bodywork_newsletter_sign_up-0'),
+                url_identity('https://www.outsideonline.com/newsletters/sweat-science-101/')]
+            and [' '.join(link.get_text().split()).casefold() for link in links] ==
+            ['sign up for the bodywork newsletter', 'sign up for the sweat science 101 newsletter']):
+        paragraph.decompose()
+
+
+def outside_account_name(name, url):
+    """Outside's RSS sometimes puts a WordPress login in the creator field."""
+    identity = url_identity(url)
+    return (identity and identity[1] in OUTSIDE_HOSTS and isinstance(name, str)
+            and re.fullmatch(r'[a-z][a-z0-9_.-]*', name) is not None)
+
+
 def earth_observatory_url(url):
     identity = url_identity(url)
     return bool(identity and identity[1] in {'science.nasa.gov', 'www.nasa.gov', 'nasa.gov'}
@@ -76,6 +148,23 @@ def remove_openculture_endmatter(body, url):
 
 
 def clean_imported_widgets(root, url, title=''):
+    if fields := harvard_feed_body(root, url, title):
+        heading, body = fields
+        if writer := harvard_writer_link(body, url):
+            link, _ = writer
+            link.previous_sibling.extract()
+            link.decompose()
+        heading.decompose()
+        for widget in list(root.find_all(['div', 'span'], recursive=False)):
+            classes = set(widget.get('class', []))
+            if classes & {'field--name-uid', 'field--name-created', 'field--name-field-full-header-section',
+                          'field--name-field-slug', 'field--name-field-hero-image'} and not widget.find('figcaption'):
+                widget.decompose()
+            elif 'field--name-field-external-description' in classes:
+                label = widget.find(class_='field__label', recursive=False)
+                if label:
+                    label.decompose()
+                    body.insert_before(widget.extract())
     if earth_observatory_url(url):
         credits = [images for _, images, _ in earth_credits(root, url)]
         widgets = (
