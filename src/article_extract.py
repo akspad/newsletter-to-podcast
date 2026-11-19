@@ -4,7 +4,7 @@ from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
-from imported_content import remove_openculture_endmatter
+from imported_content import HARVARD_HOSTS, OUTSIDE_HOSTS, remove_openculture_endmatter, remove_outside_newsletter
 from tts import speech_text
 
 
@@ -335,7 +335,24 @@ def clean_tree(root, title, author, url=''):
         for heading in root.select('article > section.maincontent > h3.invis'):
             if heading.get_text(strip=True) == 'Article body copy':
                 heading.decompose()
+    if identity and identity[1] in OUTSIDE_HOSTS:
+        for body in root.select('.article-template .js-body-content > .content-wrap.fp-contentTarget'):
+            if not editorial(body):
+                continue
+            remove_outside_newsletter(body, url)
+            for ad in body.select(':scope > .ad-placeholder-wrapper'):
+                if ad.get_text(' ', strip=True).casefold() == 'advertisement':
+                    ad.decompose()
+            for stamp in body.select(':scope > .article-body > .pub-date'):
+                if stamp.get_text(strip=True).startswith('Published '):
+                    stamp.decompose()
+            credit = body.parent.select_one(
+                ':scope > .article-header > div:has(> img) > p.fp-leadCaption')
+            if credit and editorial(credit):
+                body.insert(0, credit.extract())
     caption_selectors = {
+        **dict.fromkeys(HARVARD_HOSTS,
+                        '.block-field-blocknodearticlebody > .field--name-body figure.caption.caption-img > figcaption'),
         'theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',
         'www.theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',
         'hakaimagazine.com': '.maincontent > div.wp-caption > p.wp-caption-text',
@@ -595,6 +612,10 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
         elif identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'} and scope.name == 'article':
             body_selector = ':scope > section.maincontent'
+        elif identity[1] in HARVARD_HOSTS and match('article.node--type-article', scope):
+            body_selector = '.block-field-blocknodearticlebody > .field--name-body.field--type-text-with-summary'
+        elif identity[1] in OUTSIDE_HOSTS:
+            body_selector = '.article-template .js-body-content > .content-wrap.fp-contentTarget'
         elif identity[1] == 'www.internetsociety.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':

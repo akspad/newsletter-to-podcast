@@ -17,7 +17,10 @@ from pathlib import Path
 import security
 from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_resolved_footnote_backlinks, url_identity
-from imported_content import clean_imported_widgets, earth_observatory_writer
+from imported_content import (
+    OUTSIDE_HOSTS, clean_imported_widgets, earth_observatory_writer, harvard_feed_writer,
+    outside_account_name, remove_outside_newsletter,
+)
 
 # Substack sits behind Cloudflare, which challenges non-browser TLS fingerprints;
 # curl_cffi impersonates Chrome (including its user agent).
@@ -420,7 +423,8 @@ class Substack:
             if not link and guid_node is not None and guid_node.get('isPermaLink', 'true').strip().casefold() == 'true':
                 link = feed_url(guid)  # Opaque or malformed GUIDs remain identities only.
             html = item.findtext("content:encoded", namespaces=ns) or item.findtext(prefix + 'description', namespaces=ns) or ""
-            text = html_to_text(html, title=item.findtext(prefix + 'title', namespaces=ns) or '', url=link)
+            title = item.findtext(prefix + 'title', namespaces=ns) or ''
+            text = html_to_text(html, title=title, url=link)
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
             if published is None:
                 continue  # undated entries cannot be filtered reliably by lookback
@@ -428,10 +432,11 @@ class Substack:
                 # No optional GUID/link: fingerprint the content, independent of
                 # feed order and HTML layout, rather than hashing the empty string.
                 guid = 'rss-fallback:' + json.dumps([
-                    item.findtext(prefix + 'title', namespaces=ns) or '',
+                    title,
                     published.astimezone(timezone.utc).isoformat(), ' '.join(text.split())], ensure_ascii=False)
             enclosure = item.find("enclosure")
             bylines = [node.text.strip() for node in item.findall('dc:creator', ns) if node.text and node.text.strip()]
+            bylines = [name for name in bylines if not outside_account_name(name, link)]
             if not bylines:
                 for node in item.findall('author'):
                     value = (node.text or '').strip()
@@ -439,12 +444,14 @@ class Substack:
                     name = name.strip() or (value if '@' not in value else '')
                     if name and name not in bylines:
                         bylines.append(name)
-            if not bylines and (writer := earth_observatory_writer(html, link)):
+            if writer := harvard_feed_writer(html, link, title):
+                bylines = [writer]
+            elif not bylines and (writer := earth_observatory_writer(html, link)):
                 bylines = [writer]
             posts.append({
                 "id": int(hashlib.sha1(guid.encode()).hexdigest()[:10], 16),
                 "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
-                "title": item.findtext(prefix + 'title', namespaces=ns) or "",
+                "title": title,
                 "post_date": published.isoformat(),
                 "podcast_url": feed_url(enclosure.get("url"), base_url) if enclosure is not None and enclosure.get("type", "").startswith("audio/") else None,
                 "canonical_url": link,
@@ -583,11 +590,18 @@ class Substack:
             if not isinstance(post['body_html'], str):
                 raise ExtractionError('invalid_article_body')
             set_extraction_step('convert_html')
-            if not post.get('publishedBylines') and (writer := earth_observatory_writer(
-                    post['body_html'], post.get('canonical_url', ''))):
+            url, title = post.get('canonical_url', ''), post.get('title', '')
+            writer = harvard_feed_writer(post['body_html'], url, title) if pub.get('rss') else ''
+            if not writer and not post.get('publishedBylines'):
+                writer = earth_observatory_writer(post['body_html'], url)
+            if writer:
                 post = {**post, 'publishedBylines': [{'name': writer}]}
-            return post, html_to_text(post["body_html"], title=post.get("title", ""),
-                                      url=post.get("canonical_url", ""))
+            elif pub.get('rss') and post.get('publishedBylines'):
+                bylines = [byline for byline in post['publishedBylines']
+                           if not outside_account_name(byline.get('name', ''), url)]
+                if len(bylines) != len(post['publishedBylines']):
+                    post = {**post, 'publishedBylines': bylines}
+            return post, html_to_text(post["body_html"], title=title, url=url)
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
         set_extraction_step('validate_response')
         if not isinstance(full, dict):
@@ -641,6 +655,8 @@ def html_to_text(html: str, *, title='', url='') -> str:
                                  for node in paragraph.next_elements)
             if not following_text:
                 paragraph.decompose()
+    if identity and identity[1] in OUTSIDE_HOSTS:
+        remove_outside_newsletter(soup, url)
     # Collapse source formatting whitespace without inserting gaps between
     # inline word parts. Comments and doctypes must keep their non-text types.
     for node in list(soup.find_all(string=True)):

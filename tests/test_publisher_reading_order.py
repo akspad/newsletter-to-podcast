@@ -18,6 +18,97 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_harvard_preview_keeps_the_inline_caption_and_linked_scores_in_order(self):
+        html = f"""<article class="node--type-article"><h1>Seed trials</h1>
+        <div class="block-field-blocknodearticlebody"><div class="field--name-body field--type-text-with-summary">
+        <p>{FIRST}</p><figure class="caption caption-img"><img src="/tray.jpg">
+        <figcaption><strong>Seed tray</strong> | Photograph by Ash</figcaption></figure>
+        <p>Short result.</p><p>{LAST}</p><p><a href="/results">Earlier results</a></p></div></div>
+        <aside><figure class="caption caption-img"><img src="/sidebar.jpg">
+        <figcaption>Advertisement caption</figcaption></figure></aside></article>"""
+        _, body = narrate('https://www.harvardmagazine.com/seed-trials', html)
+        self.assertEqual(body, f'{FIRST} Seed tray | Photograph by Ash Short result. {LAST} Earlier results')
+
+    def test_harvard_rss_uses_the_exported_writer_and_removes_only_template_fields(self):
+        url = 'https://www.harvardmagazine.com/seed-trials'
+        html = f"""<span class="field--name-title">Seed trials</span>
+        <span class="field--name-uid">Uploader</span><span class="field--name-created">Posted Tuesday</span>
+        <div class="field--name-body field--type-text-with-summary"><p>{FIRST}</p>
+        <figure><figcaption>A tray after rain.</figcaption></figure>
+        <p>Hero image is the term we used in the experiment.</p><p>{LAST}</p></div>
+        by <a href="/writer/lee">Lee Writer</a>
+        <div class="field--name-field-external-description"><div class="field__label">Subhead (Required)</div>
+        <div class="field__item">What the seedlings showed.</div></div>
+        <div class="field--name-field-full-header-section">Deprecated header setting</div>
+        <div class="field--name-field-hero-image">tray.webp</div>
+        <div class="field--name-field-slug">Page Slug (Required)</div><p>Corrections added Tuesday.</p>"""
+        xml = f"""<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item>
+        <title>Seed trials</title><link>{url}</link><guid>trial-1</guid>
+        <pubDate>Wed, 18 Nov 2026 13:57:06 GMT</pubDate>
+        <dc:creator>uploader@example.test</dc:creator>
+        <description><![CDATA[{html}]]></description></item></channel></rss>"""
+        sub = Substack('')
+        pub = {'base': 'https://www.harvardmagazine.com/rss.xml', 'rss': True}
+        with patch.object(sub, 'get', return_value=xml):
+            post, = sub.recent_posts(pub)
+        self.assertEqual(post['publishedBylines'], [{'name': 'Lee Writer'}])
+        cached = {**post, 'publishedBylines': [{'name': 'uploader@example.test'}]}
+        full, body = sub.post_text(pub, cached)
+        self.assertEqual(full['publishedBylines'], post['publishedBylines'])
+        self.assertEqual(cached['publishedBylines'], [{'name': 'uploader@example.test'}])
+        self.assertEqual(body.splitlines(), [
+            'What the seedlings showed.', FIRST, 'A tray after rain.',
+            'Hero image is the term we used in the experiment.', LAST, 'Corrections added Tuesday.',
+        ])
+        for other_url, other_title in ((url, 'Other title'), ('https://example.test/seed-trials', 'Seed trials')):
+            with self.subTest(url=other_url, title=other_title):
+                self.assertIn('Page Slug (Required)', html_to_text(html, title=other_title, url=other_url))
+
+    def test_outside_keeps_headings_short_prose_and_photo_credit_but_drops_promotions(self):
+        url = 'https://www.outsideonline.com/health/wellness/seed-trials/'
+        footer = """<p><b>Want more <i>Outside</i> health stories?</b>
+        <a href="https://hub.outsideinc.com/bodywork_newsletter_sign_up-0">Sign up for the Bodywork newsletter</a>.
+        <a href="/newsletters/sweat-science-101/?utm_source=article">Sign up for the Sweat Science 101 newsletter</a>.</p>"""
+        body = f"""<p>{FIRST}</p><h2>How we counted</h2><h3>1. Start at dawn</h3><p>Short result.</p>
+        <blockquote>{footer}</blockquote><p>{LAST}</p>"""
+        html = f"""<head><meta name="author" content="Lee Writer"></head>
+        <div class="article-template"><div class="js-body-content"><div class="article-header"><h1>Seed trials</h1>
+        <div><img src="/tray.jpg"><p class="fp-leadCaption">Photograph by Ash.</p></div></div>
+        <div class="content-wrap fp-contentTarget"><div class="article-body"><div class="pub-date">Published today</div></div>
+        <div class="ad-placeholder-wrapper">ADVERTISEMENT</div>{body}{footer}<span></span></div>
+        <div class="article-bottom"><h2>More coverage</h2></div></div></div>"""
+        intro, preview_body = narrate(url, html)
+        self.assertIn('By Lee Writer.', intro)
+        self.assertTrue(preview_body.startswith(f'Photograph by Ash. {FIRST} How we counted 1. Start at dawn Short result.'))
+        rss_body = html_to_text(
+            body + footer + f'<p>The post <a href="{url}">Seed trials</a> appeared first on '
+            '<a href="https://www.outsideonline.com">Outside Online</a>.</p>', title='Seed trials', url=url)
+        for text in (preview_body, rss_body):
+            self.assertEqual(text.count('Want more Outside health stories?'), 1)
+            self.assertIn('1. Start at dawn', text)
+            self.assertTrue(text.endswith(LAST))
+            for excluded in ('ADVERTISEMENT', 'Published today', 'More coverage', 'appeared first'):
+                self.assertNotIn(excluded, text)
+        self.assertEqual(html_to_text(body + footer + '<p>Closing note.</p>', url=url).count('Want more'), 2)
+
+    def test_outside_rss_treats_a_login_as_missing_byline_and_keeps_display_names(self):
+        pub = {'base': 'https://www.outsideonline.com/feed/', 'rss': True}
+        sub = Substack('')
+        for creator, host, expected in (
+                ('loadingeditor', 'www.outsideonline.com', []),
+                ('Lee Writer', 'www.outsideonline.com', [{'name': 'Lee Writer'}]),
+                ('loadingeditor', 'example.test', [{'name': 'loadingeditor'}])):
+            with self.subTest(creator=creator, host=host):
+                xml = f"""<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item>
+                <title>Seed trials</title><link>https://{host}/seed-trials/</link>
+                <pubDate>Wed, 18 Nov 2026 13:57:06 GMT</pubDate><dc:creator>{creator}</dc:creator>
+                <description><![CDATA[<p>{FIRST}</p>]]></description></item></channel></rss>"""
+                with patch.object(sub, 'get', return_value=xml):
+                    post, = sub.recent_posts(pub)
+                self.assertEqual(post['publishedBylines'], expected)
+                cached = {**post, 'publishedBylines': [{'name': creator}]}
+                self.assertEqual(sub.post_text(pub, cached)[0]['publishedBylines'], expected)
+
     def test_guardian_credits_the_visible_author_and_retains_only_inline_caption(self):
         html = f"""<head><meta name="author" content="Staff reporter"></head><article><h1>Seed trials</h1>
         <aside data-gu-name="meta"><address data-component="meta-byline" data-gu-name="byline">
