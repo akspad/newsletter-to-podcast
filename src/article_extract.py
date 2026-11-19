@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
     remove_openculture_endmatter, remove_outside_newsletter, wyofile_feature,
@@ -374,7 +374,42 @@ def clean_tree(root, title, author, url=''):
                 ':scope > .article-header > div:has(> img) > p.fp-leadCaption')
             if credit and editorial(credit):
                 body.insert(0, credit.extract())
+    if identity and identity[1] in {'smashingmagazine.com', 'www.smashingmagazine.com'}:
+        for caption in root.select('.c-garfield-the-cat > figure > figcaption'):
+            if not editorial(caption):
+                continue
+            # A positioning class makes density pruning treat the detached
+            # caption as overlay text even after its figure is gone.
+            if 'op-vertical-bottom' in caption.get('class', []):
+                caption['class'].remove('op-vertical-bottom')
+            image_link = caption.parent.select_one(':scope > a[href]:has(> img)')
+            if not image_link:
+                continue
+            image = url_identity(image_link['href'], url)
+            for link in caption.select(':scope > a[href]'):
+                before, after = link.previous_sibling, link.next_sibling
+                if (image and url_identity(link['href'], url) == image and link.get_text(strip=True) == 'Large preview'
+                        and isinstance(before, str) and before.rstrip().endswith('(')
+                        and isinstance(after, str) and after.strip() == ')' and after.next_sibling is None):
+                    before.replace_with(before.rstrip()[:-1].rstrip())
+                    after.extract()
+                    link.decompose()
+    if identity and identity[1] == 'zed.dev' and identity[2].startswith('/blog/'):
+        for caption in root.select('main article > a[href] > button.cursor-zoom-in > figure:has(> img) > figcaption'):
+            if editorial(caption):
+                zoom_link = caption.parent.parent.parent
+                caption.name = 'p'
+                zoom_link.insert_before(caption.extract())
+        for widget in root.select('main article > div.flex.flex-col.gap-5:last-of-type > div:has(> h3)'):
+            heading = widget.find('h3', recursive=False)
+            prompt = heading.find_next_sibling()
+            if (heading.get_text(strip=True) == 'Related Posts' and prompt and prompt.name == 'p'
+                    and prompt.get_text(strip=True) == 'Check out similar blogs from the Zed team.'
+                    and widget.select_one('a[href^="/blog/"]')):
+                widget.decompose()
     caption_selectors = {
+        **dict.fromkeys({'smashingmagazine.com', 'www.smashingmagazine.com'},
+                        '.c-garfield-the-cat > figure:has(img) > figcaption'),
         **dict.fromkeys(WYOFILE_HOSTS, 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption, '
                         'article > .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
         **dict.fromkeys(COLOSSAL_HOSTS, 'article .entry-content > .entry-header '
@@ -648,6 +683,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.block-field-blocknodearticlebody > .field--name-body.field--type-text-with-summary'
         elif identity[1] in OUTSIDE_HOSTS:
             body_selector = '.article-template .js-body-content > .content-wrap.fp-contentTarget'
+        elif identity[1] in STRONG_TOWNS_HOSTS and identity[2].startswith('/journal/'):
+            body_selector = '.thought-leadership_wrap .mast-article-rich-text.w-richtext'
         elif (identity[1] == 'buttondown.com' and '/archive/' in identity[2]
               and match('article.email-body', scope)):
             body_selector = ':scope > .email-body-content'
