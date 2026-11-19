@@ -59,6 +59,20 @@ def url_identity(value, base=''):
         return None
 
 
+def plover_story_title(soup, url):
+    """Find the story heading selected by a Plover permalink or archive fragment."""
+    identity = url_identity(url)
+    if not identity or identity[1] != 'blog.plover.com':
+        return None
+    fragment = unquote(urlsplit(url).fragment)
+    for link in soup.select('.mainsection > p > a.storytitle[href]'):
+        matched = (link.get('name') == fragment if fragment else url_identity(link['href'], url) == identity)
+        section = link.parent.parent
+        if matched and editorial(link) and len(section.select(':scope > p > a.storytitle')) == 1:
+            return link
+    return None
+
+
 def remove_resolved_footnote_backlinks(root, url=''):
     """Remove unmarked return controls only after verifying both footnote links."""
     identity = url_identity(url)

@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
 from imported_content import earth_observatory_writer
-from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, url_identity
+from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, url_identity
 
 
 def clean(value, limit=160):
@@ -249,6 +249,12 @@ def article_details(soup, url):
                    labels.get('title') or next(iter(preferred_headings or headings), None))
     title = clean(heading_text(heading) if heading else '') or structured or social or page_title
     title = strip_suffix(title)
+    plover_title = plover_story_title(soup, url)
+    if plover_title:
+        title = clean(heading_text(plover_title)) or title
+        masthead = soup.select_one('h1.pagetitle')
+        if masthead and editorial(masthead):
+            publication = clean(heading_text(masthead), 80) or publication
 
     scope = article_scope(soup, title, url)
     diary_author = ''
@@ -360,6 +366,18 @@ def article_details(soup, url):
             '.devsite-article-body > p > .wd-authors > .wd-author > div > span:first-child')
             if belongs_to_scope(node, scope)]
         visible_authors = ', '.join(dict.fromkeys(filter(None, author_names))) or visible_authors
+    if requested and requested[1] in {'theguardian.com', 'www.theguardian.com'}:
+        credit = scope.select_one('address[data-component="meta-byline"][data-gu-name="byline"]')
+        if credit and credit.find_parent('article') is scope:
+            # The publisher puts its article byline inside the metadata aside.
+            visible_credit = ' '.join(str(text) for text in credit.strings
+                                      if not any(explicitly_hidden(node) for node in text.parents))
+            visible_authors = clean(visible_credit) or visible_authors
+    if requested and requested[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'}:
+        writers = [clean(visible_text(link)) for link in scope.select(
+            'header > .singlebyline > a[id="author_link_top"][href*="/profiles/"]')
+            if belongs_to_scope(link, scope)]
+        visible_authors = ', '.join(dict.fromkeys(filter(None, writers))) or visible_authors
     author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
     if not author and pypi_post:
