@@ -366,6 +366,19 @@ def clean_tree(root, title, author, url=''):
                 # content. Move the caption text before image pruning.
                 image.insert_before(caption.extract())
                 caption.unwrap()
+    if identity and identity[1] == 'creativecommons.org':
+        for body in root.select('body.blog-post main > .content'):
+            cover = body.parent.select_one(':scope > header > figure:has(img) > figcaption')
+            if cover and editorial(cover) and editorial(body):
+                cover.name = 'div' if cover.find('p') else 'p'
+                body.insert(0, cover.extract())
+    if identity and identity[1] in {'bbc.com', 'www.bbc.com', 'bbc.co.uk', 'www.bbc.co.uk'} and identity[2].startswith('/news/'):
+        for image in root.select('main article [data-testid="image"] > figure:has(img)'):
+            caption = image.find('figcaption', recursive=False)
+            if caption and editorial(caption):
+                for line in caption.find_all('p'):
+                    if editorial(line):
+                        image.parent.insert_before(line.extract())
     if identity and identity[1] in {'quantamagazine.org', 'www.quantamagazine.org'}:
         for figure in root.select('main .post > .has-tombstone > figure:has(img)'):
             caption = figure.find('figcaption', recursive=False)
@@ -808,6 +821,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.article-template .js-body-content > .content-wrap.fp-contentTarget'
         elif identity[1] in STRONG_TOWNS_HOSTS and identity[2].startswith('/journal/'):
             body_selector = '.thought-leadership_wrap .mast-article-rich-text.w-richtext'
+        elif identity[1] == 'creativecommons.org' and scope.name == 'main' and match('body.blog-post main', scope):
+            body_selector = ':scope > .content'
         elif (identity[1] == 'buttondown.com' and '/archive/' in identity[2]
               and match('article.email-body', scope)):
             body_selector = ':scope > .email-body-content'

@@ -19,6 +19,24 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_cc_keeps_the_image_attribution_separately_from_page_license_boilerplate(self):
+        html = f"""<body class="blog-post"><title>Seed trials</title><main><header><h1>Seed trials</h1>
+        <figure><img src="/cover"><figcaption><p>Trial photos by Lee — <a href="/licenses/by/4.0/">CC BY 4.0</a>.</p>
+        </figcaption></figure></header><div class="content"><p>{FIRST}</p><p>{LAST}</p>
+        <div class="cc-attribution"><p>The text in this work is licensed under a Creative Commons
+        <a href="https://creativecommons.org/licenses/by/4.0/">license</a>.</p></div>
+        </div><article class="posts related"><p>Another story.</p></article></main></body>"""
+        self.assertEqual(narrate('https://creativecommons.org/2026/11/seed-trials/', html)[1],
+                         f'Trial photos by Lee — CC BY 4.0. {FIRST} {LAST}')
+
+    def test_bbc_keeps_editorial_caption_without_the_screen_reader_prefix(self):
+        html = f"""<main><article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <div data-testid="image"><figure><img src="/cover"><figcaption>
+        <span class="visually-hidden">Image caption, </span><div><p>Putting the plots in order.</p></div>
+        </figcaption></figure></div><p>{LAST}</p></div></article></main>"""
+        self.assertEqual(narrate('https://www.bbc.com/news/articles/seed-trials', html)[1],
+                         f'{FIRST} Putting the plots in order. {LAST}')
+
     def test_filfre_rejects_a_link_only_post_without_filling_it_with_sidebar_text(self):
         url = 'https://www.filfre.net/2026/11/seed-trials/'
         html = f"""<title>Seed trials</title><link rel="canonical" href="{url}">
