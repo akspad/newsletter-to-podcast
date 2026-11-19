@@ -224,6 +224,9 @@ def article_details(soup, url):
     react_post = requested and requested[1] == 'react.dev' and requested[2].startswith('/blog/')
     if react_post and page_label.endswith(' – React'):
         publication = 'React'
+    if (requested and requested[1] in STRONG_TOWNS_HOSTS and requested[2].startswith('/journal/')
+            and publication == 'strongtowns.org' and page_label.endswith(' | Strong Towns')):
+        publication = 'Strong Towns'
     if requested and requested[1] == 'blog.archive.org':
         masthead = soup.select_one('header .site-title > a[rel~="home"][href]')
         if masthead and editorial(masthead) and url_identity(masthead['href'], url) == requested[:2] + ('', ()):

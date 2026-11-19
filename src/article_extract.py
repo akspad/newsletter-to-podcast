@@ -624,6 +624,8 @@ def clean_tree(root, title, author, url=''):
                     seen.add(label)
     caption_selectors = {
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
+        **dict.fromkeys(STRONG_TOWNS_HOSTS, '.thought-leadership_wrap .mast-article-rich-text '
+                        '> figure.w-richtext-figure-type-image > figcaption'),
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '

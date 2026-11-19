@@ -466,19 +466,22 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertIn(LAST, body)
 
     def test_strong_towns_uses_authors_beside_matching_headline_and_ignores_bio_card(self):
-        html = f"""<title>Seed trials</title><main><div class="thought-leadership_wrap">
+        html = f"""<title>Seed trials | Strong Towns</title><main><div class="thought-leadership_wrap">
         <section><div class="mast-col"><div class="heading-component"><h1>Seed trials</h1></div>
         <div class="w-dyn-list"><div class="w-dyn-items">
         <div class="w-dyn-item"><div class="mast-paragraph"><div>Lee Writer</div></div></div>
         <div hidden class="w-dyn-item"><div class="mast-paragraph"><div>Hidden Author</div></div></div>
         <div class="w-dyn-item"><div class="mast-paragraph"><div>Ash Gardener</div></div></div>
         </div></div></div></section>
-        <section><div class="mast-article-rich-text w-richtext"><p>{FIRST}</p><h2>Results</h2><p>{LAST}</p>
+        <section><div class="mast-article-rich-text w-richtext"><p>{FIRST}</p><h2>Results</h2>
+        <figure class="w-richtext-figure-type-image"><img src="tray"><figcaption>Two trays outside.</figcaption></figure>
+        <figure hidden class="w-richtext-figure-type-image"><img src="archived"><figcaption>Hidden caption.</figcaption></figure>
+        <p>{LAST}</p>
         <p>More next week.</p></div><div class="mast-card"><p>Lee Writer publishes across the country.</p></div>
         </section></div></main>"""
         intro, body = narrate('https://www.strongtowns.org/journal/seed-trials', html)
-        self.assertTrue(intro.endswith('By Lee Writer, Ash Gardener.'), intro)
-        self.assertEqual(body, f'{FIRST} Results {LAST} More next week.')
+        self.assertEqual(intro, 'Strong Towns. Seed trials. By Lee Writer, Ash Gardener.')
+        self.assertEqual(body, f'{FIRST} Results Two trays outside. {LAST} More next week.')
 
     def test_zed_zoom_caption_survives_and_only_related_widget_prompt_is_removed(self):
         html = f"""<main><article class="entry-content"><h1>Seed trials</h1><p>{FIRST}</p>
