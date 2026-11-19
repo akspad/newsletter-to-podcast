@@ -451,6 +451,24 @@ def clean_imported_widgets(root, url, title=''):
         clean_jstor_pull_quotes(root)
     if identity and identity[1] == 'www.bgs.ac.uk':
         remove_bgs_related_news(root)
+    if identity and identity[1] == 'creativecommons.org':
+        for listing in root.find_all('article', class_='posts', recursive=False):
+            cards = listing.select(':scope > ul > li > article.post')
+            links = [card.select_one(':scope > header > h3.title > a[href]') for card in cards]
+            targets = {url_identity(link['href'], url) for link in links if link}
+            if (len(targets) > 1 and identity in targets and all(link is not None for link in links)
+                    and all(target and target[:2] == identity[:2] for target in targets)
+                    and len(listing.find_all(recursive=False)) == 1
+                    and all(all(child.name in {'header', 'figure'} for child in card.find_all(recursive=False))
+                            for card in cards)):
+                listing.decompose()
+    if identity and identity[1] == 'science.nasa.gov' and identity[2].startswith('/image-article/apod-'):
+        match = re.fullmatch(r'APOD: \d{4} \w+ \d{1,2} [–—-] (.+)', title)
+        if match:
+            for hero in root.find_all('div', class_='wp-block-nasa-blocks-media-detail-hero', recursive=False):
+                heading = hero.select_one(':scope > .grid-container > h1')
+                if heading and heading_text(heading) == match[1]:
+                    heading.decompose()
     if identity and identity[1] == 'science.nasa.gov' and identity[2].startswith('/missions/webb/'):
         clean_webb_rss(root, title)
     if identity and identity[1] in {'aeon.co', 'www.aeon.co'}:

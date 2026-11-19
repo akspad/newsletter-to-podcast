@@ -19,6 +19,36 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_w3c_reads_editorial_images_without_importing_sidebar_captions(self):
+        html = f'''<body class="post"><main id="main"><div class="content"><article><h1>Seed trials</h1>
+        <div class="sub-head">Part of <a href="/blog/category/gardens/">Gardens</a></div>
+        <section class="meta"><dl><dt>Published:</dt><dd><time datetime="2026-11-19">Today</time></dd></dl></section>
+        <figure class="component component--image">
+        <img src="/tray"><figcaption><p>The seed tray at the event.</p></figcaption></figure>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div>
+        <aside><figure class="component component--image"><img src="/ad"><figcaption>
+        Unrelated image.</figcaption></figure></aside></article></div></main></body>'''
+        _, text = narrate('https://www.w3.org/blog/2026/seed-trials/', html)
+        self.assertEqual(text, f'The seed tray at the event. {FIRST} {LAST}')
+
+    def test_creative_commons_omits_feed_series_cards_and_keeps_article_sections(self):
+        url = 'https://creativecommons.org/2026/11/19/seed-trials/'
+        cards = f'''<article class="posts"><ul>
+        <li><article class="post"><header><h3 class="title"><a href="{url}">Seed trials</a></h3></header></article></li>
+        <li><article class="post"><header><h3 class="title"><a href="/2026/11/20/another-trial/">
+        Another trial</a></h3></header></article></li></ul></article>'''
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>{cards}<p>{LAST}</p>', url=url), f'{FIRST}\n{LAST}')
+        editorial = cards.replace('</header></article>', '</header><p>Further observations.</p></article>', 1)
+        self.assertIn('Further observations.', html_to_text(editorial, url=url))
+
+    def test_nasa_apod_feed_omits_its_repeated_hero_title_and_keeps_caption(self):
+        url = 'https://science.nasa.gov/image-article/apod-2026-november-19-seed-trials/'
+        title = 'APOD: 2026 November 19 – Seed trials'
+        body = f'''<div class="wp-block-nasa-blocks-media-detail-hero"><div class="grid-container">
+        <h1>Seed trials</h1><p>{FIRST}</p></div></div><p>{LAST}</p>'''
+        self.assertEqual(html_to_text(body, title=title, url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Seed trials', html_to_text(body, title='Other title', url=url))
+
     def test_universal_hub_uses_the_confirmed_reprint_byline_and_skips_feed_controls(self):
         credit = ('<p><em>This article is republished from The Conversation. It was written by: '
                   '<a href="https://theconversation.com/profiles/lee">Lee Writer</a>.</em></p>')

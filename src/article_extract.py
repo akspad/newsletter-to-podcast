@@ -230,6 +230,15 @@ def clean_tree(root, title, author, url=''):
     if identity and identity[1] == 'www.bgs.ac.uk':
         for main in root.select('main'):
             remove_bgs_related_news(main)
+    if identity and identity[1] == 'www.w3.org' and identity[2].startswith('/blog/'):
+        layout = 'body.post main#main > .content > article'
+        for section in root.select(layout + ' > section.meta:has(time[datetime])'):
+            labels = [item.get_text(strip=True) for item in section.select(':scope > dl > dt')]
+            if labels and all(label in {'By:', 'Published:', 'Updated:'} for label in labels):
+                section.decompose()
+        for category in root.select(layout + ' > .sub-head:has(a[href^="/blog/category/"])'):
+            if category.get_text(' ', strip=True).startswith('Part of '):
+                category.decompose()
     if identity and identity[1] in {'reason.com', 'www.reason.com'} and identity[2].startswith('/volokh/'):
         for article in root.select('article.volokh-post'):
             permalink = article.select_one(':scope > header > h2.entry-title > a[href]')
@@ -687,6 +696,7 @@ def clean_tree(root, title, author, url=''):
                     seen.add(label)
     caption_selectors = {
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
+        'www.w3.org': 'article > figure.component.component--image > figcaption',
         **dict.fromkeys(STRONG_TOWNS_HOSTS, '.thought-leadership_wrap .mast-article-rich-text '
                         '> figure.w-richtext-figure-type-image > figcaption'),
         **dict.fromkeys({'hyperallergic.com', 'www.hyperallergic.com'}, 'article.gh-article > section.gh-content.is-body '
@@ -1030,6 +1040,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = 'section.white[id] > div > div.post'
         elif identity[1] in {'jvns.ca', 'www.jvns.ca'} and identity[2].startswith('/blog/') and match('article.hentry', scope):
             body_selector = ':scope > main'
+        elif identity[1] == 'www.w3.org' and identity[2].startswith('/blog/') and match('body.post main#main > .content > article', scope):
+            candidates = [scope]
         elif identity[1] in {'eff.org', 'www.eff.org'} and identity[2].startswith('/deeplinks/') and match('article.node--blog--full', scope):
             body_selector = ':scope > .node__content > .field--name-body > .field__items > .field__item'
         elif identity[1] in {'openculture.com', 'www.openculture.com'}:
