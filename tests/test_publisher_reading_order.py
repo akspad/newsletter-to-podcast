@@ -18,6 +18,19 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_sapiens_keeps_image_footers_with_their_caption_and_credit(self):
+        figure = """<figure class="c-image-video"><img src="/photo"><footer class="c-image-video__footer">
+        <div class="c-media-caption"><p>A field study.</p></div>
+        <div class="c-media-credits"><a href="/artist">Photo by Ash.</a></div>
+        </footer></figure>"""
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content c-article-content">
+        <div class="m-article-img-header">{figure}</div><p>{FIRST}</p>
+        <div class="m-image-video">{figure.replace('A field study.', 'A second tray.')}</div>
+        <div class="m-image-video" hidden>{figure}</div><p>{LAST}</p>
+        <footer><p>Email the editors</p></footer></div></article>"""
+        _, body = narrate('https://www.sapiens.org/culture/seed-trials/', html)
+        self.assertEqual(body.split(), f'A field study. Photo by Ash. {FIRST} A second tray. Photo by Ash. {LAST}'.split())
+
     def test_longreads_omits_newspack_recommendations_and_keeps_the_editorial_heading(self):
         html = f"""<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
         <h2 class="article-section-title">More picks from the greenhouse</h2><p>{LAST}</p>

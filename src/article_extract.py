@@ -300,6 +300,17 @@ def clean_tree(root, title, author, url=''):
         for widget in root.select('.entry-content section.content-widget.pw-incontent-excluded'):
             if widget.select_one('a[href*="/home-of-the-future-awards-"]'):
                 widget.decompose()
+    if identity and identity[1] in {'sapiens.org', 'www.sapiens.org'}:
+        # SAPIENS puts its editorial caption and photo credit in a figure footer.
+        for footer in root.select('.c-article-content :is(.m-article-img-header, .m-image-video) '
+                                  '> figure.c-image-video > footer.c-image-video__footer:has(> .c-media-caption)'):
+            figure = footer.parent
+            if editorial(figure) and figure.find('img'):
+                footer.name = 'p'
+                footer.attrs = {}
+                labels = footer.select(':scope > .c-media-caption, :scope > .c-media-credits')
+                footer.string = ' '.join(label.get_text().strip() for label in labels)
+                figure.parent.insert_before(footer.extract())
     caption_selectors = {
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
