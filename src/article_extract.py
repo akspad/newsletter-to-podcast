@@ -262,6 +262,14 @@ def clean_tree(root, title, author, url=''):
             if editorial(link):
                 link.unwrap()
     if identity and identity[1] in {'theconversation.com', 'www.theconversation.com'}:
+        for article in root.select('article#article'):
+            bodies = article.select('.entry-content.content-body')
+            captions = article.select(':scope > figure.magazine:has(img) > .caption-wrapper > figcaption:has(> .attribution)')
+            if len(bodies) == len(captions) == 1 and editorial(bodies[0]) and editorial(captions[0]):
+                caption = captions[0]
+                caption.name = 'p'
+                caption.string = ' '.join(caption.stripped_strings)
+                bodies[0].insert(0, caption.extract())
         for caption in root.select('article#article .entry-content > figure.zoomable:has(img) > figcaption:has(> .caption)'):
             if editorial(caption):
                 figure = caption.parent
@@ -360,6 +368,10 @@ def clean_tree(root, title, author, url=''):
         for widget in root.select('.post-rich-text > .ns-buttons.ns-inline-below'):
             if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
                 widget.decompose()
+        for caption in root.select('.post-rich-text > figure.wp-block-video > figcaption.wp-element-caption'):
+            if editorial(caption) and caption.parent.select_one(':scope > video[src], :scope > video > source[src]'):
+                caption.name = 'p'
+                caption.parent.insert_before(caption.extract())
     if identity and identity[1] in {'robinsloan.com', 'www.robinsloan.com'}:
         for stamp in root.select('main > article > h1 + date-stamp'):
             if DATE.fullmatch(' '.join(stamp.stripped_strings)):

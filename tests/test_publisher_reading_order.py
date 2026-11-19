@@ -157,6 +157,14 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', html)[1],
                          f'{FIRST} The seed tray. Credit: Lee {LAST}')
 
+    def test_conversation_preserves_the_magazine_lead_caption_once(self):
+        html = f'''<article id="article"><figure class="magazine"><div><img src="/tray"></div>
+        <div class="caption-wrapper"><figcaption>The trays at sunrise. <span class="attribution">Photo by Lee.</span>
+        </figcaption></div></figure><h1>Seed trials</h1>
+        <div class="entry-content content-body"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', html)[1],
+                         f'The trays at sunrise. Photo by Lee. {FIRST} {LAST}')
+
     def test_atlas_obscura_keeps_linked_article_section_titles(self):
         html = f'''<article><h1>Seed trials</h1><section id="article-body" class="ArticleBody">
         <p>{FIRST}</p><h3 class="article-second-subheading-pre-rd"><a href="/event"><strong>First harvest</strong></a></h3>
@@ -764,6 +772,14 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <iframe src="/player"></iframe></div><figcaption class="wp-element-caption">A labeled recording.</figcaption>
         </figure><p>{LAST}</p></div></div></div>"""
         self.assertEqual(narrate('https://earthsky.org/seed-trials/', html)[1], f'{FIRST} A labeled recording. {LAST}')
+
+    def test_earthsky_keeps_editorial_caption_for_hosted_video(self):
+        html = f'''<title>Seed trials</title><div class="post-body"><div class="post"><div class="post-rich-text">
+        <p>{FIRST}</p><figure class="wp-block-video"><video src="/recording.mp4">Playback unavailable.</video>
+        <figcaption class="wp-element-caption">A labeled recording.</figcaption></figure>
+        <p>{LAST}</p></div></div></div>'''
+        self.assertEqual(narrate('https://earthsky.org/seed-trials/', html)[1],
+                         f'{FIRST} A labeled recording. {LAST}')
 
     def test_dev_preview_keeps_internal_headings_and_ignores_neighboring_cards(self):
         html = f"""<article id="article-show-container" class="crayons-article"><h1>Seed trials</h1>
