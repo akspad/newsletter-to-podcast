@@ -311,6 +311,11 @@ def clean_tree(root, title, author, url=''):
                 labels = footer.select(':scope > .c-media-caption, :scope > .c-media-credits')
                 footer.string = ' '.join(label.get_text().strip() for label in labels)
                 figure.parent.insert_before(footer.extract())
+    if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
+        for card in root.select('.roscoe-body > p > div.embed-relatedstory'):
+            if card.select_one(':scope > a.embed-relatedstory-imagelink[href]') and not card.find_parent(
+                    ['blockquote', 'pre', 'code']):
+                card.decompose()
     caption_selectors = {
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',

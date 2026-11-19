@@ -251,6 +251,20 @@ def article_details(soup, url):
     title = strip_suffix(title)
 
     scope = article_scope(soup, title, url)
+    diary_author = ''
+    if (requested and requested[1] in {'openstreetmap.org', 'www.openstreetmap.org'}
+            and 'diary_post' in scope.get('class', [])):
+        entry = re.fullmatch(r'(/user/[^/]+)/diary/\d+', requested[2])
+        if entry:
+            for permalink in scope.select(':scope > div > h2 > a[href]'):
+                if url_identity(permalink['href'], url) != requested or not belongs_to_scope(permalink, scope):
+                    continue
+                title = clean(heading_text(permalink)) or title
+                profile = url_identity(entry[1], url)
+                diary_author = next((clean(visible_text(link)) for link in permalink.parent.parent.select(
+                    ':scope > small a[href]')
+                    if url_identity(link['href'], url) == profile and belongs_to_scope(link, scope)), '')
+                break
     byline = next((node for node in scope.select('[rel~="author"], [itemprop~="author"], '
                   '.PostsAuthors-root, .byline, .news-article--authored-by, p.author, .c-article__author__name')
                    if belongs_to_scope(node, scope) and not node.find_parent(['blockquote', 'pre', 'code'])), None)
@@ -341,7 +355,7 @@ def article_details(soup, url):
             authors = [re.split(r',\s+Head of\s+', name, maxsplit=1, flags=re.I)[0]
                        for name in linked_byline_names(attribution)]
             visible_authors = ', '.join(dict.fromkeys(authors)) or visible_authors
-    author = visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     host = urlparse(url).hostname
     if not author and pypi_post:
         profiles = soup.select('.md-sidebar--post .md-post__authors .md-profile__description > strong > a[href]')

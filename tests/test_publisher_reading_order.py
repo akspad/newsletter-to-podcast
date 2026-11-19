@@ -18,6 +18,28 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_nieman_keeps_prose_inside_paragraphs_that_start_with_a_related_story_card(self):
+        card = ('<div class="embed-relatedstory"><a class="embed-relatedstory-imagelink" href="/other">Photo</a>'
+                '<div class="embed-relatedstory-headline">A different story</div></div>')
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content roscoe-body"><p>{card}{FIRST}</p>
+        <p>We <a href="/notes">checked the same plots</a> again.</p><p>{LAST}</p></div></article>"""
+        _, body = narrate('https://www.niemanlab.org/2026/11/seed-trials/', html)
+        self.assertEqual(body.split(), f'{FIRST} We checked the same plots again. {LAST}'.split())
+
+    def test_openstreetmap_diary_uses_the_permalink_title_and_profile(self):
+        url = 'https://www.openstreetmap.org/user/lee/diary/42'
+        html = f"""<head><title>Lee’s Diary | Paths near the greenhouse | OpenStreetMap</title>
+        <meta property="og:site_name" content="OpenStreetMap"></head>
+        <h1>Lee’s Diary</h1><article class="diary_post"><div class="mb-3">
+        <h2><a href="/user/lee/diary/42">Paths near the greenhouse</a></h2>
+        <small>Posted by <a href="/user/lee">Lee</a> in <a href="/diary/en">English</a>.</small></div>
+        <div class="richtext"><p>{FIRST}</p><p>{LAST}</p></div></article>"""
+        intro, body = narrate(url, html)
+        self.assertEqual(intro, 'OpenStreetMap. Paths near the greenhouse. By Lee.')
+        self.assertEqual(body.split(), f'{FIRST} {LAST}'.split())
+        unrelated, _ = narrate(url, html.replace('/user/lee/diary/42', '/user/lee/diary/41'))
+        self.assertNotIn('By Lee.', unrelated)
+
     def test_sapiens_keeps_image_footers_with_their_caption_and_credit(self):
         figure = """<figure class="c-image-video"><img src="/photo"><footer class="c-image-video__footer">
         <div class="c-media-caption"><p>A field study.</p></div>
