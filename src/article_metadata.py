@@ -274,6 +274,9 @@ def article_details(soup, url):
             if visible and visible in (structured, clean(unescape(raw_headline))):
                 heading = headline
     title = clean(heading_text(heading) if heading else '') or structured or social or page_title
+    if (requested and requested[1] == 'devblogs.microsoft.com' and requested[2].startswith('/oldnewthing/')
+            and heading and heading.find('code') and all(child.name in {'code', 'em', 'strong'} for child in heading.find_all())):
+        title = clean(heading.get_text()) or title
     title = strip_suffix(title)
     plover_title = plover_story_title(soup, url)
     if plover_title:

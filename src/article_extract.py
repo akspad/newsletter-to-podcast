@@ -254,6 +254,13 @@ def clean_tree(root, title, author, url=''):
     if identity and identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
         for node in root.select('#pgContentWrap > .newsdate'):
             node.decompose()
+    if identity and identity[1] in {'tbray.org', 'www.tbray.org'} and identity[2].startswith('/ongoing/When/'):
+        for caption in root.select('#centercontent > .main-image:has(img) + div.caption'):
+            if editorial(caption):
+                caption['class'].remove('caption')
+        footer = root.select_one('#centercontent > #footer')
+        if footer and footer.select_one(':scope > p.footer > [data-pagefind-meta^="date:"]'):
+            footer.decompose()
     if identity and identity[1] == 'react.dev' and identity[2].startswith('/blog/'):
         byline, writer = react_blog_credit(root, title)
         if byline and writer == author:
@@ -1012,6 +1019,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.post-body > .post > .post-rich-text'
         elif identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
             body_selector = '#pgContentWrap'
+        elif identity[1] in {'tbray.org', 'www.tbray.org'} and identity[2].startswith('/ongoing/When/'):
+            body_selector = '#center-and-right > #centercontent'
         elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')
               and match('main#quarto-document-content.quarto-banner-title-block:has(> section.level2)', scope)):
             candidates = [scope]

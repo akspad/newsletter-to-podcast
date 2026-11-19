@@ -19,6 +19,22 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_tim_bray_keeps_a_caption_anchored_to_an_article_image(self):
+        html = f'''<title>Seed trials</title><h1>Seed trials</h1><div id="center-and-right"><div id="centercontent">
+        <p>{FIRST}</p><div class="main-image"><a href="/large"><img src="tray"></a></div>
+        <div class="caption"><p>The narrow tray.</p></div><p>{LAST}</p>
+        <aside><div class="caption"><p>Unrelated image caption.</p></div></aside>
+        <div id="footer"><p class="footer"><b data-pagefind-meta="date: today">Updated today</b></p></div></div></div>'''
+        _, body = narrate('https://www.tbray.org/ongoing/When/202x/2026/08/08/seed-trials', html)
+        self.assertEqual(body, f'{FIRST} The narrow tray. {LAST}')
+
+    def test_old_new_thing_uses_the_inline_code_titles_original_punctuation(self):
+        html = f'''<article><h1>Can I use <code>seed()</code>?</h1><div class="entry-content">
+        <p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        intro, _ = narrate('https://devblogs.microsoft.com/oldnewthing/seed-trials', html)
+        self.assertIn('Can I use seed()?', intro)
+        self.assertNotIn('seed() ?', intro)
+
     def test_earthsky_keeps_inline_captions_inside_an_image_wrapper(self):
         html = f'''<main><h1>Seed trials</h1><div class="post-body"><div class="post"><div class="post-rich-text">
         <p>{FIRST}</p><div class="wp-block-image"><figure><img src="tray"><figcaption class="wp-element-caption">
