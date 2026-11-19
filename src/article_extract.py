@@ -252,6 +252,22 @@ def clean_tree(root, title, author, url=''):
         for category in root.select(layout + ' > .sub-head:has(a[href^="/blog/category/"])'):
             if category.get_text(' ', strip=True).startswith('Part of '):
                 category.decompose()
+    if identity and identity[1] == 'daringfireball.net':
+        for node in root.select('#Main > .article > #PreviousNext:has(table), #Main > .article > h6.dateline'):
+            label = node.get_text(strip=True).split(', ', 1)[-1]
+            if node.get('id') == 'PreviousNext' or DATE.fullmatch(label):
+                node.decompose()
+    if identity and identity[1] in {'atlasobscura.com', 'www.atlasobscura.com'} and identity[2].startswith('/articles/'):
+        for link in root.select('section#article-body.ArticleBody > h3.article-second-subheading-pre-rd > a[href]'):
+            if editorial(link):
+                link.unwrap()
+    if identity and identity[1] in {'theconversation.com', 'www.theconversation.com'}:
+        for caption in root.select('article#article .entry-content > figure.zoomable:has(img) > figcaption:has(> .caption)'):
+            if editorial(caption):
+                figure = caption.parent
+                caption.name = 'p'
+                caption.string = ' '.join(caption.stripped_strings)
+                figure.insert_before(caption.extract())
     if identity and identity[1] == 'diff.wikimedia.org':
         # Keep captions from the inner image blocks when the enclosing photo
         # gallery would otherwise be pruned as an image.
@@ -418,9 +434,14 @@ def clean_tree(root, title, author, url=''):
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
                 bio.decompose()
-        for ad in root.select('.story-content > .story-body > .insert-post-ads:has(> script)'):
-            if ad.get_text(strip=True) == 'Article continues after advertisement':
+        for ad in root.select('.story-content > .story-body .insert-post-ads:has(> script)'):
+            if (ad.get_text(strip=True) == 'Article continues after advertisement'
+                    and not ad.find_parent(['blockquote', 'pre', 'code'])):
                 ad.decompose()
+        if identity[2].startswith('/lit-hub-daily-'):
+            for lead in root.select('.story-content > .story-body > p:first-of-type > span.caption:first-child'):
+                if lead.get_text(strip=True).startswith('TODAY:'):
+                    lead['class'].remove('caption')
     if identity and identity[1] in {'universetoday.com', 'www.universetoday.com'}:
         for body in root.select('main.container > article > figure:has(img) + .article-content > .text'):
             figure = body.parent.find_previous_sibling()
@@ -1089,6 +1110,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '#pgContentWrap'
         elif identity[1] in {'tbray.org', 'www.tbray.org'} and identity[2].startswith('/ongoing/When/'):
             body_selector = '#center-and-right > #centercontent'
+        elif identity[1] == 'daringfireball.net' and re.fullmatch(r'/\d{4}/\d{2}/[^/]+', identity[2]):
+            body_selector = '#Main > div.article'
         elif (identity[1] == 'blog.r-project.org' and identity[2].startswith('/posts/')
               and match('main#quarto-document-content.quarto-banner-title-block:has(> section.level2)', scope)):
             candidates = [scope]

@@ -132,6 +132,55 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(narrate('https://www.geographyrealm.com/seed-trials/', html)[1],
                          f'{FIRST} Related resources: {LAST}')
 
+    def test_jstor_feed_omits_the_recommendation_teaser_and_its_byline(self):
+        url = 'https://daily.jstor.org/seed-trials/'
+        related = '''<div class="daily-explore story-list more-to-explore">
+        <h2 class="story-list-header">More to Explore</h2><div class="article-tease"><div class="article-tease__text">
+        <a href="/different">Different trials</a><div class="byline">Lee Grower</div></div></div></div>'''
+        self.assertEqual(html_to_text(f'<p>{FIRST}</p>{related}<p>{LAST}</p>', url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Lee Grower', html_to_text(f'<blockquote>{related}</blockquote>', url=url))
+
+    def test_bgs_feed_omits_tag_links_and_keeps_webinar_registration(self):
+        url = 'https://www.bgs.ac.uk/news/seed-trials/'
+        body = f'''<section class="wp-block-bgs-blocks-content-container"><p>{FIRST}</p>
+        <p><a href="/events/seed">Register online</a></p><div class="relatives"><h5>Relative topics</h5>
+        <div><a class="button" href="/tag/gardens/">Gardens</a></div></div><p>{LAST}</p></section>'''
+        self.assertEqual(html_to_text(body, url=url), f'{FIRST}\nRegister online\n{LAST}')
+        self.assertIn('Another detail.', html_to_text(body.replace('<h5>Relative topics</h5>',
+                                                                  '<h5>Relative topics</h5><p>Another detail.</p>'), url=url))
+
+    def test_conversation_preserves_editorial_figure_caption_and_credit(self):
+        html = f'''<article id="article"><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <figure class="zoomable"><img src="/seed">
+        <figcaption><span class="caption">The seed tray.</span><span class="attribution">Credit: Lee</span></figcaption>
+        </figure><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', html)[1],
+                         f'{FIRST} The seed tray. Credit: Lee {LAST}')
+
+    def test_atlas_obscura_keeps_linked_article_section_titles(self):
+        html = f'''<article><h1>Seed trials</h1><section id="article-body" class="ArticleBody">
+        <p>{FIRST}</p><h3 class="article-second-subheading-pre-rd"><a href="/event"><strong>First harvest</strong></a></h3>
+        <p>{LAST}</p></section></article>'''
+        self.assertEqual(narrate('https://www.atlasobscura.com/articles/seed-trials', html)[1],
+                         f'{FIRST} First harvest {LAST}')
+
+    def test_lit_hub_daily_keeps_today_line_and_omits_nested_advertisement(self):
+        html = f'''<title>Seed trials</title><div class="story-content"><div class="story-body">
+        <p><span class="caption">TODAY: Seeds arrived.</span></p><p>{FIRST}
+        <div class="insert-post-ads"><span>Article continues after advertisement</span><script>ad()</script></div></p>
+        <p>{LAST}</p></div></div>'''
+        self.assertEqual(narrate('https://lithub.com/lit-hub-daily-seed-trials/', html)[1],
+                         f'TODAY: Seeds arrived. {FIRST} {LAST}')
+
+    def test_daring_fireball_keeps_leading_links_and_omits_article_navigation(self):
+        html = f'''<title>Seed trials</title><div id="Main"><div class="article"><h1>Seed trials</h1>
+        <h6 class="dateline">Thursday, 19 November 2026</h6><ul><li><a href="/sheet">Trial schedule</a></li>
+        <li><a href="/guide">Field guide</a></li></ul><p>{FIRST}</p><p>{LAST}</p>
+        <div id="PreviousNext"><table><tr><td><a href="/past">Previous article</a></td></tr></table></div>
+        </div></div>'''
+        self.assertEqual(narrate('https://daringfireball.net/2026/11/seed_trials', html)[1],
+                         f'Trial schedule Field guide {FIRST} {LAST}')
+
     def test_universal_hub_uses_the_confirmed_reprint_byline_and_skips_feed_controls(self):
         credit = ('<p><em>This article is republished from The Conversation. It was written by: '
                   '<a href="https://theconversation.com/profiles/lee">Lee Writer</a>.</em></p>')

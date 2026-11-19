@@ -449,12 +449,27 @@ def clean_imported_widgets(root, url, title=''):
                 node.decompose()
     if identity and identity[1] == 'daily.jstor.org':
         clean_jstor_pull_quotes(root)
+        for recommendations in root.select('.daily-explore.story-list.more-to-explore'):
+            heading = recommendations.select_one(':scope > h2.story-list-header')
+            if (heading and heading_text(heading) == 'More to Explore'
+                    and recommendations.select_one(':scope > .article-tease .article-tease__text .byline')
+                    and not recommendations.find_parent(['blockquote', 'pre', 'code'])):
+                recommendations.decompose()
     if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2] and title:
         headline = root.find('h1', recursive=False)
         if headline and heading_text(headline) == title:
             headline.decompose()
     if identity and identity[1] == 'www.bgs.ac.uk':
         remove_bgs_related_news(root)
+        for topics in root.select('section.wp-block-bgs-blocks-content-container .relatives'):
+            label = topics.find('h5', recursive=False)
+            links = topics.select(':scope > div > a.button[href]')
+            if (label and heading_text(label) == 'Relative topics' and links
+                    and topics.get_text(' ', strip=True) == ' '.join(
+                        node.get_text(' ', strip=True) for node in (label, *links))
+                    and all((target := url_identity(link['href'], url)) and target[:2] == identity[:2]
+                            and target[2].startswith('/tag/') for link in links)):
+                topics.decompose()
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
         for timeline in root.select('aside.rsc-collbox.rsc-collbox-side'):
             items = timeline.select(':scope > .rsc-collbox-body > ol.rsc-collbox-list > li.rsc-collbox-item')
