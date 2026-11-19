@@ -24,10 +24,11 @@ class EndpointTests(unittest.TestCase):
                 requests = []
 
                 class Communicate:
-                    def __init__(self, text, voice, rate):
-                        requests.append((sdk.communicate.WSS_URL, text))
+                    def __init__(self, text, voice, rate, boundary):
+                        requests.append((sdk.communicate.WSS_URL, text, boundary))
 
                     async def stream(self):
+                        yield {"type": "SentenceBoundary", "text": "Fictional passage.", "offset": 0, "duration": 10_000_000}
                         yield {"type": "audio", "data": b"fictional-audio"}
 
                 sdk.Communicate = Communicate
@@ -36,7 +37,7 @@ class EndpointTests(unittest.TestCase):
                     path = Path(tmp) / "audio.mp3"
                     self.assertTrue(tts.speak("Fictional passage.", path))
                     self.assertEqual(path.read_bytes(), b"fictional-audio")
-                self.assertEqual(requests, [(endpoint, "Fictional passage.")])
+                self.assertEqual(requests, [(endpoint, "Fictional passage.", "SentenceBoundary")])
                 self.assertEqual(sdk.communicate.WSS_URL, endpoint)
 
 

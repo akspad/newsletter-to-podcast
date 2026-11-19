@@ -11,12 +11,17 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from unicodedata import normalize
+
+from monitoring import IncompleteNarrationError
 
 # Microsoft Edge's free neural voices; list others with `edge-tts --list-voices`.
 VOICE = os.environ.get("TTS_VOICE", "en-US-AndrewNeural")
 RATE = os.environ.get("TTS_RATE", "+0%")
 MAX_SECONDS = 5 * 60  # default only; callers pass the configured limit
 CHUNK_CHARS = 3000  # small requests are less likely to be dropped by the free endpoint
+# Older checkpoints were validated by duration alone.
+VERIFIED_AUDIO_PREFIX = b"audio-v2:"
 
 
 def speech_text(text: str) -> str:
@@ -50,11 +55,27 @@ def narration_budget():
         _audio_budget.reset(token)
 
 
-async def save_audio(communication, path):
+def boundary_text(text):
+    """Compare spoken text across changes in spacing, punctuation and casing."""
+    return "".join(char for char in normalize("NFKC", text).casefold() if char.isalnum())
+
+
+async def save_audio(communication, path, text):
     budget = _audio_budget.get()
     count = 0
+    expected = boundary_text(text)
+    covered = end_ticks = 0
     with path.open("wb") as output:
         async for item in communication.stream():
+            if item["type"] == "SentenceBoundary":
+                fragment = boundary_text(item["text"])
+                offset, length = item["offset"], item["duration"]
+                if (not expected.startswith(fragment, covered)
+                        or type(offset) is not int or type(length) is not int or offset < 0 or length <= 0):
+                    raise IncompleteNarrationError("Speech boundary does not match the requested passage")
+                covered += len(fragment)
+                end_ticks = max(end_ticks, offset + length)
+                continue
             if item["type"] != "audio":
                 continue
             data = item["data"]
@@ -64,6 +85,9 @@ async def save_audio(communication, path):
             if count > security.MAX_AUDIO_BYTES or (budget and budget.bytes > security.MAX_AUDIO_BYTES):
                 raise security.BudgetExceeded("Narration exceeds the temporary audio byte limit")
             output.write(data)
+    if covered != len(expected) or not end_ticks:
+        raise IncompleteNarrationError("The speech stream did not reach the end of the passage")
+    return end_ticks / 10_000_000  # Edge metadata uses 100 ns ticks.
 
 
 def chunks(text):
@@ -126,20 +150,21 @@ def speak(text: str, path: Path, attempts=3) -> bool:
             # --env-file is loaded after imports, so read voice options at call time.
             voice = os.environ.get("TTS_VOICE") or VOICE
             rate = os.environ.get("TTS_RATE") or RATE
-            asyncio.run(asyncio.wait_for(save_audio(edge_tts.Communicate(text, voice, rate=rate), path), timeout=60))
+            communication = edge_tts.Communicate(text, voice, rate=rate, boundary="SentenceBoundary")
+            speech_end = asyncio.run(asyncio.wait_for(save_audio(communication, path, text), timeout=60))
             if path.stat().st_size > 0:
                 seconds = duration(path, verify=True)
-                # A successful stream can still contain only a tiny prefix.
-                # Use a deliberately generous 600 words/minute ceiling, adjusted
-                # for the requested rate, to catch gross truncation without
-                # rejecting naturally short passages or fast voices.
                 speed = max(0.1, 1 + int(rate.rstrip("%")) / 100)
                 minimum = len(text.split()) / (10 * speed)
-                if math.isfinite(seconds) and seconds > 0 and seconds >= minimum:
+                # Allow small timing differences from encoder padding while
+                # requiring audio through the reported end of speech.
+                if math.isfinite(seconds) and seconds > 0 and seconds >= minimum and seconds + 0.25 >= speech_end:
                     return True
-                raise RuntimeError("TTS returned implausibly short audio")
+            raise IncompleteNarrationError("The audio ends before the reported speech")
         except security.BudgetExceeded:
             raise
+        except IncompleteNarrationError:
+            print(f"TTS retry {n + 1} reason=incomplete_narration")
         except Exception:
             print(f"TTS retry {n + 1}")
         path.unlink(missing_ok=True)
@@ -165,8 +190,8 @@ def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
     saved = cache.get(key) if cache else None
     split = saved == b"split"
     reused = False
-    if saved and saved.startswith(b"audio:"):
-        path.write_bytes(saved[6:])
+    if saved and saved.startswith(VERIFIED_AUDIO_PREFIX):
+        path.write_bytes(saved[len(VERIFIED_AUDIO_PREFIX):])
         try:
             seconds = duration(path, verify=True)
             rate = os.environ.get("TTS_RATE") or RATE
@@ -187,7 +212,7 @@ def _speak_pieces(text: str, tmp: Path, name: str) -> list[Path]:
             if not math.isfinite(budget.seconds) or budget.seconds > security.MAX_AUDIO_SECONDS:
                 raise security.BudgetExceeded("Narration exceeds the total duration limit")
         if cache and not reused:
-            cache.put(key, b"audio:" + path.read_bytes())
+            cache.put(key, VERIFIED_AUDIO_PREFIX + path.read_bytes())
         return [path]
     if len(text) <= 200:
         raise RuntimeError("TTS could not voice a passage; episode will be retried")
@@ -226,6 +251,8 @@ def _synthesize(script: str, out_path: Path, max_seconds: float | None) -> float
 
 def join_audio(parts, out_path, max_seconds=None):
     """Join complete clips; only summary callers request a hard duration cap."""
+    parts = tuple(parts)
+    expected = sum(duration(part) for part in parts) if max_seconds is None else None
     with tempfile.TemporaryDirectory() as tmp:
         listing = Path(tmp) / "list.txt"
         # All clip paths are generated internally, not from article metadata.
@@ -235,10 +262,16 @@ def join_audio(parts, out_path, max_seconds=None):
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
                         *limit, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "44100", "-ac", "1", "-b:a", "64k",
                         str(out_path)], check=True, timeout=180)
-    seconds = duration(out_path)
-    if not math.isfinite(seconds) or seconds > security.MAX_AUDIO_SECONDS or out_path.stat().st_size > security.MAX_AUDIO_BYTES:
+    try:
+        seconds = duration(out_path, verify=True)
+        if not math.isfinite(seconds) or seconds > security.MAX_AUDIO_SECONDS or out_path.stat().st_size > security.MAX_AUDIO_BYTES:
+            raise security.BudgetExceeded("Narration exceeds its output budget")
+        # MP3 input durations include encoder padding which concat may remove.
+        if expected is not None and seconds + 0.25 + 0.08 * len(parts) < expected:
+            raise IncompleteNarrationError("Assembled audio is shorter than its source clips")
+    except Exception:
         out_path.unlink(missing_ok=True)
-        raise security.BudgetExceeded("Narration exceeds its output budget")
+        raise
     return seconds
 
 

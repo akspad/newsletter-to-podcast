@@ -11,12 +11,14 @@ import tts
 
 
 class TruncationTests(unittest.TestCase):
-    def run_speech(self, text, durations, rate="+0%"):
+    def run_speech(self, text, durations, rate="+0%", boundaries=None):
         class Communicate:
             def __init__(self, *args, **kwargs):
                 pass
 
             async def stream(self):
+                for boundary in boundaries if boundaries is not None else [text]:
+                    yield {"type": "SentenceBoundary", "text": boundary, "offset": 0, "duration": 5_000_000}
                 yield {"type": "audio", "data": b"provider-audio"}
 
         sdk = types.SimpleNamespace(Communicate=Communicate)
@@ -46,6 +48,20 @@ class TruncationTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 self.assertEqual(self.run_speech("A fictional sentence.", [invalid, 2]),
                                  (True, True, 2))
+
+    def test_missing_boundaries_never_accept_audio_by_length_alone(self):
+        self.assertEqual(self.run_speech("A fictional sentence.", [], boundaries=[]), (False, False, 0))
+
+    def test_complete_boundaries_tolerate_unicode_punctuation_and_sentence_segmentation(self):
+        text = "Café & tea. 台灣的花。 A/B costs $12.50. 🌱"
+        boundaries = ["CAFE\u0301 and tea", "台灣的花", "A / B costs 12,50"]
+        self.assertEqual(self.run_speech(text.replace("&", "and"), [4], boundaries=boundaries), (True, True, 1))
+        self.assertEqual(self.run_speech(text, [4], boundaries=["CAFE\u0301 tea", *boundaries[1:]]), (True, True, 1))
+
+    def test_missing_middle_is_rejected_even_if_final_sentence_is_reported(self):
+        text = "The trays arrived. Two were damaged. The lab kept the labels."
+        self.assertEqual(self.run_speech(text, [], boundaries=["The trays arrived.", "The lab kept the labels."]),
+                         (False, False, 0))
 
     def test_unrecoverable_short_passage_raises_for_pipeline_retry(self):
         with tempfile.TemporaryDirectory() as directory, patch("tts.speak", return_value=False):

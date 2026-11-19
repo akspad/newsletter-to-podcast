@@ -28,6 +28,7 @@ class EpisodeDiagnosticsTests(unittest.TestCase):
                 ('prepare', 'invalid_value', ValueError(PRIVATE)),
                 ('summary', 'runtime_error', RuntimeError(PRIVATE)),
                 ('speech', 'runtime_error', RuntimeError(PRIVATE)),
+                ('speech', 'incomplete_narration', monitoring.IncompleteNarrationError(PRIVATE)),
                 ('audio_metadata', 'subprocess_error', subprocess.CalledProcessError(1, PRIVATE, stderr=PRIVATE))):
             with self.subTest(stage=stage), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)

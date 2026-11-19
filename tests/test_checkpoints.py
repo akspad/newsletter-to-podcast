@@ -116,12 +116,12 @@ class CheckpointTests(unittest.TestCase):
             with checkpoints.use(root / "state"):
                 cache = checkpoints.current()
                 key = cache.key("Text.", tts.VOICE, tts.RATE)
-                cache.put(key, b"audio:broken")
+                cache.put(key, tts.VERIFIED_AUDIO_PREFIX + b"broken")
                 with patch("tts.duration", side_effect=[0, 1]), patch("tts.speak", side_effect=self.speech) as render:
                     paths = tts.speak_pieces("Text.", root, "retry")
                 render.assert_called_once()
                 self.assertEqual(paths[0].read_text(), "Text.")
-                self.assertEqual(cache.get(key), b"audio:Text.")
+                self.assertEqual(cache.get(key), tts.VERIFIED_AUDIO_PREFIX + b"Text.")
 
     def test_reused_audio_still_obeys_article_budget(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {}, clear=True), \

@@ -36,7 +36,7 @@ def setUpModule():
     DAMAGED = VALID[:third] + b'\0' * third + VALID[2 * third:]
 
 
-def speech_factory(outputs, calls):
+def speech_factory(outputs, calls, boundaries=None):
     class Speech:
         def __init__(self, *args, **kwargs):
             self.attempt = len(calls)
@@ -46,6 +46,12 @@ def speech_factory(outputs, calls):
             output = outputs[min(self.attempt, len(outputs) - 1)]
             if isinstance(output, Exception):
                 raise output
+            if boundaries is None:
+                reports = [(calls[self.attempt][0][0], 2.5)]
+            else:
+                reports = boundaries[min(self.attempt, len(boundaries) - 1)]
+            for text, end in reports:
+                yield {'type': 'SentenceBoundary', 'text': text, 'offset': 0, 'duration': int(end * 10_000_000)}
             yield {'type': 'audio', 'data': output}
     return Speech
 
@@ -84,22 +90,80 @@ class AudioIntegrityTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), VALID)
         self.assertEqual(len(calls), 2)
 
+    def test_decodable_prefix_is_retried_when_the_ending_was_not_spoken(self):
+        first = 'The blue tray arrived early this morning.'
+        last = 'The final note includes the identity of the sender.'
+        text = f'{first} {last}'
+        calls, logs = [], io.StringIO()
+        reports = [[(first, 2.5)], [(first, 1.3), (last, 2.8)]]
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(logs), \
+                patch('edge_tts.Communicate', speech_factory([VALID, VALID], calls, reports)), patch('tts.time.sleep'):
+            root = Path(directory)
+            with checkpoints.use(root / 'state'):
+                self.assertEqual(tts.speak_pieces(text, root, 'speech')[0].read_bytes(), VALID)
+        self.assertEqual(len(calls), 2)
+        self.assertIn('TTS retry 1 reason=incomplete_narration', logs.getvalue())
+        self.assertNotIn(first, logs.getvalue())
+        self.assertNotIn(last, logs.getvalue())
+
+    def test_full_boundary_text_cannot_hide_audio_ending_before_its_timestamp(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory, \
+                patch('edge_tts.Communicate', speech_factory([VALID], calls, [[(TEXT, 4.5)]])), patch('tts.time.sleep'):
+            path = Path(directory) / 'speech.mp3'
+            self.assertFalse(tts.speak(TEXT, path))
+            self.assertFalse(path.exists())
+        self.assertEqual(len(calls), 3)
+
+    def test_incomplete_uncapped_concat_is_removed_but_intentional_trim_is_accepted(self):
+        run = subprocess.run
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            clip, output = root / 'clip.mp3', root / 'episode.mp3'
+            clip.write_bytes(VALID)
+
+            def omit_one_clip(args, **kwargs):
+                if '-f' in args and args[args.index('-f') + 1] == 'concat':
+                    Path(args[-1]).write_bytes(VALID)
+                    return subprocess.CompletedProcess(args, 0)
+                return run(args, **kwargs)
+
+            with patch('tts.subprocess.run', side_effect=omit_one_clip):
+                with self.assertRaises(tts.IncompleteNarrationError):
+                    tts.join_audio([clip, clip], output)
+                self.assertFalse(output.exists())
+                self.assertAlmostEqual(tts.join_audio([clip, clip], output, 3.2), 3, delta=0.1)
+                self.assertTrue(output.is_file())
+
     def test_damaged_cached_clip_is_regenerated_without_losing_valid_cache(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {}, clear=True):
             root = Path(directory)
             with checkpoints.use(root / 'state'):
                 cache = checkpoints.current()
                 key = cache.key(TEXT, tts.VOICE, tts.RATE)
-                cache.put(key, b'audio:' + DAMAGED)
+                cache.put(key, tts.VERIFIED_AUDIO_PREFIX + DAMAGED)
                 calls = []
                 with patch('edge_tts.Communicate', speech_factory([VALID], calls)):
                     paths = tts.speak_pieces(TEXT, root, 'recovered')
                 self.assertEqual(paths[0].read_bytes(), VALID)
-                self.assertEqual(cache.get(key), b'audio:' + VALID)
+                self.assertEqual(cache.get(key), tts.VERIFIED_AUDIO_PREFIX + VALID)
                 with patch('tts.speak') as speech:
                     reused = tts.speak_pieces(TEXT, root, 'reused')
                 speech.assert_not_called()
                 self.assertEqual(reused[0].read_bytes(), VALID)
+
+    def test_legacy_checkpoint_with_decodable_audio_must_be_revalidated_by_synthesis(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {}, clear=True):
+            root = Path(directory)
+            with checkpoints.use(root / 'state'):
+                cache = checkpoints.current()
+                key = cache.key(TEXT, tts.VOICE, tts.RATE)
+                cache.put(key, b'audio:' + VALID)
+                calls = []
+                with patch('edge_tts.Communicate', speech_factory([VALID], calls)):
+                    tts.speak_pieces(TEXT, root, 'regenerated')
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(cache.get(key), tts.VERIFIED_AUDIO_PREFIX + VALID)
 
     def test_probe_and_decode_processes_have_finite_deadlines(self):
         for failure_at, timeout in ((1, 15), (2, 30)):

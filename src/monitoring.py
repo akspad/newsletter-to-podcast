@@ -27,13 +27,17 @@ class ExtractionError(ValueError):
         self.reason = reason if type(reason) is str and reason in EXTRACTION_REASONS else 'invalid_value'
 
 
+class IncompleteNarrationError(RuntimeError):
+    """A speech stream or assembled file omitted expected narration."""
+
+
 def failure_reason(error):
     """Return only fixed codes, never provider messages or exception class names."""
     categories = ((TimeoutError, 'timeout'), (subprocess.TimeoutExpired, 'timeout'),
                   (ConnectionError, 'connection_error'), (FileNotFoundError, 'missing_file'),
                   (PermissionError, 'permission_denied'), (OSError, 'io_error'),
                   (subprocess.SubprocessError, 'subprocess_error'), (ValueError, 'invalid_value'),
-                  (RuntimeError, 'runtime_error'))
+                  (IncompleteNarrationError, 'incomplete_narration'), (RuntimeError, 'runtime_error'))
     return next((code for kind, code in categories if isinstance(error, kind)), 'unexpected_error')
 
 

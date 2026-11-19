@@ -175,9 +175,10 @@ class PrivacyAndSelectionTests(unittest.TestCase):
     def test_voice_settings_loaded_after_import_are_used(self):
         calls = []
         class Communicate:
-            def __init__(self, text, voice, rate):
+            def __init__(self, text, voice, rate, boundary):
                 calls.append((voice, rate))
             async def stream(self):
+                yield {"type": "SentenceBoundary", "text": "Fictional text.", "offset": 0, "duration": 10_000_000}
                 yield {"type": "audio", "data": b"audio"}
         fake = types.ModuleType("edge_tts")
         fake.Communicate = Communicate

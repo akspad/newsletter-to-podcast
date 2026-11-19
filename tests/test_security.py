@@ -281,7 +281,7 @@ class ResourceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch("security.MAX_AUDIO_BYTES", 5), tts.narration_budget():
             path = Path(tmp) / "part.mp3"
             with self.assertRaises(security.BudgetExceeded):
-                asyncio.run(tts.save_audio(Voice(), path))
+                asyncio.run(tts.save_audio(Voice(), path, "A test clip."))
             self.assertLessEqual(path.stat().st_size, 5)
 
     def test_run_budget_resets_between_runs(self):

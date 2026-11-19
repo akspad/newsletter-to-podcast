@@ -31,6 +31,7 @@ class SpeechTextTests(unittest.TestCase):
                 received.append(text)
 
             async def stream(self):
+                yield {"type": "SentenceBoundary", "text": received[-1], "offset": 0, "duration": 10_000_000}
                 yield {"type": "audio", "data": b"audio"}
 
         with tempfile.TemporaryDirectory() as tmp, \
