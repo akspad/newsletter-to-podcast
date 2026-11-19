@@ -19,6 +19,43 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_smashing_caption_preserves_literal_code_and_omits_same_image_zoom_link(self):
+        html = f"""<article><h1>Seed trials</h1><div class="c-garfield-the-cat"><p>{FIRST}</p>
+        <figure><a href="/plot.png"><img src="/plot.png"></a><figcaption class="op-vertical-bottom">
+        A plot for <code>&lt;seed&gt;</code>. (<a href="/plot.png">Large preview</a>)</figcaption></figure>
+        <figure><a href="/samples.png"><img src="/samples.png"></a><figcaption class="op-vertical-bottom">
+        Observations after rain. (<a href="/other">Large preview</a>)</figcaption></figure>
+        <p>{LAST}</p></div></article>"""
+        _, body = narrate('https://www.smashingmagazine.com/2026/11/seed-trials/', html)
+        self.assertIn('A plot for <seed>.', body.replace('> .', '>.'))
+        self.assertEqual(body.count('Large preview'), 1)
+        self.assertIn(LAST, body)
+
+    def test_strong_towns_uses_authors_beside_matching_headline_and_ignores_bio_card(self):
+        html = f"""<title>Seed trials</title><main><div class="thought-leadership_wrap">
+        <section><div class="mast-col"><div class="heading-component"><h1>Seed trials</h1></div>
+        <div class="w-dyn-list"><div class="w-dyn-items">
+        <div class="w-dyn-item"><div class="mast-paragraph"><div>Lee Writer</div></div></div>
+        <div hidden class="w-dyn-item"><div class="mast-paragraph"><div>Hidden Author</div></div></div>
+        <div class="w-dyn-item"><div class="mast-paragraph"><div>Ash Gardener</div></div></div>
+        </div></div></div></section>
+        <section><div class="mast-article-rich-text w-richtext"><p>{FIRST}</p><h2>Results</h2><p>{LAST}</p>
+        <p>More next week.</p></div><div class="mast-card"><p>Lee Writer publishes across the country.</p></div>
+        </section></div></main>"""
+        intro, body = narrate('https://www.strongtowns.org/journal/seed-trials', html)
+        self.assertTrue(intro.endswith('By Lee Writer, Ash Gardener.'), intro)
+        self.assertEqual(body, f'{FIRST} Results {LAST} More next week.')
+
+    def test_zed_zoom_caption_survives_and_only_related_widget_prompt_is_removed(self):
+        html = f"""<main><article class="entry-content"><h1>Seed trials</h1><p>{FIRST}</p>
+        <a href="/chart.png"><button class="cursor-zoom-in"><figure><img src="/chart.png">
+        <figcaption>Harvest by season</figcaption></figure></button></a>
+        <h3>Related Posts</h3><p>A phrase that belongs in the article.</p><p>{LAST}</p>
+        <div class="flex flex-col gap-5"><div><h3>Related Posts</h3><p>Check out similar blogs from the Zed team.</p>
+        <div><a href="/blog/recommended">A recommended story</a></div></div></div></article></main>"""
+        _, body = narrate('https://zed.dev/blog/seed-trials', html)
+        self.assertEqual(body, f'{FIRST} Harvest by season Related Posts A phrase that belongs in the article. {LAST}')
+
     def test_lithub_keeps_the_source_credit_and_skips_the_sibling_author_card(self):
         html = f"""<meta name="author" content="Lee Writer"><main><h1 class="entry-title">Seed trials</h1>
         <div class="story-content"><div class="story-body entry-content"><p>{FIRST}</p><p>{LAST}</p>

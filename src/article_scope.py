@@ -9,6 +9,7 @@ BODY_SELECTORS = (
     '.available-content .body.markup, .body.markup, [data-gu-name="body"], .entry.entryPage, #story_text, '
     'topcomment > article.comment > pre'
 )
+STRONG_TOWNS_HOSTS = {'strongtowns.org', 'www.strongtowns.org'}
 FOOTNOTE_NAV = (
     '[role~="doc-noteref"], [role~="doc-backlink"], a.footnote-ref, a.footnote-backref, '
     'a.reversefootnote, a.footnote-return, a[rel~="footnote"], a[rel~="footnote-backref"], '
