@@ -19,7 +19,8 @@ from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
-    guardian_author_label, harvard_account_name, harvard_feed_writer, mit_news_author_label, open_culture_writer, outside_account_name,
+    freebsd_report_writer, guardian_author_label, harvard_account_name, harvard_feed_writer, mit_news_author_label,
+    open_culture_writer, outside_account_name,
     remove_outside_newsletter, wyofile_feed_authors,
 )
 
@@ -618,6 +619,8 @@ class Substack:
             set_extraction_step('convert_html')
             url, title = post.get('canonical_url', ''), post.get('title', '')
             writer = harvard_feed_writer(post['body_html'], url, title) if pub.get('rss') else ''
+            if pub.get('rss') and not writer:
+                writer = freebsd_report_writer(post['body_html'], url, title)
             if pub.get('rss') and not writer and all(
                     byline.get('name', '').casefold() in {'oc', 'open culture', ''}
                     for byline in post.get('publishedBylines') or []):

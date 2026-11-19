@@ -5,7 +5,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, open_culture_writer, wyofile_feature
+from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, freebsd_report_writer, guardian_author_label, open_culture_writer, wyofile_feature
 from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, react_blog_credit, url_identity
 
 
@@ -431,6 +431,8 @@ def article_details(soup, url):
         _, react_author = react_blog_credit(soup, title)
         author = react_author or author
     host = urlparse(url).hostname
+    if host == 'freebsdfoundation.org':
+        author = freebsd_report_writer(scope, url, title) or author
     if (not author and requested and host in {'publicdomainreview.org', 'www.publicdomainreview.org'}
             and requested[2].startswith('/collection/')):
         credit = scope.select_one('.collection-view > .collection-byline > .attribution:has(> a[href])')

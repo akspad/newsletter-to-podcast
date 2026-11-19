@@ -19,6 +19,26 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_freebsd_signed_travel_report_uses_the_named_guest_in_both_paths(self):
+        url = 'https://freebsdfoundation.org/blog/event-report/'
+        title = 'BSDCan 2026 Travel Report – Lee Writer'
+        body = f'<p>{FIRST}</p><p>{LAST}<br>Be well,<br>Lee Writer bsdtv / bsdcan 2026 con chair</p>'
+        html = f'<meta name="author" content="Site Editor"><article><h1>{title}</h1><div class="post-content">{body}</div></article>'
+        intro, text = narrate(url, html)
+        self.assertIn('By Lee Writer.', intro)
+        self.assertIn('Be well, Lee Writer', text)
+        self.assertIn('By Site Editor.', narrate(url, html.replace('Lee Writer bsdtv', 'Ash Reporter bsdtv'))[0])
+        post = {'title': title, 'canonical_url': url, 'body_html': body, 'publishedBylines': [{'name': 'Site Editor'}]}
+        full, _ = Substack('').post_text({'rss': True}, post)
+        self.assertEqual(full['publishedBylines'], [{'name': 'Lee Writer'}])
+        feed = (f'<section class="block-tadv-classic-paragraph">{body}</section>'
+                f'<p>The post <a href="{url}">{title}</a> first appeared on '
+                '<a href="/">FreeBSD Foundation</a>.</p>')
+        full, _ = Substack('').post_text({'rss': True}, {**post, 'body_html': feed})
+        self.assertEqual(full['publishedBylines'], [{'name': 'Lee Writer'}])
+        full, _ = Substack('').post_text({'rss': True}, {**post, 'body_html': f'<blockquote>{body}</blockquote>'})
+        self.assertEqual(full['publishedBylines'], [{'name': 'Site Editor'}])
+
     def test_creative_commons_feed_spaces_exported_author_separators(self):
         source = Substack('')
         post = {'canonical_url': 'https://creativecommons.org/2026/10/02/seed-trials/', 'title': 'Seed trials',

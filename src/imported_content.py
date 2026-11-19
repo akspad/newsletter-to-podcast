@@ -26,6 +26,35 @@ def mit_news_author_label(name):
     return re.sub(r'\s*\|\s*MIT News$', '', name).rstrip() or name
 
 
+def freebsd_report_writer(root, url, title):
+    """Use a travel report's named guest only when the same person signed it."""
+    identity = url_identity(url)
+    if not identity or identity[1] != 'freebsdfoundation.org' or not identity[2].startswith('/blog/'):
+        return ''
+    report = re.fullmatch(r'BSDCan \d{4} Travel Report\s+[–—-]\s+([^\d:;.!?\n]{3,100})', title)
+    if not report:
+        return ''
+    if isinstance(root, str):
+        from bs4 import BeautifulSoup
+        root = BeautifulSoup(root, 'html.parser')
+        sections = root.find_all('section', class_='block-tadv-classic-paragraph', recursive=False)
+        if len(sections) == 1:
+            root = sections[0]
+    else:
+        root = root.select_one(':scope > .post-content')
+        if root is None:
+            return ''
+    last = next((p for p in reversed(root.find_all('p')) if editorial(p) and p.get_text(strip=True)), None)
+    if not last or last.find_parent(['blockquote', 'pre', 'code']) or not last.find('br', recursive=False):
+        return ''
+    name = report[1].strip()
+    lines = last.get_text('\n', strip=True).splitlines()
+    if (len(lines) >= 2 and lines[-2] == 'Be well,' and
+            re.fullmatch(re.escape(name) + r'(?: bsdtv / bsdcan \d{4} con chair)?', lines[-1])):
+        return name
+    return ''
+
+
 def wyofile_feature(root, title):
     """Find the featured header for this story, outside the article element."""
     features = [
