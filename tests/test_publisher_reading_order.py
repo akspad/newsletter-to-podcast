@@ -19,6 +19,29 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_hcn_keeps_cover_and_inline_captions_without_republishing_widget(self):
+        html = f"""<main class="site-main"><div class="featured-image-beside"><img src="/cover">
+        <figcaption>Cover by Lee.</figcaption></div><div class="main-content"><article>
+        <h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p><div class="wp-block-image">
+        <figure><img src="/plot"><figcaption class="wp-element-caption">After rain.</figcaption></figure></div>
+        <p>{LAST}</p><section class="below-content widget republication_tracker_tool">Republish This Story
+        <p>Reuse details for newsrooms.</p></section></div></article></div></main>"""
+        self.assertEqual(narrate('https://www.hcn.org/articles/seed-trials/', html)[1],
+                         f'Cover by Lee. {FIRST} After rain. {LAST}')
+
+    def test_damn_interesting_keeps_caption_and_one_rights_notice_without_donation_prompt(self):
+        rights = '<p class="print-only print-copyright">Copyright belongs to the author.</p>'
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p></div>
+        <figure class="entry-image"><img src="/plot"><figcaption>After rain.</figcaption></figure>
+        <div class="entry-content"><p>{LAST}</p></div>{rights}{rights}<p class="print-only">
+        Since you enjoyed our work enough to print it out, <a href="/donate">give a little</a>.</p></article>"""
+        # The publisher's full-width body uses the density fallback.
+        html = html.replace(' class="entry-content"', '')
+        _, body = narrate('https://www.damninteresting.com/seed-trials/', html)
+        self.assertIn('After rain.', body)
+        self.assertLessEqual(body.count('Copyright belongs to the author.'), 1)
+        self.assertNotIn('give a little', body)
+
     def test_kottke_untitled_post_does_not_read_clipped_opening_as_a_title(self):
         url = 'https://kottke.org/26/11/0054321-seed-trials'
         quote = f'“{FIRST} {LAST}”'

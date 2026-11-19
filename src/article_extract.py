@@ -524,7 +524,38 @@ def clean_tree(root, title, author, url=''):
                     if isinstance(summary.contents[0], str):
                         value = summary.contents[0]
                         value.replace_with(re.sub(r'^\s*—\s*', '', value))
+    if identity and identity[1] in {'hcn.org', 'www.hcn.org'}:
+        for feature in root.select('main.site-main > .featured-image-beside:has(img)'):
+            caption = feature.find('figcaption', recursive=False)
+            bodies = feature.parent.select(':scope > .main-content article > .entry-content')
+            if caption and editorial(caption) and len(bodies) == 1 and editorial(bodies[0]):
+                caption.name = 'div' if caption.find('p') else 'p'
+                bodies[0].insert(0, caption.extract())
+        for widget in root.select('article section.below-content.widget'):
+            if not widget.find_parent(['blockquote', 'pre', 'code']):
+                label = widget.get_text(' ', strip=True)
+                if (label == 'Republish' or
+                        label.startswith(('Spread the word.', 'Republish This Story'))):
+                    widget.decompose()
+    if identity and identity[1] in {'damninteresting.com', 'www.damninteresting.com'}:
+        for article in root.select('article'):
+            seen = set()
+            for notice in article.select(':scope > p.print-only'):
+                label = ' '.join(notice.get_text().split())
+                if (label.startswith('Since you enjoyed our work enough to print it out,')
+                        and (notice.select_one('a[href$="/donate"]')
+                             or 'https://www.damninteresting.com/donate' in label)):
+                    notice.decompose()
+                elif 'print-copyright' in notice.get('class', []):
+                    if label in seen:
+                        notice.decompose()
+                    seen.add(label)
     caption_selectors = {
+        **dict.fromkeys({'hcn.org', 'www.hcn.org'},
+                        'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '
+                        'article .entry-content .wp-block-image > figure > figcaption.wp-element-caption'),
+        **dict.fromkeys({'damninteresting.com', 'www.damninteresting.com'},
+                        'article > figure.entry-image > figcaption'),
         **dict.fromkeys({'sciencedaily.com', 'www.sciencedaily.com'},
                         '#story_text > #featured > figure.mainimg > figcaption'),
         **dict.fromkeys({'propublica.org', 'www.propublica.org'},
