@@ -19,6 +19,23 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_nasa_keeps_captions_when_wordpress_nests_an_image_inside_a_paragraph(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <p class="wp-block-paragraph"><div class="hds-media wp-block-image"><div class="hds-media-wrapper">
+        <img src="/tray"><figcaption class="hds-caption"><div>The trial tray at dawn.</div></figcaption>
+        </div></div></p><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://www.nasa.gov/centers-and-facilities/seed-trials/', html)[1],
+                         f'{FIRST} The trial tray at dawn. {LAST}')
+
+    def test_wyofile_preserves_column_image_captions_in_reading_order(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <div class="wp-block-columns"><div class="wp-block-column">
+        <figure class="wp-block-image"><img src="/one"><figcaption class="wp-element-caption">
+        Tray one.</figcaption></figure></div><div class="wp-block-column"><figure class="wp-block-image">
+        <img src="/two"><figcaption class="wp-element-caption">Tray two.</figcaption></figure></div></div>
+        <p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://wyofile.com/seed-trials/', html)[1], f'{FIRST} Tray one. Tray two. {LAST}')
+
     def test_reason_omits_its_email_widget_without_removing_newsletter_prose(self):
         html = f'''<article class="rcom-standard-article"><h1>Seed trials</h1><div class="entry-content">
         <p>{FIRST}</p><div class="gform_wrapper incontent-email-signup_wrapper">

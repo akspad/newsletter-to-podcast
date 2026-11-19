@@ -590,7 +590,8 @@ def clean_tree(root, title, author, url=''):
         for body in root.select('article > .entry-content'):
             remove_pluralistic_footer(body)
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
-        for image in root.select('.entry-content > .hds-media.wp-block-image'):
+        for image in root.select('.entry-content > .hds-media.wp-block-image, '
+                                 '.entry-content > p.wp-block-paragraph > .hds-media.wp-block-image'):
             wrapper = image.select_one('.hds-media-wrapper:has(img)')
             caption = wrapper.find('figcaption', recursive=False) if wrapper else None
             if caption and editorial(caption):
@@ -821,7 +822,9 @@ def clean_tree(root, title, author, url=''):
         **dict.fromkeys({'smashingmagazine.com', 'www.smashingmagazine.com'},
                         '.c-garfield-the-cat > figure:has(img) > figcaption'),
         **dict.fromkeys(WYOFILE_HOSTS, 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption, '
-                        'article > .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
+                        'article > .entry-content > .wp-block-image > figure > figcaption.wp-element-caption, '
+                        'article > .entry-content > .wp-block-columns > .wp-block-column '
+                        '> figure.wp-block-image > figcaption.wp-element-caption'),
         **dict.fromkeys(COLOSSAL_HOSTS, 'article .entry-content > .entry-header '
                         '> figure.colo-post-featured-image > figcaption.wp-element-caption, '
                         'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption'),
