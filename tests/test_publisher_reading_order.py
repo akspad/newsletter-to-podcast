@@ -18,6 +18,43 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_guardian_credits_the_visible_author_and_retains_only_inline_caption(self):
+        html = f"""<head><meta name="author" content="Staff reporter"></head><article><h1>Seed trials</h1>
+        <aside data-gu-name="meta"><address data-component="meta-byline" data-gu-name="byline">
+        <div><span>Lee</span><span hidden>Other author</span></div></address></aside>
+        <div data-gu-name="body"><div class="article-body-viewer-selector"><p>{FIRST}</p>
+        <figure><img src="/photo"><figcaption data-spacefinder-role="inline">Photo by Lee.</figcaption></figure>
+        <p>{LAST}</p></div></div></article>"""
+        intro, body = narrate('https://www.theguardian.com/science/seed-trials', html)
+        self.assertTrue(intro.endswith('By Lee.'), intro)
+        self.assertEqual(body.split(), f'{FIRST} Photo by Lee. {LAST}'.split())
+
+    def test_hakai_keeps_visible_coauthors_and_captions_without_the_hidden_body_label(self):
+        html = f"""<article><header><h1>Seed trials</h1><section class="singlebyline">
+        <a id="author_link_top" href="/profiles/lee/">Lee</a> and
+        <a id="author_link_top" href="/profiles/ash/">Ash</a></section></header>
+        <section class="maincontent"><h3 class="invis">Article body copy</h3><p>{FIRST}</p>
+        <div class="wp-caption"><img src="/photo"><p class="wp-caption-text">A tray after rain.</p></div>
+        <p>{LAST}</p></section></article>"""
+        intro, body = narrate('https://hakaimagazine.com/features/seed-trials/', html)
+        self.assertTrue(intro.endswith('By Lee, Ash.'), intro)
+        self.assertEqual(body.split(), f'{FIRST} A tray after rain. {LAST}'.split())
+
+    def test_plover_fragment_reads_story_title_once_and_keeps_series_links(self):
+        archive = 'https://blog.plover.com/2026/09/24/#seed-trials'
+        permalink = 'https://blog.plover.com/science/seed-trials.html'
+        html = f"""<head><meta property="og:site_name" content="Example weblog : Seed trials"></head>
+        <h1 class="pagetitle">Example weblog</h1><div class="mainsection"><span class="dateheader">Thu, 24 Sep 2026</span>
+        <p><a class="storytitle" name="seed-trials" href="{permalink}">Seed trials</a><br>
+        <p>{FIRST}</p><ol><li><a href="/prior">Earlier experiments</a></li></ol><p>{LAST}</p></p>
+        <p>[ <a href="/science/">Other articles in category /science</a> ] <i><a href="{permalink}">permanent link</a></i></p>
+        </div>"""
+        for url in (archive, permalink):
+            with self.subTest(url=url):
+                intro, body = narrate(url, html)
+                self.assertEqual(intro, 'Example weblog. Seed trials.')
+                self.assertEqual(body.split(), f'{FIRST} Earlier experiments {LAST}'.split())
+
     def test_webdev_uses_the_visible_title_and_author_card(self):
         html = f"""<article><h1 class="devsite-page-title">Seed trials<devsite-actions hidden>
         <span>Save this page</span></devsite-actions></h1><div class="devsite-article-body entry-content">

@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, readable_prose, remove_resolved_footnote_backlinks, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from imported_content import remove_openculture_endmatter
 from tts import speech_text
 
@@ -331,7 +331,15 @@ def clean_tree(root, title, author, url=''):
             if lead and editorial(lead) and lead.parent.parent.find('img'):
                 lead.name = 'p'
                 body.insert(0, lead.extract())
+    if identity and identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'}:
+        for heading in root.select('article > section.maincontent > h3.invis'):
+            if heading.get_text(strip=True) == 'Article body copy':
+                heading.decompose()
     caption_selectors = {
+        'theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',
+        'www.theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',
+        'hakaimagazine.com': '.maincontent > div.wp-caption > p.wp-caption-text',
+        'www.hakaimagazine.com': '.maincontent > div.wp-caption > p.wp-caption-text',
         'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
         'astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
@@ -515,6 +523,20 @@ def preserve_reference_lists(scope, url):
 
 def extract_text(soup, title='', author='', url=''):
     scope = article_scope(soup, title, url)
+    plover_title = plover_story_title(soup, url)
+    plover_body = None
+    if plover_title:
+        plover_body = plover_title.parent.parent
+        permalink = url_identity(plover_title['href'], url)
+        plover_title.decompose()
+        for date in plover_body.select(':scope > span.dateheader'):
+            date.decompose()
+        footer = plover_body.find_all('p', recursive=False)[-1]
+        for link in footer.select(':scope > i > a[href]'):
+            if (link.get_text(strip=True) == 'permanent link' and url_identity(link['href'], url) == permalink
+                    and footer.get_text(' ', strip=True).startswith('[ Other articles in category ')):
+                footer.decompose()
+                break
     # Capture the layout evidence before cleanup removes its masthead. This
     # body uses the same structure-preserving path as explicit article bodies.
     recovered_body = masthead_body(soup, title)
@@ -563,12 +585,16 @@ def extract_text(soup, title='', author='', url=''):
     if deferred:
         return ' '.join(deferred)
     candidates = scope.select(BODY_SELECTORS)
-    if match(BODY_SELECTORS, scope) or scope is recovered_body:
+    if plover_body:
+        candidates = [plover_body]
+    elif match(BODY_SELECTORS, scope) or scope is recovered_body:
         candidates = [scope]
     body_selector = None
     if identity:
         if identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
+        elif identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'} and scope.name == 'article':
+            body_selector = ':scope > section.maincontent'
         elif identity[1] == 'www.internetsociety.org' and identity[2].startswith('/blog/') and scope.name == 'article':
             body_selector = ':scope > .body-text'
         elif identity[1] == 'webkit.org' and identity[2].startswith('/blog/') and scope.name == 'article':
