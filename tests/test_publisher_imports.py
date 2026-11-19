@@ -109,6 +109,33 @@ class PublisherCreditTests(unittest.TestCase):
 
 
 class PublisherWidgetTests(unittest.TestCase):
+    def test_google_research_rss_omits_only_category_labels_without_text_or_audio(self):
+        source = Substack('')
+        base = 'https://research.google/blog/rss/'
+        def item(slug, description, extra='', host='research.google'):
+            return f"""<item><title>{slug}</title><guid>{slug}</guid>
+            <link>https://{host}/blog/{slug}/</link><pubDate>Wed, 11 Nov 2026 12:00:00 GMT</pubDate>
+            <category>Seed &amp; Soil</category><description>{description}</description>{extra}</item>"""
+
+        items = [
+            item('stub', 'Seed &amp; Soil'),
+            item('excerpt', 'Seed &amp; Soil matters.'),
+            item('marked-up', '&lt;p&gt;Seed &amp;amp; Soil&lt;/p&gt;'),
+            item('full-text', 'Seed &amp; Soil', '<content:encoded><![CDATA[' + PROSE + ']]></content:encoded>'),
+            item('native-audio', 'Seed &amp; Soil', '<enclosure type="audio/mpeg" url="https://audio.example/post.mp3"/>'),
+            item('other-publisher', 'Seed &amp; Soil', host='fictional.example'),
+        ]
+        xml = ('<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel>' +
+               ''.join(items) + '</channel></rss>')
+        with patch.object(source, 'get', return_value=xml) as fetch:
+            posts = source.recent_posts({'base': base, 'rss': True})
+            fetch.assert_called_once_with(base, raw=True)
+        self.assertEqual([post['slug'] for post in posts], [
+            'excerpt', 'marked-up', 'full-text', 'native-audio', 'other-publisher',
+        ])
+        self.assertEqual(posts[2]['body_html'], PROSE)
+        self.assertEqual(posts[3]['podcast_url'], 'https://audio.example/post.mp3')
+
     def test_nasa_widgets_leave_prose_references_captions_and_contributor_credit(self):
         body = PROSE + CREDIT + MEDIA + WIDGETS + '<p>Reference: Research paper DOI 10.0000/example.</p>'
         text = html_to_text(body, url=NASA)

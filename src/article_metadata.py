@@ -1,4 +1,5 @@
 """Read article attribution from public HTML, without fetching more resources."""
+from html import unescape
 import json
 import re
 from urllib.parse import urljoin, urlparse
@@ -247,6 +248,16 @@ def article_details(soup, url):
     preferred_headings = [node for node in headings if any(parent is preliminary_scope for parent in node.parents)]
     heading = next((node for node in headings if matches_heading(node)),
                    labels.get('title') or next(iter(preferred_headings or headings), None))
+    if (requested and requested[1] in {'theparisreview.org', 'www.theparisreview.org'}
+            and requested[2].startswith('/blog/')):
+        # The article headline is a sibling of main, and the schema can
+        # contain HTML entities even when the visible text is correct.
+        headline = soup.select_one('section#content > header.titles > h1')
+        raw_headline = article.get('headline')
+        if headline and editorial(headline) and isinstance(raw_headline, str):
+            visible = clean(heading_text(headline))
+            if visible and visible in (structured, clean(unescape(raw_headline))):
+                heading = headline
     title = clean(heading_text(heading) if heading else '') or structured or social or page_title
     title = strip_suffix(title)
     plover_title = plover_story_title(soup, url)
