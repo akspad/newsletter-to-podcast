@@ -19,6 +19,33 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_abseil_uses_the_tip_heading_byline_and_full_markdown_body(self):
+        title = "Tip of the Week #153: Seed trials"
+        html = f'''<title>abseil / {title}</title><div class="container">
+        <div class="col-sm-8 markdown"><h1>{title}</h1>
+        <p>Originally posted as TotW #153 on July 17, 2018</p><p>By Lee Writer and Ash Editor</p>
+        <p>{FIRST}</p><ul><li>A short planting note.</li><li>The second trial.</li></ul>
+        <pre><code>arrange(tray);</code></pre><p>{LAST}</p></div>
+        <div class="col-sm-4"><p>Other tips.</p></div></div>'''
+        intro, body = narrate('https://abseil.io/tips/153', html)
+        self.assertIn(f'{title}. By Lee Writer and Ash Editor.', intro)
+        self.assertEqual(body, f'Originally posted as TotW #153 on July 17, 2018 {FIRST} '
+                               f'A short planting note. The second trial. arrange(tray); {LAST}')
+
+    def test_asimov_reads_visible_article_image_caption(self):
+        html = f'''<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
+        <p>{FIRST}</p><div class="captioned-image-container"><figure><img src="/tray">
+        <figcaption class="image-caption">The trays at sunrise.</figcaption></figure></div>
+        <p>{LAST}</p></div></div></article>'''
+        self.assertEqual(narrate('https://www.asimov.press/p/seed-trials', html)[1],
+                         f'{FIRST} The trays at sunrise. {LAST}')
+
+    def test_experimental_history_skips_its_terminal_read_more_link(self):
+        url = 'https://www.experimental-history.com/p/seed-trials'
+        excerpt = f'<p>{FIRST}</p><p><a href="{url}">Read more</a></p>'
+        self.assertEqual(html_to_text(excerpt, url=url), FIRST)
+        self.assertIn('Read more', html_to_text(excerpt, url=url + '-elsewhere'))
+
     def test_damn_interesting_keeps_feed_teaser_without_repeating_its_linked_title(self):
         url = 'https://www.damninteresting.com/seed-trials/'
         label = f'<p><b><a href="{url}">Seed trials</a></b>:</p>'

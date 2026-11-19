@@ -227,6 +227,14 @@ def clean_tree(root, title, author, url=''):
         for body in root.select('article > .entry-content'):
             clean_jstor_pull_quotes(body)
             remove_jstor_recommendations(body)
+    if identity and identity[1] == 'abseil.io' and re.fullmatch(r'/tips/\d+', identity[2]):
+        for heading in root.select('div.col-sm-8.markdown > h1'):
+            published = heading.find_next_sibling()
+            byline = published.find_next_sibling() if published else None
+            if (heading_text(heading) == title and published and published.name == 'p'
+                    and published.get_text(strip=True).startswith('Originally posted as TotW ')
+                    and byline and byline.name == 'p' and byline.get_text(strip=True) == f'By {author}'):
+                byline.decompose()
     if identity and identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
         for node in root.select('#pgContentWrap > .newsdate'):
             node.decompose()
@@ -843,6 +851,8 @@ def clean_tree(root, title, author, url=''):
         'www.astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
         'experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
+        'www.asimov.press': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
+        'asimov.press': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',
         'earthsky.org': ('.post-rich-text > figure.wp-block-image > figcaption.wp-element-caption, '
                          '.post-rich-text > div.wp-block-image > figure > figcaption.wp-element-caption'),
         'www.futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
@@ -1109,7 +1119,9 @@ def extract_text(soup, title='', author='', url=''):
         candidates = [scope]
     body_selector = None
     if identity:
-        if identity[1] in {'theguardian.com', 'www.theguardian.com'}:
+        if identity[1] == 'abseil.io' and re.fullmatch(r'/tips/\d+', identity[2]):
+            body_selector = 'div.col-sm-8.markdown'
+        elif identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
         elif identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'} and scope.name == 'article':
             body_selector = ':scope > section.maincontent'

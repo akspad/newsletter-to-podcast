@@ -278,6 +278,11 @@ def article_details(soup, url):
             visible = clean(heading_text(headline))
             if visible and visible in (structured, clean(unescape(raw_headline))):
                 heading = headline
+    abseil_tip = requested and requested[1] == 'abseil.io' and re.fullmatch(r'/tips/(\d+)', requested[2])
+    if abseil_tip:
+        tip = soup.select_one('div.col-sm-8.markdown > h1')
+        if tip and editorial(tip) and heading_text(tip).startswith(f'Tip of the Week #{abseil_tip[1]}: '):
+            heading = tip
     title = clean(heading_text(heading) if heading else '') or structured or social or page_title
     if (requested and requested[1] == 'devblogs.microsoft.com' and requested[2].startswith('/oldnewthing/')
             and heading and heading.find('code') and all(child.name in {'code', 'em', 'strong'} for child in heading.find_all())):
@@ -460,6 +465,14 @@ def article_details(soup, url):
             visible_authors = ', '.join(dict.fromkeys(filter(None, writers))) or visible_authors
             break
     author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    if abseil_tip and heading is not None:
+        published = heading.find_next_sibling()
+        byline = published.find_next_sibling() if published else None
+        if (published and published.name == 'p' and published.get_text(strip=True).startswith('Originally posted as TotW ')
+                and byline and byline.name == 'p' and editorial(byline)):
+            label = clean(visible_text(byline))
+            if label.startswith('By '):
+                author = label.removeprefix('By ')
     if react_post:
         _, react_author = react_blog_credit(soup, title)
         author = react_author or author

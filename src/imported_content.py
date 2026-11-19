@@ -600,7 +600,8 @@ def clean_imported_widgets(root, url, title=''):
                     and url_identity(links[1]['href']) == url_identity('https://mastodon.social/@jimniels')
                     and url_identity(links[2]['href']) == url_identity('https://bsky.app/profile/jim-nielsen.com')):
                 paragraph.decompose()
-    if identity and identity[1] in {'construction-physics.com', 'www.construction-physics.com'}:
+    if identity and identity[1] in {'construction-physics.com', 'www.construction-physics.com',
+                                    'experimental-history.com', 'www.experimental-history.com'}:
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
         if getattr(paragraph, 'name', None) == 'p':
             links = paragraph.select(':scope > a[href]')
