@@ -624,8 +624,9 @@ def clean_tree(root, title, author, url=''):
         'www.theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',
         'hakaimagazine.com': '.maincontent > div.wp-caption > p.wp-caption-text',
         'www.hakaimagazine.com': '.maincontent > div.wp-caption > p.wp-caption-text',
-        'www.filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
-        'filfre.net': '.post.hentry > .entry > div.wp-caption > p.wp-caption-text',
+        **dict.fromkeys({'filfre.net', 'www.filfre.net'},
+                        '.post.hentry > .entry > div.wp-caption > p.wp-caption-text, '
+                        '.post.hentry > .entry > div:not([class], [id]) > div.wp-caption > p.wp-caption-text'),
         'astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.astronomy.com': '.entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.experimental-history.com': '.available-content .body.markup .captioned-image-container > figure > figcaption.image-caption',

@@ -864,6 +864,8 @@ class PublisherReadingOrderTests(unittest.TestCase):
         html = f"""<div class="post hentry"><h2>Seed trials</h2><div class="entry">
         <p>{FIRST}</p><div class="wp-caption"><a href="/tray"><img src="tray"></a>
         <p class="wp-caption-text">A tray of seedlings photographed after rain.</p></div>
+        <div><div class="wp-caption"><img src="wrapped-tray">
+        <p class="wp-caption-text">A second tray on the windowsill.</p></div></div>
         <div class="wp-caption" hidden><img src="unpublished">
         <p class="wp-caption-text">Unpublished frame.</p></div><p>{LAST}</p>
         <h4>Footnotes</h4><ol><li>The study began in March.</li></ol></div>
@@ -871,7 +873,8 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <p class="wp-caption-text">A sponsored image.</p></div></aside>"""
         _, body = narrate('https://www.filfre.net/2026/10/seed-trials/', html)
         self.assertEqual(body.split(),
-                         f'{FIRST} A tray of seedlings photographed after rain. {LAST} '
+                         f'{FIRST} A tray of seedlings photographed after rain. '
+                         f'A second tray on the windowsill. {LAST} '
                          'Footnotes The study began in March.'.split())
 
     def test_inkscape_uses_brand_and_skips_placeholder_and_header_timestamp(self):
