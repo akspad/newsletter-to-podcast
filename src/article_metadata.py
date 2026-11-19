@@ -6,7 +6,7 @@ from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
 from imported_content import GUARDIAN_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, wyofile_feature
-from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, url_identity
+from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, react_blog_credit, url_identity
 
 
 def clean(value, limit=160):
@@ -221,6 +221,9 @@ def article_details(soup, url):
                         feed_name or home_name, 80)
     publication = publication.split(' | ')[0].strip()
     publication = publication or clean((urlparse(url).hostname or '').removeprefix('www.'), 80)
+    react_post = requested and requested[1] == 'react.dev' and requested[2].startswith('/blog/')
+    if react_post and page_label.endswith(' – React'):
+        publication = 'React'
 
     def strip_suffix(value):
         for separator in (' — ', ' - ', ' | ', ' – ', ' –\u00a0'):
@@ -404,6 +407,9 @@ def article_details(soup, url):
             visible_authors = ', '.join(dict.fromkeys(filter(None, writers))) or visible_authors
             break
     author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
+    if react_post:
+        _, react_author = react_blog_credit(soup, title)
+        author = react_author or author
     host = urlparse(url).hostname
     if not author and scope.name == 'article' and host == 'pluralistic.net':
         credit = scope.select_one(':scope > footer.entry-footer .byline .author.vcard a[href*="/author/"]')

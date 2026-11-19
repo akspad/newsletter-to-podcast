@@ -19,6 +19,22 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_react_uses_the_blog_brand_and_moves_dated_author_into_intro(self):
+        html = f"""<title>Seed trials – React</title><a href="/">logo by Lee</a><main><article>
+        <div><h1 class="mdx-heading">Seed trials</h1></div>
+        <p>November 19, 2026 by <a href="/about">Lee Writer</a></p><hr>
+        <p>{FIRST}</p><p>{LAST}</p></article></main>"""
+        self.assertEqual(narrate('https://react.dev/blog/2026/11/19/seed-trials', html),
+                         ['React. Seed trials. By Lee Writer.', f'{FIRST} {LAST}'])
+
+    def test_nautilus_preserves_caption_and_credit_in_article_order(self):
+        html = f"""<article><h1>Seed trials</h1><div class="entry-content">
+        <div class="PostContent_content__fictional"><p>{FIRST}</p><figure class="wp-block-image"><img src="/plot">
+        <figcaption class="wp-element-caption">Seeds after rain. <em>Photo by Lee.</em></figcaption>
+        </figure><p>{LAST}</p></div></div></article>"""
+        self.assertEqual(narrate('https://nautil.us/seed-trials-123/', html)[1],
+                         f'{FIRST} Seeds after rain. Photo by Lee. {LAST}')
+
     def test_hcn_keeps_cover_and_inline_captions_without_republishing_widget(self):
         html = f"""<main class="site-main"><div class="featured-image-beside"><img src="/cover">
         <figcaption>Cover by Lee.</figcaption></div><div class="main-content"><article>

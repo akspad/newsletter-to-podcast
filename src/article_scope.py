@@ -167,6 +167,23 @@ def heading_matches(value, title):
            title.endswith(': ' + value))
 
 
+def react_blog_credit(root, title):
+    """Read the dated byline that precedes the React article prose."""
+    for article in root.select('main article'):
+        heading = article.select_one('h1.mdx-heading')
+        paragraph = article.find('p')
+        if not (heading and editorial(heading) and heading_matches(heading_text(heading), title)
+                and paragraph and editorial(paragraph)):
+            continue
+        links = paragraph.find_all('a', recursive=False)
+        if len(links) == 1 and editorial(links[0]):
+            name = links[0].get_text(strip=True)
+            date, marker, author = ' '.join(paragraph.get_text().split()).partition(' by ')
+            if marker and DATE.fullmatch(date) and name and name == author:
+                return paragraph, name
+    return None, ''
+
+
 def article_labels(root, title):
     """Recognize a labeled article masthead, not ordinary definition lists."""
     for block in root.select('dl.macrodata'):

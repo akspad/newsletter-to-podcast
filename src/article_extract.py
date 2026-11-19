@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
@@ -246,6 +246,10 @@ def clean_tree(root, title, author, url=''):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     identity = url_identity(url)
+    if identity and identity[1] == 'react.dev' and identity[2].startswith('/blog/'):
+        byline, writer = react_blog_credit(root, title)
+        if byline and writer == author:
+            byline.decompose()
     if identity and identity[1] == 'creativecommons.org':
         body = 'body.blog-post main > .content'
         for opening in root.select(body + ' > aside.opening:first-child'):
@@ -551,6 +555,7 @@ def clean_tree(root, title, author, url=''):
                         notice.decompose()
                     seen.add(label)
     caption_selectors = {
+        'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '
                         'article .entry-content .wp-block-image > figure > figcaption.wp-element-caption'),
