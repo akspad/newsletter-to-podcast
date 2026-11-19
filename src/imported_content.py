@@ -181,6 +181,17 @@ def remove_openculture_endmatter(body, url):
                 card.decompose()
 
 
+def remove_loc_subscription(body):
+    paragraph = next((node for node in reversed(body.contents) if str(node).strip()), None)
+    if getattr(paragraph, 'name', None) == 'p':
+        links = paragraph.find_all('a', recursive=False, href=True)
+        value = ' '.join(paragraph.get_text().split()).replace('— ', '—')
+        if len(links) == 1 and value == 'Subscribe to the blog—it’s free!' and links[0].get_text(strip=True) == 'Subscribe':
+            destination = url_identity(links[0]['href'])
+            if destination and destination[1:3] == ('public.govdelivery.com', '/accounts/USLOC/subscriber/new'):
+                paragraph.decompose()
+
+
 def clean_imported_widgets(root, url, title=''):
     if fields := harvard_feed_body(root, url, title):
         heading, body = fields
@@ -236,6 +247,8 @@ def clean_imported_widgets(root, url, title=''):
                     seen.add(value)
 
     identity = url_identity(url)
+    if identity and identity[1] == 'blogs.loc.gov':
+        remove_loc_subscription(root)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
         remove_openculture_endmatter(root, url)
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:

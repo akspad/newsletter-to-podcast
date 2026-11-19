@@ -6,7 +6,7 @@ from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, readable_prose, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
-    remove_openculture_endmatter, remove_outside_newsletter, wyofile_feature,
+    remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, wyofile_feature,
 )
 from tts import speech_text
 
@@ -361,6 +361,22 @@ def clean_tree(root, title, author, url=''):
                 # content. Move the caption text before image pruning.
                 image.insert_before(caption.extract())
                 caption.unwrap()
+    if identity and identity[1] in {'quantamagazine.org', 'www.quantamagazine.org'}:
+        for figure in root.select('main .post > .has-tombstone > figure:has(img)'):
+            caption = figure.find('figcaption', recursive=False)
+            following = figure.find_next_sibling()
+            body = following.select_one('.post__content') if following and match('div.acf-content', following) else None
+            if caption and body and editorial(caption) and editorial(body):
+                lines = [line for line in caption.select('.caption > p, .attribution > p') if editorial(line)]
+                for index, line in enumerate(lines):
+                    body.insert(index, line.extract())
+    if identity and identity[1] == 'blogs.loc.gov':
+        for body in root.select('article > .entry-content'):
+            remove_loc_subscription(body)
+            cover = body.parent.select_one(':scope > header.entry-header > figure.hero-post:has(img) > figcaption')
+            if cover and editorial(cover) and editorial(body):
+                cover.name = 'div' if cover.find('p') else 'p'
+                body.insert(0, cover.extract())
     if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2]:
         for deck in root.select('article.email-body > h1.subject + h2.description'):
             body = deck.find_next_sibling()
@@ -503,8 +519,10 @@ def clean_tree(root, title, author, url=''):
                     caption['class'].remove('caption')
                 container = figure.parent if 'wp-block-image' in figure.parent.get('class', []) else figure
                 container.insert_before(caption.extract())
-    if identity and identity[1] == 'www.raspberrypi.com' and identity[2].startswith('/news/'):
-        for caption in root.select('.c-post-content__wysiwyg > figure.wp-block-embed-youtube > figcaption.wp-element-caption'):
+    video_bodies = {'www.raspberrypi.com': '.c-post-content__wysiwyg', 'earthsky.org': '.post-rich-text'}
+    if (identity and identity[1] in video_bodies
+            and (identity[1] != 'www.raspberrypi.com' or identity[2].startswith('/news/'))):
+        for caption in root.select(video_bodies[identity[1]] + ' > figure.wp-block-embed-youtube > figcaption.wp-element-caption'):
             if editorial(caption) and caption.parent.select_one(':scope > .wp-block-embed__wrapper iframe[src]'):
                 caption.parent.insert_before(caption.extract())
                 caption.name = 'p'

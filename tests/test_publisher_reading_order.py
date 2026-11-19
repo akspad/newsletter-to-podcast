@@ -19,6 +19,35 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_quanta_keeps_figure_caption_and_credit_between_body_modules(self):
+        html = f"""<title>Seed trials</title><main><div class="post"><div class="has-tombstone">
+        <div class="acf-content"><div class="post__content">{FIRST}</div></div>
+        <figure><img src="/map"><figcaption><div class="caption"><p>A map of the plots.</p></div>
+        <div class="attribution"><p>Map by Lee.</p><p hidden>Hidden credit.</p></div></figcaption></figure>
+        <div class="acf-content"><div class="post__content">{LAST}</div></div>
+        </div></div></main>"""
+        self.assertEqual(narrate('https://www.quantamagazine.org/seed-trials/', html)[1],
+                         f'{FIRST} A map of the plots. Map by Lee. {LAST}')
+
+    def test_loc_keeps_the_cover_credit_and_drops_the_verified_subscription_footer(self):
+        url = 'https://blogs.loc.gov/loc/2026/11/seed-trials/'
+        footer = ('<p><a href="https://public.govdelivery.com/accounts/USLOC/subscriber/new?topic_id=example">'
+                  '<em>Subscribe</em></a><em> to the blog— it’s free!</em></p>')
+        markup = f'<p>{FIRST}</p><p>{LAST}</p>{footer}'
+        html = f"""<article><header class="entry-header"><h1>Seed trials</h1>
+        <figure class="hero-post"><img src="/map"><figcaption>Map by Lee.</figcaption></figure></header>
+        <div class="entry-content">{markup}</div></article>"""
+        self.assertEqual(narrate(url, html)[1], f'Map by Lee. {FIRST} {LAST}')
+        self.assertEqual(html_to_text(markup, url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Subscribe', html_to_text(markup.replace('public.govdelivery.com', 'fictional.example'), url=url))
+
+    def test_earthsky_keeps_the_video_caption_with_the_rich_text(self):
+        html = f"""<title>Seed trials</title><div class="post-body"><div class="post"><div class="post-rich-text">
+        <p>{FIRST}</p><figure class="wp-block-embed-youtube"><div class="wp-block-embed__wrapper">
+        <iframe src="/player"></iframe></div><figcaption class="wp-element-caption">A labeled recording.</figcaption>
+        </figure><p>{LAST}</p></div></div></div>"""
+        self.assertEqual(narrate('https://earthsky.org/seed-trials/', html)[1], f'{FIRST} A labeled recording. {LAST}')
+
     def test_dev_preview_keeps_internal_headings_and_ignores_neighboring_cards(self):
         html = f"""<article id="article-show-container" class="crayons-article"><h1>Seed trials</h1>
         <div class="crayons-article__main"><div id="article-body" class="crayons-article__body">
