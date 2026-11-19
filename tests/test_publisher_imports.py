@@ -140,6 +140,19 @@ class PublisherWidgetTests(unittest.TestCase):
                 self.assertIn('Unrelated recommendation', text)
         self.assertIn('September 20, 2026', html_to_text(PROSE + '<p>September 20, 2026</p>', url=NASA))
 
+    def test_nieman_feed_omits_only_the_image_marker_paragraph(self):
+        url = 'https://www.niemanlab.org/2026/11/seed-trials/'
+        gallery = ('<p>[img]<br><img class="inpost" src="/one.png"><br>[/img]'
+                   '<br>[img]<br><img class="inpost" src="/two.png"><br>[/img]</p>')
+        self.assertEqual(html_to_text(gallery + PROSE, url=url), html_to_text(PROSE))
+        for markup, source in ((gallery, 'https://other.example/story'),
+                               ('<blockquote>' + gallery + '</blockquote>', url),
+                               (gallery.replace('</p>', 'The seeds are visible in both images.</p>'), url),
+                               (gallery.replace('class="inpost"', 'class="other"'), url),
+                               ('<p>Type [img] and [/img] to close the example.</p>', url)):
+            with self.subTest(markup=markup, url=source):
+                self.assertEqual(html_to_text(markup, url=source), html_to_text(markup))
+
     def test_simon_atom_removes_only_the_terminal_category_links(self):
         url = 'https://simonwillison.net/2026/11/17/seed-trials/'
         categories = ('<p>Tags: <a href="/tags/botany">botany</a>, '
