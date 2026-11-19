@@ -18,8 +18,8 @@ import security
 from monitoring import ExtractionError, set_extraction_step
 from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
-    COLOSSAL_HOSTS, GUARDIAN_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
-    guardian_author_label, harvard_feed_writer, mit_news_author_label, open_culture_writer, outside_account_name,
+    COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
+    guardian_author_label, harvard_account_name, harvard_feed_writer, mit_news_author_label, open_culture_writer, outside_account_name,
     remove_outside_newsletter, wyofile_feed_authors,
 )
 
@@ -466,6 +466,8 @@ class Substack:
                         bylines.append(name)
             if identity and identity[1] == 'news.mit.edu':
                 bylines = [mit_news_author_label(name) for name in bylines]
+            if identity and identity[1] in HARVARD_HOSTS:
+                bylines = [name for name in bylines if not harvard_account_name(name)]
             if writer := harvard_feed_writer(html, link, title):
                 bylines = [writer]
             elif not bylines and (writer := earth_observatory_writer(html, link)):
@@ -636,6 +638,8 @@ class Substack:
                 if identity and identity[1] in GUARDIAN_HOSTS:
                     bylines = [{**byline, 'name': guardian_author_label(byline['name'])}
                                if 'name' in byline else byline for byline in bylines]
+                if identity and identity[1] in HARVARD_HOSTS:
+                    bylines = [byline for byline in bylines if not harvard_account_name(byline.get('name'))]
                 if identity and identity[1] == 'news.mit.edu':
                     bylines = [{**byline, 'name': mit_news_author_label(byline['name'])}
                                if 'name' in byline else byline for byline in bylines]

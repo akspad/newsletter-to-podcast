@@ -421,6 +421,15 @@ def clean_tree(root, title, author, url=''):
             if cover and editorial(cover) and editorial(body):
                 cover.name = 'div' if cover.find('p') else 'p'
                 body.insert(0, cover.extract())
+    if identity and identity[1] in HARVARD_HOSTS:
+        for article in root.select('article.node--type-article'):
+            covers = article.select('.article_header_section .field--name-field-hero-image '
+                                    'figure.media--view-mode-article-hero:has(img) > figcaption')
+            bodies = article.select('.block-field-blocknodearticlebody > .field--name-body.field--type-text-with-summary')
+            if len(covers) == len(bodies) == 1 and editorial(covers[0]) and editorial(bodies[0]):
+                cover = covers[0]
+                cover.name = 'div' if cover.find('p') else 'p'
+                bodies[0].insert(0, cover.extract())
     if identity and identity[1] == 'pluralistic.net':
         for body in root.select('article > .entry-content'):
             remove_pluralistic_footer(body)
@@ -599,7 +608,8 @@ def clean_tree(root, title, author, url=''):
         **dict.fromkeys(WYOFILE_HOSTS, 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption, '
                         'article > .entry-content > .wp-block-image > figure > figcaption.wp-element-caption'),
         **dict.fromkeys(COLOSSAL_HOSTS, 'article .entry-content > .entry-header '
-                        '> figure.colo-post-featured-image > figcaption.wp-element-caption'),
+                        '> figure.colo-post-featured-image > figcaption.wp-element-caption, '
+                        'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption'),
         **dict.fromkeys(HARVARD_HOSTS,
                         '.block-field-blocknodearticlebody > .field--name-body figure.caption.caption-img > figcaption'),
         'theguardian.com': '.article-body-viewer-selector figure > figcaption[data-spacefinder-role="inline"]',

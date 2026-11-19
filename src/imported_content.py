@@ -69,10 +69,16 @@ def harvard_writer_link(body, url):
     if getattr(link, 'name', None) == 'a' and editorial(link):
         person = url_identity(link.get('href'), url)
         name = ' '.join(link.get_text().split())
-        if (person and person[1] in HARVARD_HOSTS and re.fullmatch(r'/writer/[^/]+', person[2])
-                and '@' not in name and 0 < len(name) <= 100):
-            return link, name
+        if person and person[1] in HARVARD_HOSTS and re.fullmatch(r'/writer/[^/]+', person[2]):
+            if harvard_account_name(name):
+                return link, ''
+            if '@' not in name and 0 < len(name) <= 100:
+                return link, name
     return None
+
+
+def harvard_account_name(name):
+    return isinstance(name, str) and re.fullmatch(r'[^@\s]+@harvard\.edu', name, re.I) is not None
 
 
 def harvard_feed_writer(html, url, title):
@@ -246,7 +252,8 @@ def clean_imported_widgets(root, url, title=''):
         for widget in list(root.find_all(['div', 'span'], recursive=False)):
             classes = set(widget.get('class', []))
             if classes & {'field--name-uid', 'field--name-created', 'field--name-field-full-header-section',
-                          'field--name-field-slug', 'field--name-field-hero-image'} and not widget.find('figcaption'):
+                          'field--name-field-slug', 'field--name-field-hero-image', 'field--name-field-sub-topics',
+                          'field--name-field-featured-topic'} and not widget.find('figcaption'):
                 widget.decompose()
             elif 'field--name-field-external-description' in classes:
                 label = widget.find(class_='field__label', recursive=False)

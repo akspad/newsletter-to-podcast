@@ -513,12 +513,14 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <div class="entry-content"><div class="entry-header">
         <figure class="colo-post-featured-image"><img src="/tray.jpg">
         <figcaption class="wp-element-caption">All images courtesy of <strong>Ash</strong></figcaption></figure>
-        </div><p>{FIRST}</p><p>{LAST}</p><aside><figure class="colo-post-featured-image">
+        </div><p>{FIRST}</p><figure class="wp-block-image"><img src="/tray-two.jpg">
+        <figcaption class="wp-element-caption">The second trial. Photo by Lee.</figcaption></figure>
+        <p>{LAST}</p><aside><figure class="colo-post-featured-image">
         <img src="/ad.jpg"><figcaption class="wp-element-caption">Advertisement caption</figcaption>
         </figure></aside></div></article>"""
         intro, body = narrate(url, html)
         self.assertIn('By Lee Writer.', intro)
-        self.assertEqual(body, f'All images courtesy of Ash {FIRST} {LAST}')
+        self.assertEqual(body, f'All images courtesy of Ash {FIRST} The second trial. Photo by Lee. {LAST}')
 
     def test_paris_review_uses_the_visible_headline_beside_the_article_body(self):
         url = 'https://www.theparisreview.org/blog/2026/11/19/seed-trials/'
@@ -550,6 +552,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
 
     def test_harvard_preview_keeps_the_inline_caption_and_linked_scores_in_order(self):
         html = f"""<article class="node--type-article"><h1>Seed trials</h1>
+        <div class="article_header_section"><div class="field--name-field-hero-image">
+        <figure class="media--view-mode-article-hero"><img src="/hero.jpg"><figcaption>
+        <p>The first three seedlings. Photographs by Lee.</p></figcaption></figure></div></div>
         <div class="block-field-blocknodearticlebody"><div class="field--name-body field--type-text-with-summary">
         <p>{FIRST}</p><figure class="caption caption-img"><img src="/tray.jpg">
         <figcaption><strong>Seed tray</strong> | Photograph by Ash</figcaption></figure>
@@ -557,7 +562,23 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <aside><figure class="caption caption-img"><img src="/sidebar.jpg">
         <figcaption>Advertisement caption</figcaption></figure></aside></article>"""
         _, body = narrate('https://www.harvardmagazine.com/seed-trials', html)
-        self.assertEqual(body, f'{FIRST} Seed tray | Photograph by Ash Short result. {LAST} Earlier results')
+        self.assertEqual(body, f'The first three seedlings. Photographs by Lee. {FIRST} '
+                         f'Seed tray | Photograph by Ash Short result. {LAST} Earlier results')
+
+    def test_harvard_export_drops_an_account_and_topics_without_guessing_attribution(self):
+        url = 'https://www.harvardmagazine.com/seed-trials'
+        account = 'fictional-user@harvard.edu'
+        body = f'''<span class="field--name-title">Seed trials</span>
+        <div class="field--name-body field--type-text-with-summary"><p>{FIRST}</p><p>{LAST}</p></div>
+        by <a href="/writer/lee-writer">{account}</a>
+        <div class="field--name-field-sub-topics"><div class="field__label">Related topics</div>Test tag</div>
+        <div class="field--name-field-featured-topic"><div class="field__label">Primary Topic</div>News</div>'''
+        entry = {'title': 'Seed trials', 'canonical_url': url, 'body_html': body,
+                 'publishedBylines': [{'name': account}]}
+        post, text = Substack('').post_text({'rss': True}, entry)
+        self.assertEqual(post['publishedBylines'], [])
+        self.assertEqual(text, f'{FIRST}\n{LAST}')
+        self.assertIn(account, html_to_text(body, title='Different title', url=url))
 
     def test_harvard_rss_uses_the_exported_writer_and_removes_only_template_fields(self):
         url = 'https://www.harvardmagazine.com/seed-trials'
