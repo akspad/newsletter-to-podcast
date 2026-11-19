@@ -19,6 +19,24 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_hyperallergic_preserves_ghost_image_captions_in_article_order(self):
+        html = f'''<article class="gh-article"><h1>Seed trials</h1><section class="gh-content is-body">
+        <figure class="kg-image-card"><img src="one"><figcaption>Tray one.</figcaption></figure><p>{FIRST}</p>
+        <figure class="kg-image-card"><img src="two"><figcaption>Tray <em>two</em>.</figcaption></figure>
+        <p>{LAST}</p></section><aside><figure class="kg-image-card"><img src="ad">
+        <figcaption>Ad caption.</figcaption></figure></aside></article>'''
+        _, body = narrate('https://hyperallergic.com/seed-trials/', html)
+        self.assertEqual(body, f'Tray one. {FIRST} Tray two. {LAST}')
+
+    def test_universe_today_preserves_the_lead_caption_and_stops_at_article_text(self):
+        html = f'''<main class="container"><article><header class="article-header"><h1>Seed trials</h1></header>
+        <figure><img src="tray"><figcaption>A tray. Credit: Lee.</figcaption></figure>
+        <div class="article-content"><div class="text"><p>{FIRST}</p><p>{LAST}</p></div></div>
+        <a class="plus-video-cta" href="/interview">Watch a trailer</a>
+        <div class="author-footer"><p>Bio of Lee.</p></div></article></main>'''
+        _, body = narrate('https://www.universetoday.com/articles/seed-trials', html)
+        self.assertEqual(body, f'A tray. Credit: Lee. {FIRST} {LAST}')
+
     def test_freebsd_signed_travel_report_uses_the_named_guest_in_both_paths(self):
         url = 'https://freebsdfoundation.org/blog/event-report/'
         title = 'BSDCan 2026 Travel Report – Lee Writer'

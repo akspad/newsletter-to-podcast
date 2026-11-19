@@ -379,6 +379,13 @@ def clean_tree(root, title, author, url=''):
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
                 bio.decompose()
+    if identity and identity[1] in {'universetoday.com', 'www.universetoday.com'}:
+        for body in root.select('main.container > article > figure:has(img) + .article-content > .text'):
+            figure = body.parent.find_previous_sibling()
+            caption = figure.find('figcaption', recursive=False)
+            if caption and editorial(caption) and editorial(body):
+                caption.name = 'div' if caption.find('p') else 'p'
+                body.insert(0, caption.extract())
     if identity and identity[1] in QUILLETTE_HOSTS:
         for body in root.select('article.post > section > .gh-content-fade'):
             remove_quillette_bookmarks(body, url)
@@ -626,6 +633,8 @@ def clean_tree(root, title, author, url=''):
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys(STRONG_TOWNS_HOSTS, '.thought-leadership_wrap .mast-article-rich-text '
                         '> figure.w-richtext-figure-type-image > figcaption'),
+        **dict.fromkeys({'hyperallergic.com', 'www.hyperallergic.com'}, 'article.gh-article > section.gh-content.is-body '
+                        '> figure.kg-image-card > figcaption'),
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '
@@ -975,6 +984,10 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.collection-view > .collection-preamble > .essay__content'
         elif identity[1] in {'sapiens.org', 'www.sapiens.org'}:
             body_selector = '.c-article-content[data-article-content] > .c-modules'
+        elif identity[1] in {'hyperallergic.com', 'www.hyperallergic.com'} and match('article.gh-article', scope):
+            body_selector = ':scope > section.gh-content.is-body'
+        elif identity[1] in {'universetoday.com', 'www.universetoday.com'} and match('main.container > article', scope):
+            body_selector = ':scope > .article-content > .text'
         elif identity[1] in {'lithub.com', 'www.lithub.com'}:
             body_selector = '.story-content > .story-body'
         elif identity[1] in QUILLETTE_HOSTS and match('article.post', scope):
