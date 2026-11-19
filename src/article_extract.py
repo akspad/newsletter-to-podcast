@@ -299,6 +299,11 @@ def clean_tree(root, title, author, url=''):
                     opening = body.find('p', recursive=False)
                     if not opening or ' '.join(opening.get_text().split()) != ' '.join(deck.get_text().split()):
                         body.insert(0, deck.extract())
+    if identity and identity[1] in {'reason.com', 'www.reason.com'}:
+        for widget in root.select('article.rcom-standard-article .entry-content .gform_wrapper.incontent-email-signup_wrapper'):
+            if (widget.select_one(':scope > form input[type="email"]')
+                    and not widget.find_parent(['blockquote', 'pre', 'code'])):
+                widget.decompose()
     if identity and identity[1] == 'blogs.kde.org':
         for form in root.select('article.post-content form.listmonk-form[action="https://newsletter.kde.org/subscription/form"]'):
             prompt = form.find_previous_sibling()
@@ -486,6 +491,11 @@ def clean_tree(root, title, author, url=''):
             if cover and editorial(cover) and editorial(body):
                 cover.name = 'div' if cover.find('p') else 'p'
                 body.insert(0, cover.extract())
+    if identity and identity[1] == 'www.raspberrypi.com' and identity[2].startswith('/news/'):
+        for caption in root.select('.c-post-content__wysiwyg > figure.wp-block-gallery > figcaption.blocks-gallery-caption'):
+            if editorial(caption) and caption.parent.find('img'):
+                caption.name = 'p'
+                caption.parent.insert_before(caption.extract())
     if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'} and author:
         for bio in root.select('article > .entry-content > hr.wp-block-separator + p.wp-block-paragraph:last-child'):
             credit = bio.select_one(':scope > em > strong:first-child')
@@ -773,6 +783,7 @@ def clean_tree(root, title, author, url=''):
                         notice.decompose()
                     seen.add(label)
     caption_selectors = {
+        **dict.fromkeys(QUILLETTE_HOSTS, 'article.post > section.prose.prose-brand > figure.kg-image-card > figcaption'),
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.w3.org': 'article > figure.component.component--image > figcaption',
         'inkscape.org': 'body.news #content > .wrapper figure.plugin_picture > figcaption',
@@ -1170,7 +1181,7 @@ def extract_text(soup, title='', author='', url=''):
         elif identity[1] in {'lithub.com', 'www.lithub.com'}:
             body_selector = '.story-content > .story-body'
         elif identity[1] in QUILLETTE_HOSTS and match('article.post', scope):
-            body_selector = ':scope > section > .gh-content-fade'
+            body_selector = ':scope > section > .gh-content-fade, :scope > section.prose.prose-brand:not(:has(> .gh-content-fade))'
         elif identity[1] in {'theparisreview.org', 'www.theparisreview.org'} and identity[2].startswith('/blog/'):
             body_selector = 'section#content > .article-body-wrap > main.article-body.blog-body'
             if match(body_selector, scope):

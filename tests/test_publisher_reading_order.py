@@ -19,6 +19,32 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_reason_omits_its_email_widget_without_removing_newsletter_prose(self):
+        html = f'''<article class="rcom-standard-article"><h1>Seed trials</h1><div class="entry-content">
+        <p>{FIRST}</p><div class="gform_wrapper incontent-email-signup_wrapper">
+        <div class="gform_heading"><p>Sign up for more.</p></div><form><input type="email"></form></div>
+        <p>The newsletter published the first report.</p><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://reason.com/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} The newsletter published the first report. {LAST}')
+
+    def test_raspberry_pi_preserves_the_group_caption_of_a_gallery(self):
+        html = f'''<title>Seed trials</title><div class="c-post-content__wysiwyg">
+        <p>{FIRST}</p><figure class="wp-block-gallery has-nested-images">
+        <figure class="wp-block-image"><img src="/seeds"></figure>
+        <figcaption class="blocks-gallery-caption">Seeds of each variety.</figcaption></figure>
+        <p>{LAST}</p></div>'''
+        self.assertEqual(narrate('https://www.raspberrypi.com/news/seed-trials/', html)[1],
+                         f'{FIRST} Seeds of each variety. {LAST}')
+
+    def test_quillette_reads_visible_prose_section_captions(self):
+        html = f'''<main><article class="post"><h1>Seed trials</h1><section class="prose prose-brand">
+        <p>{FIRST}</p><figure class="kg-card kg-image-card"><img src="/tray">
+        <figcaption>A tray at the end of the trial.</figcaption></figure>
+        <p>{LAST}</p><aside>Another article.</aside></section>
+        <section hidden class="prose prose-brand"><p>Hidden layout content.</p></section></article></main>'''
+        self.assertEqual(narrate('https://quillette.com/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} A tray at the end of the trial. {LAST}')
+
     def test_mozilla_omits_the_language_picker_but_keeps_translation_prose(self):
         html = f'''<article><h1>Seed trials</h1><div class="ft-c-single-post__body entry-content">
         <p class="wpml-ls-statics-post_translations wpml-ls">This post is also available in:
@@ -358,6 +384,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
         paragraph = '<p>This release adds a new measurement tool.</p>'
         self.assertEqual(html_to_text(opening + paragraph, title='seed-trials 1.0', url=url),
                          'This release adds a new measurement tool.')
+        self.assertEqual(html_to_text(opening + f'<p>{FIRST}</p>', title='seed-trials 1.0', url=url), FIRST)
+        extra = opening.replace('</p>', ' in our report.</p>')
+        self.assertIn('in our report.', html_to_text(extra + f'<p>{FIRST}</p>', title='seed-trials 1.0', url=url))
 
     def test_webb_article_keeps_the_sibling_caption_and_removes_download_instructions(self):
         html = f'''<article><h1>Seed trials</h1><div class="usa-article-content"><div class="entry-content">

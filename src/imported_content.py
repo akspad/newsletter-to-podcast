@@ -605,9 +605,9 @@ def clean_imported_widgets(root, url, title=''):
             target = url_identity(release['href'], url) if release else None
             remainder = opening.find_next_sibling('p')
             prior_text = ''.join(str(node).strip() for node in opening.previous_siblings)
+            release_name = heading_text(release) if release else ''
             duplicate = heading_matches(heading_text(opening), title) or (
-                release and heading_matches(release.get_text(strip=True), title)
-                and any(p.get_text(strip=True).startswith('This release ') for p in opening.find_next_siblings('p')))
+                release_name == title and heading_text(opening) == f'Release: {release_name}')
             if (not prior_text and label and label.get_text(strip=True) == 'Release:' and target
                     and target[1] == 'github.com' and '/releases/tag/' in target[2]
                     and duplicate and remainder and remainder.get_text(strip=True)):
