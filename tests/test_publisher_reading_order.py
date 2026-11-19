@@ -19,6 +19,18 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_internet_archive_uses_linked_masthead_and_keeps_inline_image_caption(self):
+        html = f'''<meta property="og:site_name" content="Fictional Archive - Latest updates">
+        <header><h1 class="site-title"><a href="/" rel="home">Fictional Archive</a></h1></header>
+        <article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <figure class="wp-block-image"><img src="/trays"><figcaption class="wp-element-caption">
+        Trays on the windowsill.</figcaption></figure><p>{LAST}</p></div></article>'''
+        url = 'https://blog.archive.org/2026/11/17/seed-trials/'
+        self.assertEqual(narrate(url, html),
+                         ['Fictional Archive. Seed trials.', f'{FIRST} Trays on the windowsill. {LAST}'])
+        external = html.replace('href="/"', 'href="https://example.com/"')
+        self.assertTrue(narrate(url, external)[0].startswith('Fictional Archive - Latest updates.'))
+
     def test_react_uses_the_blog_brand_and_moves_dated_author_into_intro(self):
         html = f"""<title>Seed trials – React</title><a href="/">logo by Lee</a><main><article>
         <div><h1 class="mdx-heading">Seed trials</h1></div>

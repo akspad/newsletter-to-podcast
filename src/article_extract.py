@@ -3,7 +3,7 @@ import re
 from html import unescape
 from urllib.parse import unquote, urlsplit
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_resolved_footnote_backlinks, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS,
     remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
@@ -329,20 +329,8 @@ def clean_tree(root, title, author, url=''):
             if card.select_one(':scope > a.embed-relatedstory-imagelink[href]') and not card.find_parent(
                     ['blockquote', 'pre', 'code']):
                 card.decompose()
-        for marker in root.select('.roscoe-body sup > a.footnote-identifier-link[id][href], '
-                                  '.roscoe-body ol.footnotes > li.footnote > a.footnote-back-link[href]'):
-            target, _, fragment = marker['href'].partition('#')
-            if (not fragment or (target and url_identity(target, url) != identity)
-                    or marker.find_parent(['blockquote', 'pre', 'code'])):
-                continue
-            if marker.get_text(strip=True).isdecimal():
-                marker.decompose()
-            elif marker.get_text(strip=True) == '↩':
-                before, after = marker.previous_sibling, marker.next_sibling
-                if isinstance(before, str) and isinstance(after, str) and before.endswith('[') and after.startswith(']'):
-                    before.replace_with(before[:-1])
-                    after.replace_with(after[1:])
-                marker.decompose()
+        for body in root.select('.roscoe-body'):
+            remove_nieman_footnote_controls(body, url)
     if identity and identity[1] in {'lithub.com', 'www.lithub.com'}:
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
@@ -569,6 +557,7 @@ def clean_tree(root, title, author, url=''):
                         notice.decompose()
                     seen.add(label)
     caption_selectors = {
+        'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '

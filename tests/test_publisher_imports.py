@@ -180,6 +180,14 @@ class PublisherWidgetTests(unittest.TestCase):
             with self.subTest(markup=markup, url=source):
                 self.assertEqual(html_to_text(markup, url=source), html_to_text(markup))
 
+    def test_nieman_feed_skips_the_reference_number_and_keeps_the_endnote(self):
+        url = 'https://www.niemanlab.org/2026/11/seed-trials/'
+        html = ('<p>Seeds sprouted<sup><a href="#note" class="footnote-identifier-link" '
+                'id="reading-note">1</a></sup>.</p><ol class="footnotes">'
+                '<li class="footnote" id="note">The trays were <a href="/trays">shallow</a>.</li></ol>')
+        self.assertEqual(html_to_text(html, url=url).split(), 'Seeds sprouted. The trays were shallow.'.split())
+        self.assertIn('sprouted1.', html_to_text(html, url='https://example.com/'))
+
     def test_simon_atom_removes_only_the_terminal_category_links(self):
         url = 'https://simonwillison.net/2026/11/17/seed-trials/'
         categories = ('<p>Tags: <a href="/tags/botany">botany</a>, '

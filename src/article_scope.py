@@ -119,6 +119,28 @@ def remove_resolved_footnote_backlinks(root, url=''):
             link.decompose()
 
 
+def remove_nieman_footnote_controls(root, url):
+    """Keep Nieman's footnote text while removing its numbered and return links."""
+    identity = url_identity(url)
+    if not identity or identity[1] not in {'niemanlab.org', 'www.niemanlab.org'}:
+        return
+    for marker in root.select('sup > a.footnote-identifier-link[id][href], '
+                              'ol.footnotes > li.footnote > a.footnote-back-link[href]'):
+        target, _, fragment = marker['href'].partition('#')
+        if (not fragment or (target and url_identity(target, url) != identity)
+                or marker.find_parent(['blockquote', 'pre', 'code'])):
+            continue
+        label = marker.get_text(strip=True)
+        if label.isdecimal() and marker.parent.name == 'sup':
+            marker.decompose()
+        elif label == '↩' and marker.parent.name == 'li':
+            before, after = marker.previous_sibling, marker.next_sibling
+            if isinstance(before, str) and isinstance(after, str) and before.endswith('[') and after.startswith(']'):
+                before.replace_with(before[:-1])
+                after.replace_with(after[1:])
+            marker.decompose()
+
+
 def explicitly_hidden(node):
     if node.has_attr('hidden') or node.get('aria-hidden', '').casefold() == 'true':
         return True

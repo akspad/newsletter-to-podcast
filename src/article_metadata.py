@@ -224,6 +224,10 @@ def article_details(soup, url):
     react_post = requested and requested[1] == 'react.dev' and requested[2].startswith('/blog/')
     if react_post and page_label.endswith(' – React'):
         publication = 'React'
+    if requested and requested[1] == 'blog.archive.org':
+        masthead = soup.select_one('header .site-title > a[rel~="home"][href]')
+        if masthead and editorial(masthead) and url_identity(masthead['href'], url) == requested[:2] + ('', ()):
+            publication = clean(masthead.get_text(), 80) or publication
 
     def strip_suffix(value):
         for separator in (' — ', ' - ', ' | ', ' – ', ' –\u00a0'):
