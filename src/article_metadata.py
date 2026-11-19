@@ -5,7 +5,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from imported_content import earth_observatory_writer
+from imported_content import WYOFILE_HOSTS, earth_observatory_writer, wyofile_feature
 from article_scope import DATE, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, url_identity
 
 
@@ -440,6 +440,12 @@ def article_details(soup, url):
         elif sidebar_byline and re.match(r'^By\s+', sidebar_byline.get_text(' ', strip=True)):
             author = sidebar_byline.get_text(' ', strip=True)
     author = clean(author or meta('article:author', 'og:article:author'), 100)
+    if host in WYOFILE_HOSTS and (feature := wyofile_feature(soup, title)):
+        credit = feature.select_one('header.entry-header .entry-meta > span.byline')
+        if credit and editorial(credit):
+            signed = clean(visible_text(credit), 241)
+            if re.match(r'^by\s+\S', signed, re.I) and len(signed) <= 240:
+                author = signed
     if author.startswith(('http://', 'https://')):
         author = ''
     author = re.sub(r'^by(?:\s*:\s*|\s+|$)', '', author, flags=re.I)
