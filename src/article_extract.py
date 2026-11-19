@@ -329,6 +329,20 @@ def clean_tree(root, title, author, url=''):
             if card.select_one(':scope > a.embed-relatedstory-imagelink[href]') and not card.find_parent(
                     ['blockquote', 'pre', 'code']):
                 card.decompose()
+        for marker in root.select('.roscoe-body sup > a.footnote-identifier-link[id][href], '
+                                  '.roscoe-body ol.footnotes > li.footnote > a.footnote-back-link[href]'):
+            target, _, fragment = marker['href'].partition('#')
+            if (not fragment or (target and url_identity(target, url) != identity)
+                    or marker.find_parent(['blockquote', 'pre', 'code'])):
+                continue
+            if marker.get_text(strip=True).isdecimal():
+                marker.decompose()
+            elif marker.get_text(strip=True) == '↩':
+                before, after = marker.previous_sibling, marker.next_sibling
+                if isinstance(before, str) and isinstance(after, str) and before.endswith('[') and after.startswith(']'):
+                    before.replace_with(before[:-1])
+                    after.replace_with(after[1:])
+                marker.decompose()
     if identity and identity[1] in {'lithub.com', 'www.lithub.com'}:
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
@@ -896,6 +910,8 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = '.blog-entry-body'
         elif identity[1] == 'www.raspberrypi.com' and identity[2].startswith('/news/'):
             body_selector = '.c-post-content__wysiwyg'
+        elif identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
+            body_selector = '.roscoe-article-body > .roscoe-body'
     if body_selector:
         bodies = scope.select(body_selector)
         if len(bodies) == 1 and editorial(bodies[0]) and (trusted_short_body or readable_prose(plain_text(bodies[0]))):

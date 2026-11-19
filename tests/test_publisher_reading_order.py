@@ -619,6 +619,19 @@ class PublisherReadingOrderTests(unittest.TestCase):
         _, body = narrate('https://www.niemanlab.org/2026/11/seed-trials/', html)
         self.assertEqual(body.split(), f'{FIRST} We checked the same plots again. {LAST}'.split())
 
+    def test_nieman_preserves_chart_labels_and_footnotes_without_reading_controls(self):
+        html = f'''<h1>Seed trials</h1><div class="roscoe-article-body"><div class="roscoe-body">
+        <p>{FIRST}</p><div class="ljc"><div class="ljc-title">Tray measurements</div>
+        <p>Measured at noon.</p><script>const data = []</script></div>
+        <p>Seeds sprouted<sup><a class="footnote-identifier-link" id="reference" href="#note">1</a></sup>.</p>
+        <p>{LAST}<ol class="footnotes"><li class="footnote" id="note">The trays were <a href="/trays">shallow</a>.
+        [<a class="footnote-back-link" href="#reference">↩</a>]</li></ol></p>
+        <blockquote>Use [<a class="footnote-back-link" href="#reference">↩</a>] to return.</blockquote>
+        </div></div><p>Newsletter signup</p>'''
+        _, body = narrate('https://www.niemanlab.org/2026/11/seed-trials/', html)
+        self.assertEqual(body, f'{FIRST} Tray measurements Measured at noon. Seeds sprouted. {LAST} '
+                         'The trays were shallow. Use [↩] to return.')
+
     def test_openstreetmap_diary_uses_the_permalink_title_and_profile(self):
         url = 'https://www.openstreetmap.org/user/lee/diary/42'
         html = f"""<head><title>Lee’s Diary | Paths near the greenhouse | OpenStreetMap</title>
