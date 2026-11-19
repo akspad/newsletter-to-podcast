@@ -1,4 +1,5 @@
 """Publisher templates must keep article content separate from page controls."""
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -18,6 +19,24 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_paris_review_uses_the_visible_headline_beside_the_article_body(self):
+        url = 'https://www.theparisreview.org/blog/2026/11/19/seed-trials/'
+        schema = {'@type': 'Article', 'url': url, 'headline': 'A gardener&#8217;s notebook',
+                  'author': {'name': 'Lee Writer'}}
+        html = f"""<meta property="og:site_name" content="Example Review">
+        <meta property="og:title" content="A gardener's notebook by Lee Writer">
+        <script type="application/ld+json">{json.dumps(schema)}</script>
+        <h1 hidden>A gardener’s notebook</h1><h1>Sign In</h1>
+        <section id="content"><header class="titles"><h1>A gardener&rsquo;s notebook</h1></header>
+        <div class="article-body-wrap"><main class="blog-body"><div class="entry-content">
+        <p>{FIRST}</p><p>{LAST}</p></div></main></div></section>"""
+        intro, body = narrate(url, html)
+        self.assertEqual(intro, 'Example Review. A gardener’s notebook. By Lee Writer.')
+        self.assertEqual(body, f'{FIRST} {LAST}')
+        # Visible examples of character-reference syntax are intentional.
+        literal = html.replace('gardener&rsquo;s', 'gardener&amp;#8217;s')
+        self.assertIn('A gardener&#8217;s notebook.', narrate(url, literal)[0])
+
     def test_harvard_preview_keeps_the_inline_caption_and_linked_scores_in_order(self):
         html = f"""<article class="node--type-article"><h1>Seed trials</h1>
         <div class="block-field-blocknodearticlebody"><div class="field--name-body field--type-text-with-summary">

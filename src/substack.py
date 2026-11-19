@@ -408,6 +408,7 @@ class Substack:
         if root.tag == "{http://www.w3.org/2005/Atom}feed":
             return self.atom_posts(pub, root, limit, base_url=self.last_url or pub['base'])
         base_url = self.last_url or pub['base']
+        google_research_feed = url_identity(base_url) == url_identity('https://research.google/blog/rss/')
         items = (node for node in root.iter() if node.tag in ('item', '{' + ns['rss'] + '}item'))
         for index, item in enumerate(items):
             if index >= min(limit or security.MAX_SOURCE_ENTRIES, security.MAX_SOURCE_ENTRIES):
@@ -422,7 +423,22 @@ class Substack:
             guid_node = item.find('guid')
             if not link and guid_node is not None and guid_node.get('isPermaLink', 'true').strip().casefold() == 'true':
                 link = feed_url(guid)  # Opaque or malformed GUIDs remain identities only.
-            html = item.findtext("content:encoded", namespaces=ns) or item.findtext(prefix + 'description', namespaces=ns) or ""
+            content = item.findtext("content:encoded", namespaces=ns)
+            description_node = item.find(prefix + 'description', namespaces=ns)
+            html = content or (description_node.text if description_node is not None else '') or ''
+            enclosure = item.find("enclosure")
+            podcast_url = (feed_url(enclosure.get("url"), base_url)
+                           if enclosure is not None and enclosure.get("type", "").startswith("audio/") else None)
+            if (google_research_feed and not content and not podcast_url
+                    and description_node is not None and len(description_node) == 0
+                    and (article_url := url_identity(link))):
+                # This feed can repeat a category verbatim as the description.
+                # A bare category is metadata and has no article text to read.
+                description = ' '.join(html.split())
+                if (article_url[1] == 'research.google' and article_url[2].startswith('/blog/')
+                        and description and description in
+                        {' '.join((node.text or '').split()) for node in item.findall('category')}):
+                    continue
             title = item.findtext(prefix + 'title', namespaces=ns) or ''
             text = html_to_text(html, title=title, url=link)
             published = feed_date(item.findtext("pubDate") or item.findtext("dc:date", namespaces=ns), rss=True)
@@ -434,7 +450,6 @@ class Substack:
                 guid = 'rss-fallback:' + json.dumps([
                     title,
                     published.astimezone(timezone.utc).isoformat(), ' '.join(text.split())], ensure_ascii=False)
-            enclosure = item.find("enclosure")
             bylines = [node.text.strip() for node in item.findall('dc:creator', ns) if node.text and node.text.strip()]
             bylines = [name for name in bylines if not outside_account_name(name, link)]
             if not bylines:
@@ -453,7 +468,7 @@ class Substack:
                 "slug": urlparse(link).path.strip("/").split("/")[-1] or "post",
                 "title": title,
                 "post_date": published.isoformat(),
-                "podcast_url": feed_url(enclosure.get("url"), base_url) if enclosure is not None and enclosure.get("type", "").startswith("audio/") else None,
+                "podcast_url": podcast_url,
                 "canonical_url": link,
                 "audience": "everyone",
                 "wordcount": len(text.split()),
