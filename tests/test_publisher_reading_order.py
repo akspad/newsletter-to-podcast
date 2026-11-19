@@ -138,7 +138,7 @@ class PublisherReadingOrderTests(unittest.TestCase):
 
     def test_damn_interesting_keeps_caption_and_one_rights_notice_without_donation_prompt(self):
         rights = '<p class="print-only print-copyright">Copyright belongs to the author.</p>'
-        html = f"""<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p></div>
+        html = f"""<article><h1>Seed trials</h1>{rights}<div class="entry-content"><p>{FIRST}</p></div>
         <figure class="entry-image"><img src="/plot"><figcaption>After rain.</figcaption></figure>
         <div class="entry-content"><p>{LAST}</p></div>{rights}{rights}<p class="print-only">
         Since you enjoyed our work enough to print it out, <a href="/donate">give a little</a>.</p></article>"""
@@ -147,7 +147,18 @@ class PublisherReadingOrderTests(unittest.TestCase):
         _, body = narrate('https://www.damninteresting.com/seed-trials/', html)
         self.assertIn('After rain.', body)
         self.assertLessEqual(body.count('Copyright belongs to the author.'), 1)
+        self.assertTrue(body.startswith(FIRST), body)
         self.assertNotIn('give a little', body)
+
+    def test_outside_keeps_the_marked_inline_photo_caption_without_reading_sidebar_images(self):
+        html = f'''<main><h1>Seed trials</h1><div class="article-template"><div class="js-body-content">
+        <div class="content-wrap fp-contentTarget"><p>{FIRST}</p>
+        <figure class="pom-image-wrap"><img src="tray"><figcaption class="pom-caption">
+        <span class="article__caption">A tray in a greenhouse.</span> (Photo: Lee)</figcaption></figure><p>{LAST}</p></div>
+        <aside><figure class="pom-image-wrap"><img src="ad"><figcaption class="pom-caption">
+        Sponsored image.</figcaption></figure></aside></div></div></main>'''
+        _, body = narrate('https://www.outsideonline.com/adventure-travel/seed-trials/', html)
+        self.assertEqual(body, f'{FIRST} A tray in a greenhouse. (Photo: Lee) {LAST}')
 
     def test_kottke_untitled_post_does_not_read_clipped_opening_as_a_title(self):
         url = 'https://kottke.org/26/11/0054321-seed-trials'

@@ -631,7 +631,8 @@ def clean_tree(root, title, author, url=''):
     if identity and identity[1] in {'damninteresting.com', 'www.damninteresting.com'}:
         for article in root.select('article'):
             seen = set()
-            for notice in article.select(':scope > p.print-only'):
+            # Prefer the closing printed credit when the template repeats it at the top.
+            for notice in reversed(article.select(':scope > p.print-only')):
                 label = ' '.join(notice.get_text().split())
                 if (label.startswith('Since you enjoyed our work enough to print it out,')
                         and (notice.select_one('a[href$="/donate"]')
@@ -647,6 +648,8 @@ def clean_tree(root, title, author, url=''):
                         '> figure.w-richtext-figure-type-image > figcaption'),
         **dict.fromkeys({'hyperallergic.com', 'www.hyperallergic.com'}, 'article.gh-article > section.gh-content.is-body '
                         '> figure.kg-image-card > figcaption'),
+        **dict.fromkeys(OUTSIDE_HOSTS, '.article-template .js-body-content > .content-wrap.fp-contentTarget '
+                        '> figure.pom-image-wrap > figcaption.pom-caption'),
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'hcn.org', 'www.hcn.org'},
                         'article .entry-content figure.wp-block-image > figcaption.wp-element-caption, '
