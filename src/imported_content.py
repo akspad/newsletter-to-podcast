@@ -12,6 +12,7 @@ OUTSIDE_HOSTS = {'outsideonline.com', 'www.outsideonline.com'}
 COLOSSAL_HOSTS = {'thisiscolossal.com', 'www.thisiscolossal.com'}
 WYOFILE_HOSTS = {'wyofile.com', 'www.wyofile.com'}
 GUARDIAN_HOSTS = {'theguardian.com', 'www.theguardian.com'}
+OPEN_CULTURE_HOSTS = {'openculture.com', 'www.openculture.com'}
 
 
 def guardian_author_label(name):
@@ -145,6 +146,22 @@ def earth_observatory_writer(root, url):
     return next(iter(writers)) if len(writers) == 1 else ''
 
 
+def open_culture_writer(body, url):
+    identity = url_identity(url)
+    if not identity or identity[1] not in OPEN_CULTURE_HOSTS:
+        return ''
+    if isinstance(body, str):
+        from bs4 import BeautifulSoup
+        body = BeautifulSoup(body, 'html.parser')
+    last = next((node for node in reversed(body.find_all('p', recursive=False)) if node.get_text(strip=True)), None)
+    if last and editorial(last) and not last.find_parent(['blockquote', 'pre', 'code']):
+        credit = last.find('em', recursive=False)
+        text = ' '.join(speech_text(last.get_text()).split())
+        if credit and text == ' '.join(speech_text(credit.get_text()).split()) == 'Ted Mills is a freelance writer on the arts.':
+            return 'Ted Mills'
+    return ''
+
+
 def remove_openculture_endmatter(body, url):
     """Remove Open Culture's donation appeal and related-post navigation."""
     identity = url_identity(url)
@@ -180,7 +197,8 @@ def remove_openculture_endmatter(body, url):
                 break
             link = sibling.select_one(':scope > a[href]')
             target = url_identity(link['href'], url) if link else None
-            if (not target or target[1] != identity[1] or not target[2].endswith('.html') or target == identity
+            if (not target or target[1] not in OPEN_CULTURE_HOSTS or not target[2].endswith('.html')
+                    or target[2:] == identity[2:]
                     or ('bookmark' not in link.get('rel', []) and
                         (text != 'Related Content:' or not re.fullmatch(r'/\d{4}/\d{2}/[^/]+\.html', target[2])))
                     or len(sibling.find_all('a')) != 1 or sibling.get_text(strip=True) != link.get_text(strip=True)):
@@ -296,6 +314,14 @@ def clean_imported_widgets(root, url, title=''):
         remove_pluralistic_footer(root)
     if identity and identity[1] in {'openculture.com', 'www.openculture.com'}:
         remove_openculture_endmatter(root, url)
+    if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'} and identity[2].startswith('/picture-of-the-day/'):
+        for link in root.select('p > a.more-link[href]'):
+            teaser = link.select_one(':scope > .screen-reader-text')
+            if (link.parent.parent is root and teaser and title and url_identity(link['href'], url) == identity
+                    and heading_matches(heading_text(teaser).strip('"'), title)
+                    and heading_text(link).startswith('Continue reading ')
+                    and not link.find_next_sibling() and not any(str(text).strip() for text in link.next_siblings)):
+                link.decompose()
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
         for paragraph in root.find_all('p', recursive=False):
             images = paragraph.select(':scope > img.inpost')

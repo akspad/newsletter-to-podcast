@@ -332,6 +332,36 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(html_to_text(markup, url=url), f'{FIRST}\n{LAST}')
         self.assertIn('Related Content:', html_to_text(markup.rsplit('<p>',1)[0], url=url))
 
+    def test_open_culture_announces_the_signed_writer_and_prunes_both_own_host_variants(self):
+        url = 'https://www.openculture.com/2026/11/seed-trials.html'
+        bio = '<p><em>Ted Mills is a free&shy;lance writer on the arts.</em></p>'
+        related = ('<p><strong>Related Content:</strong></p><p><a rel="bookmark" '
+                   'href="https://openculture.com/2026/01/old.html">An unrelated story</a></p>')
+        story = f'<p>{FIRST}</p><p>{LAST}</p>{related}{bio}'
+        html = (f'<title>Seed trials</title><meta name="author" content="OC"><div class="recent_post">'
+                f'<div class="colorcontrast"><div class="entry">{story}</div></div></div>')
+        intro, body = narrate(url, html)
+        self.assertIn('By Ted Mills.', intro)
+        self.assertNotIn('An unrelated story', body)
+        source = Substack('')
+        post = {'title': 'Seed trials', 'canonical_url': url, 'body_html': story,
+                'publishedBylines': [{'name': 'OC'}]}
+        full, text = source.post_text({'rss': True}, post)
+        self.assertEqual(full['publishedBylines'], [{'name': 'Ted Mills'}])
+        self.assertNotIn('An unrelated story', text)
+        for markup in (f'<blockquote>{bio}</blockquote>', bio + f'<p>{LAST}</p>'):
+            control, _ = source.post_text({'rss': True}, {**post, 'body_html': markup})
+            self.assertEqual(control['publishedBylines'], [{'name': 'OC'}])
+
+    def test_astronomy_photo_feed_removes_only_its_own_read_more_control(self):
+        title = 'Seed trials'
+        url = 'https://www.astronomy.com/picture-of-the-day/photo/seed-trials/'
+        link = (f'<a class="more-link" href="{url}">Continue reading '
+                '<span class="screen-reader-text">"Seed trials"</span></a>')
+        self.assertEqual(html_to_text(f'<p>{FIRST}{link}</p>', title=title, url=url), FIRST)
+        for keep in (link.replace('seed-trials/', 'another/'), link + ' ' + LAST, link.replace('>"Seed trials"<', '>"Another story"<')):
+            self.assertIn('Continue reading', html_to_text(f'<p>{FIRST}{keep}</p>', title=title, url=url))
+
     def test_raspberry_pi_keeps_the_video_caption_without_the_embed(self):
         html = f"""<article><h1>Seed trials</h1><div class="c-post-content__wysiwyg"><p>{FIRST}</p>
         <figure class="wp-block-embed-youtube"><div class="wp-block-embed__wrapper"><iframe src="/player"></iframe></div>

@@ -5,7 +5,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from tts import speech_text
-from imported_content import GUARDIAN_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, wyofile_feature
+from imported_content import GUARDIAN_HOSTS, OPEN_CULTURE_HOSTS, WYOFILE_HOSTS, earth_observatory_writer, guardian_author_label, open_culture_writer, wyofile_feature
 from article_scope import DATE, STRONG_TOWNS_HOSTS, article_labels, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, opening_writer_credits, plover_story_title, react_blog_credit, url_identity
 
 
@@ -424,6 +424,10 @@ def article_details(soup, url):
         _, react_author = react_blog_credit(soup, title)
         author = react_author or author
     host = urlparse(url).hostname
+    if host in OPEN_CULTURE_HOSTS and author.casefold() in {'', 'oc', 'open culture'}:
+        section = scope.select_one('.recent_post > .colorcontrast > .entry')
+        if section and belongs_to_scope(section, scope):
+            author = open_culture_writer(section, url) or author
     if not author and scope.name == 'article' and host == 'pluralistic.net':
         credit = scope.select_one(':scope > footer.entry-footer .byline .author.vcard a[href*="/author/"]')
         if credit and not any(explicitly_hidden(node) for node in (credit, *credit.parents)):
