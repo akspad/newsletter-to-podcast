@@ -444,6 +444,11 @@ def article_details(soup, url):
         _, react_author = react_blog_credit(soup, title)
         author = react_author or author
     host = urlparse(url).hostname
+    if (not author and requested and host == 'www.bicycleretailer.com'
+            and url_identity(scope.get('about'), url) == requested):
+        credit = soup.select_one('#block-views-author-block .view-author .authname > a')
+        if credit and editorial(credit):
+            author = clean(visible_text(credit))
     if host in {'universalhub.com', 'www.universalhub.com'}:
         _, writer = universal_hub_writer(scope, url)
         author = writer or author

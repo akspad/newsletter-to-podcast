@@ -292,6 +292,71 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <p>{FIRST}</p><p>{LAST}</p></article></main>"""
         self.assertEqual(narrate('https://react.dev/blog/2026/11/19/seed-trials', html),
                          ['React. Seed trials. By Lee Writer.', f'{FIRST} {LAST}'])
+        multiple = html.replace('Lee Writer</a></p>', 'Lee Writer</a> and <a href="/ash">Ash Editor</a></p>')
+        self.assertEqual(narrate('https://react.dev/blog/2026/11/19/seed-trials', multiple),
+                         ['React. Seed trials. By Lee Writer and Ash Editor.', f'{FIRST} {LAST}'])
+
+    def test_eff_keeps_a_nested_caption_inside_the_full_deeplinks_article(self):
+        caption = ('<div class="caption caption-center"><div class="caption-inner">'
+                   '<img src="/tray"><p class="caption-text">A side view.</p></div></div>')
+        html = f'''<article class="node--blog--full"><h1>Seed trials</h1><div class="node__content">
+        <div class="field--name-body"><div class="field__items"><div class="field__item">
+        <p>{FIRST}</p><p><span><i>{caption}</i></span></p><p>{LAST}</p>
+        </div></div></div></div></article><article class="node--teaser"><h2>Other news</h2>
+        {caption.replace('A side view.', 'Unrelated image.')}</article>'''
+        self.assertEqual(narrate('https://www.eff.org/deeplinks/2026/11/seed-trials', html)[1],
+                         f'{FIRST} A side view. {LAST}')
+
+    def test_nieman_lab_keeps_the_editorial_quiz_photo_caption(self):
+        html = f'''<article><h1>Seed trials</h1><div class="roscoe-article-body">
+        <div class="roscoe-body"><p>{FIRST}</p><div class="rsc-quiz">
+        <figure class="rsc-quiz-fig"><img src="/tray">
+        <figcaption class="rsc-quiz-credit">A view of the tray.</figcaption></figure></div>
+        <p>{LAST}</p><aside><div class="rsc-quiz"><figure class="rsc-quiz-fig"><img src="/ad">
+        <figcaption class="rsc-quiz-credit">Sponsored image.</figcaption></figure></div></aside>
+        </div></div></article>'''
+        self.assertEqual(narrate('https://www.niemanlab.org/2026/11/seed-trials/', html)[1],
+                         f'{FIRST} A view of the tray. {LAST}')
+
+    def test_bicycle_retailer_uses_the_author_block_only_for_the_matching_article(self):
+        url = 'https://www.bicycleretailer.com/retail-news/2026/11/19/seed-trials'
+        html = f'''<title>Seed trials</title><article about="{url}"><h1>Seed trials</h1>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p><p>Lee Reader</p></div></article>
+        <div id="block-views-author-block"><div class="view-author"><div class="authname">
+        <a href="/authors/ash-writer">Ash Writer</a></div></div></div>'''
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('By Ash Writer.'), intro)
+        self.assertEqual(body, f'{FIRST} {LAST} Lee Reader')
+        self.assertNotIn('Ash Writer', narrate(f'{url}-different', html)[0])
+
+    def test_rust_release_keeps_stabilized_api_links_and_matching_inline_punctuation(self):
+        html = f'''<title>Seed trials</title><section class="white" id="Seed-trials"><div>
+        <h1>Seed trials</h1><div class="post"><p>{FIRST}</p><h2>Stabilized APIs</h2>
+        <ul><li><a href="/seed"><code><span>Tray</span><span>::</span>seed</code></a></li>
+        <li><a href="/water"><code><span>Tray</span><span>::</span>water</code></a></li></ul>
+        <p>{LAST}</p></div></div></section><section><h2>Other stories</h2></section>'''
+        self.assertEqual(narrate('https://blog.rust-lang.org/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} Stabilized APIs Tray::seed Tray::water {LAST}')
+
+    def test_kde_skips_its_listmonk_prompt_and_preserves_editorial_newsletter_prose(self):
+        html = f'''<article class="post-content"><h1>Seed trials</h1><div class="jumbotron"></div>
+        <div class="content-width"><p>{FIRST}</p><h2>Newsletter findings</h2><p>{LAST}</p>
+        <h2 id="newsletter">Newsletter</h2>
+        <p>Enter your email address to follow this blog and receive notifications of new posts by email.</p>
+        <form class="listmonk-form" action="https://newsletter.kde.org/subscription/form">
+        <button>Subscribe</button></form></div></article>'''
+        self.assertEqual(narrate('https://blogs.kde.org/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} Newsletter findings {LAST}')
+
+    def test_bgs_skips_the_identified_related_news_carousel_in_both_paths(self):
+        url = 'https://www.bgs.ac.uk/news/seed-trials/'
+        editorial_body = f'<section class="content-section"><p>{FIRST}</p><h2>Related news</h2><p>{LAST}</p></section>'
+        carousel = '''<section class="cards-carousel-section"><div class="container">
+        <div class="header-of-section"><div class="col-12"><h2>Related news</h2></div></div>
+        <div class="cards-find-more"><h4><a href="/other">Other story</a></h4></div></div></section>'''
+        html = f'<main><h1>Seed trials</h1><div class="entry-content">{editorial_body}</div>{carousel}</main>'
+        self.assertEqual(narrate(url, html)[1], f'{FIRST} Related news {LAST}')
+        self.assertEqual(html_to_text(editorial_body + carousel, url=url), f'{FIRST}\nRelated news\n{LAST}')
 
     def test_nautilus_preserves_caption_and_credit_in_article_order(self):
         html = f"""<article><h1>Seed trials</h1><div class="entry-content">

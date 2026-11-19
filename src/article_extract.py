@@ -5,7 +5,7 @@ from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, remove_table_of_contents, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
-    remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
+    remove_bgs_related_news, remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
     remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
     wyofile_feature,
 )
@@ -222,6 +222,23 @@ def clean_tree(root, title, author, url=''):
         footer = root.select_one('#centercontent > #footer')
         if footer and footer.select_one(':scope > p.footer > [data-pagefind-meta^="date:"]'):
             footer.decompose()
+    if identity and identity[1] in {'eff.org', 'www.eff.org'} and identity[2].startswith('/deeplinks/'):
+        for figure in root.select('article.node--blog--full .field--name-body .caption:has(img)'):
+            caption = figure.select_one('.caption-inner > p.caption-text')
+            if caption and editorial(caption):
+                figure.insert_before(caption.extract())
+    if identity and identity[1] == 'www.bgs.ac.uk':
+        for main in root.select('main'):
+            remove_bgs_related_news(main)
+    if identity and identity[1] == 'blogs.kde.org':
+        for form in root.select('article.post-content form.listmonk-form[action="https://newsletter.kde.org/subscription/form"]'):
+            prompt = form.find_previous_sibling()
+            heading = prompt.find_previous_sibling() if prompt and prompt.name == 'p' else None
+            if (heading and heading.name == 'h2' and heading.get('id') == 'newsletter'
+                    and heading.get_text(strip=True) == 'Newsletter'
+                    and prompt.get_text(strip=True) == 'Enter your email address to follow this blog and receive notifications of new posts by email.'):
+                prompt.decompose()
+                heading.decompose()
     if identity and identity[1] == 'react.dev' and identity[2].startswith('/blog/'):
         byline, writer = react_blog_credit(root, title)
         if byline and writer == author:
@@ -643,6 +660,8 @@ def clean_tree(root, title, author, url=''):
                         '> figure.kg-image-card > figcaption'),
         **dict.fromkeys(OUTSIDE_HOSTS, '.article-template .js-body-content > .content-wrap.fp-contentTarget '
                         '> figure.pom-image-wrap > figcaption.pom-caption'),
+        **dict.fromkeys({'niemanlab.org', 'www.niemanlab.org'}, '.roscoe-body .rsc-quiz '
+                        'figure.rsc-quiz-fig > figcaption.rsc-quiz-credit'),
         **dict.fromkeys({'theparisreview.org', 'www.theparisreview.org'}, 'section#content > .article-body-wrap '
                         '> main.article-body.blog-body > div.wp-caption > p.wp-caption-text'),
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
@@ -974,6 +993,10 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = 'div.post.hentry > div.entry'
         elif identity[1] == 'blogs.kde.org' and match('article.post-content', scope):
             body_selector = ':scope > .jumbotron ~ .content-width'
+        elif identity[1] == 'blog.rust-lang.org':
+            body_selector = 'section.white[id] > div > div.post'
+        elif identity[1] in {'eff.org', 'www.eff.org'} and identity[2].startswith('/deeplinks/') and match('article.node--blog--full', scope):
+            body_selector = ':scope > .node__content > .field--name-body > .field__items > .field__item'
         elif identity[1] in {'openculture.com', 'www.openculture.com'}:
             body_selector = '.recent_post > .colorcontrast > .entry'
         elif (identity[1] in {'robinsloan.com', 'www.robinsloan.com'} and identity[2].startswith('/lab/')

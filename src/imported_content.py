@@ -20,6 +20,13 @@ def guardian_author_label(name):
     return name.removesuffix(' Health policy editor') if isinstance(name, str) else name
 
 
+def remove_bgs_related_news(root):
+    for carousel in root.find_all('section', class_='cards-carousel-section', recursive=False):
+        heading = carousel.select_one(':scope > .container > .header-of-section > .col-12 > h2')
+        if heading and heading_text(heading) == 'Related news' and carousel.select_one('.cards-find-more h4 a[href]'):
+            carousel.decompose()
+
+
 def universal_hub_writer(root, url):
     identity = url_identity(url)
     if not identity or identity[1] not in {'universalhub.com', 'www.universalhub.com'}:
@@ -442,6 +449,8 @@ def clean_imported_widgets(root, url, title=''):
                 node.decompose()
     if identity and identity[1] == 'daily.jstor.org':
         clean_jstor_pull_quotes(root)
+    if identity and identity[1] == 'www.bgs.ac.uk':
+        remove_bgs_related_news(root)
     if identity and identity[1] == 'science.nasa.gov' and identity[2].startswith('/missions/webb/'):
         clean_webb_rss(root, title)
     if identity and identity[1] in {'aeon.co', 'www.aeon.co'}:

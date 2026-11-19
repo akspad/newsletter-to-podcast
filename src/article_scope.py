@@ -262,11 +262,14 @@ def react_blog_credit(root, title):
                 and paragraph and editorial(paragraph)):
             continue
         links = paragraph.find_all('a', recursive=False)
-        if len(links) == 1 and editorial(links[0]):
-            name = links[0].get_text(strip=True)
+        if links and all(editorial(link) for link in links):
+            names = [link.get_text(strip=True) for link in links]
+            listed = {', '.join(names), ' and '.join(names)}
+            if len(names) > 2:
+                listed.add(', '.join(names[:-1]) + ', and ' + names[-1])
             date, marker, author = ' '.join(paragraph.get_text().split()).partition(' by ')
-            if marker and DATE.fullmatch(date) and name and name == author:
-                return paragraph, name
+            if marker and DATE.fullmatch(date) and all(names) and author in listed:
+                return paragraph, author
     return None, ''
 
 
