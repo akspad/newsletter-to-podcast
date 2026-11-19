@@ -235,6 +235,16 @@ def clean_imported_widgets(root, url, title=''):
             if (images and markers == '[img][/img]' * len(images)
                     and all(child.name in {'img', 'br'} for child in paragraph.find_all(recursive=False))):
                 paragraph.decompose()
+    if identity and identity[1] == 'blog.jim-nielsen.com':
+        paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
+        if getattr(paragraph, 'name', None) == 'p':
+            links = paragraph.find_all('a', recursive=False, href=True)
+            if (len(links) == 3 and ' '.join(paragraph.get_text().split()) == 'Reply via: Email · Mastodon · Bluesky'
+                    and [link.get_text(strip=True) for link in links] == ['Email', 'Mastodon', 'Bluesky']
+                    and links[0]['href'].startswith('mailto:')
+                    and url_identity(links[1]['href']) == url_identity('https://mastodon.social/@jimniels')
+                    and url_identity(links[2]['href']) == url_identity('https://bsky.app/profile/jim-nielsen.com')):
+                paragraph.decompose()
     if identity and identity[1] == 'simonwillison.net':
         # The Atom feed appends a paragraph of category links after the story.
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)

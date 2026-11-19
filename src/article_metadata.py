@@ -197,8 +197,13 @@ def article_details(soup, url):
     feed_name = re.sub(r'\s+(?:[-|–—]\s+)?(?:Atom|RSS)\s+Feed$|\s+[-|–—]\s+(?:Atom|RSS)$', '',
                        feed.get('title', '').split(' » ')[0] if feed else '', flags=re.I)
     if clean(feed_name).casefold() in {'rss', 'atom', 'feed', 'rss feed', 'atom feed',
-                                      'recent entries', 'recent posts', 'latest posts'}:
+                                      'recent entries', 'recent posts', 'latest posts',
+                                      'rss: xml feed', 'rss: json feed'}:
         feed_name = ''
+    if requested and requested[1] == 'blog.jim-nielsen.com' and not feed_name:
+        headline, _, site_label = page_label.rpartition(' - ')
+        if headline in visible_titles and site_label:
+            home_name = site_label
     pypi_post = requested and requested[1] == 'blog.pypi.org' and requested[2].startswith('/posts/')
     if pypi_post:
         logo = soup.select_one('header .md-logo[data-md-component="logo"][title]')

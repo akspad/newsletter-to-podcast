@@ -22,6 +22,29 @@ PUB = {'base': 'https://fictional.example/feed', 'rss': True, 'name': 'Science N
 
 
 class SyndicationFooterTests(unittest.TestCase):
+    def test_old_new_thing_accepts_its_own_devblogs_homepage_and_preserves_query_identity(self):
+        url = 'https://devblogs.microsoft.com/oldnewthing/story/?p=123/'
+        footer = FOOTER.replace('/story"', '/oldnewthing/story/?p=123/"').replace(
+            'https://fictional.example', 'https://devblogs.microsoft.com/oldnewthing')
+        self.assertEqual(html_to_text(BODY + footer, title=TITLE, url=url), 'A brief but legitimate quotation.')
+        with_code = footer.replace('discovery', '&lt;CODE&gt;discovery&lt;/CODE&gt;')
+        self.assertEqual(html_to_text(BODY + with_code, title=TITLE, url=url), 'A brief but legitimate quotation.')
+        for changed in (footer.replace('?p=123/', '?p=456/'),
+                        footer.replace('com/oldnewthing"', 'com/otherblog"'),
+                        with_code.replace('CODE', 'B'),
+                        footer + '<p>The rest of the story.</p>'):
+            self.assertIn('appeared first on', html_to_text(BODY + changed, title=TITLE, url=url))
+
+    def test_jim_nielsen_strips_only_the_terminal_reply_links_on_its_own_feed_content(self):
+        url = 'https://blog.jim-nielsen.com/2026/story/'
+        footer = ('<p>Reply via: <a href="mailto:writer@example.test">Email</a> · '
+                  '<a href="https://mastodon.social/@jimniels">Mastodon</a> · '
+                  '<a href="https://bsky.app/profile/jim-nielsen.com">Bluesky</a></p>')
+        self.assertEqual(html_to_text(BODY + footer, title=TITLE, url=url), 'A brief but legitimate quotation.')
+        for context, markup in ((URL, footer), (url, '<blockquote>' + footer + '</blockquote>'),
+                                (url, footer + '<p>One last note.</p>'), (url, footer.replace('@jimniels', '@other'))):
+            self.assertIn('Reply via:', html_to_text(BODY + markup, title=TITLE, url=context))
+
     def test_mozilla_footer_accepts_only_the_same_locale_homepage(self):
         url = 'https://blog.mozilla.org/en-US/mozilla/story/'
         footer = FOOTER.replace('/story"', '/en-US/mozilla/story/"').replace(

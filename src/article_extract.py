@@ -323,6 +323,14 @@ def clean_tree(root, title, author, url=''):
         for bio in root.select('.story-content > .bio-container:has(> .bio)'):
             if not bio.find_parent(['blockquote', 'pre', 'code']):
                 bio.decompose()
+    if identity and identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'} and identity[2].startswith('/collection/'):
+        for image in root.select('.collection-preamble > .essay__content > .essay__image:has(img)'):
+            caption = image.select_one(':scope > .essay__center-content > .essay__image__caption')
+            if caption and editorial(caption) and not caption.find_parent(['blockquote', 'pre', 'code']):
+                # The layout marks both the picture and its credit as image
+                # content. Move the caption text before image pruning.
+                image.insert_before(caption.extract())
+                caption.unwrap()
     if identity and identity[1] == 'buttondown.com' and '/archive/' in identity[2]:
         for deck in root.select('article.email-body > h1.subject + h2.description'):
             body = deck.find_next_sibling()
