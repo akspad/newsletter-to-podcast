@@ -27,6 +27,19 @@ def remove_bgs_related_news(root):
             carousel.decompose()
 
 
+def remove_bgs_topic_links(root, url):
+    identity = url_identity(url)
+    for topics in root.select('section.wp-block-bgs-blocks-content-container .relatives'):
+        label = topics.find('h5', recursive=False)
+        links = topics.select(':scope > div > a.button[href]')
+        if (label and heading_text(label) == 'Relative topics' and links
+                and topics.get_text(' ', strip=True) == ' '.join(
+                    node.get_text(' ', strip=True) for node in (label, *links))
+                and all((target := url_identity(link['href'], url)) and target[:2] == identity[:2]
+                        and target[2].startswith('/tag/') for link in links)):
+            topics.decompose()
+
+
 def universal_hub_writer(root, url):
     identity = url_identity(url)
     if not identity or identity[1] not in {'universalhub.com', 'www.universalhub.com'}:
@@ -459,17 +472,30 @@ def clean_imported_widgets(root, url, title=''):
         headline = root.find('h1', recursive=False)
         if headline and heading_text(headline) == title:
             headline.decompose()
+    if identity and identity[1] in {'smashingmagazine.com', 'www.smashingmagazine.com'}:
+        for widget in root.find_all('div', recursive=False):
+            plans = widget.select(':scope > div > div > a[href^="https://smart-interface-design-patterns.thinkific.com/enroll/"]')
+            if len(plans) < 2 or not widget.select_one(':scope > div > ul a[href="#"]'):
+                continue
+            if {heading_text(h) for h in widget.select(':scope > div > div > h3')} != {'Video only', 'Video + UX Training'}:
+                continue
+            previous = widget.find_previous_sibling()
+            while previous and not previous.get_text(strip=True):
+                previous = previous.find_previous_sibling()
+            if (previous and previous.name == 'a' and previous.get('href') == 'https://ai-design-patterns.com/'
+                    and previous.get_text(strip=True) == 'Design Patterns For AI Interfaces'):
+                heading = previous
+                prompt = heading.find_previous_sibling()
+                while prompt and not prompt.get_text(strip=True):
+                    prompt = prompt.find_previous_sibling()
+                heading.decompose()
+                if (prompt and prompt.name == 'p' and prompt.get_text(' ', strip=True).startswith('Meet Design Patterns For AI Interfaces')
+                        and prompt.select_one('a[href="https://ai-design-patterns.com/"]')):
+                    prompt.decompose()
+            widget.decompose()
     if identity and identity[1] == 'www.bgs.ac.uk':
         remove_bgs_related_news(root)
-        for topics in root.select('section.wp-block-bgs-blocks-content-container .relatives'):
-            label = topics.find('h5', recursive=False)
-            links = topics.select(':scope > div > a.button[href]')
-            if (label and heading_text(label) == 'Relative topics' and links
-                    and topics.get_text(' ', strip=True) == ' '.join(
-                        node.get_text(' ', strip=True) for node in (label, *links))
-                    and all((target := url_identity(link['href'], url)) and target[:2] == identity[:2]
-                            and target[2].startswith('/tag/') for link in links)):
-                topics.decompose()
+        remove_bgs_topic_links(root, url)
     if identity and identity[1] in {'niemanlab.org', 'www.niemanlab.org'}:
         for timeline in root.select('aside.rsc-collbox.rsc-collbox-side'):
             items = timeline.select(':scope > .rsc-collbox-body > ol.rsc-collbox-list > li.rsc-collbox-item')

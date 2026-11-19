@@ -19,6 +19,44 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_mozilla_omits_the_language_picker_but_keeps_translation_prose(self):
+        html = f'''<article><h1>Seed trials</h1><div class="ft-c-single-post__body entry-content">
+        <p class="wpml-ls-statics-post_translations wpml-ls">This post is also available in:
+        <a href="/de/seed-trials/"><span class="wpml-ls-native" lang="de">Deutsch</span></a></p>
+        <p>{FIRST}</p><p>Our translated notes helped other gardeners.</p><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://blog.mozilla.org/en/seed-trials/', html)[1],
+                         f'{FIRST} Our translated notes helped other gardeners. {LAST}')
+
+    def test_inkscape_reads_embedded_picture_captions_and_keeps_news_sections(self):
+        html = f'''<body class="news"><main id="content"><div class="wrapper">
+        <div class="breadcrumbs"><a href="/news/">News</a></div><h1>Seed trials</h1>
+        <p class="postdate">19 November 2026</p><p>{FIRST}</p><div><figure class="plugin_picture">
+        <img src="/tray.gif"><figcaption>The trays after rain.</figcaption></figure></div>
+        <h2>Results</h2><p>{LAST}</p></div></main></body>'''
+        self.assertEqual(narrate('https://inkscape.org/news/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} The trays after rain. Results {LAST}')
+
+    def test_bgs_preview_keeps_the_caption_inside_its_editorial_figure(self):
+        html = f'''<main><section class="hero-section-article"><div class="hero-info-wrap">
+        <div class="hero-info"><h1>Seed trials</h1><p>How the trials went.</p><span>19/11/2026</span></div>
+        </div></section><section class="wp-block-bgs-blocks-content-container content-section">
+        <div class="container"><p>{FIRST}</p><figure class="img-wrap"><img src="/tray">
+        <figcaption class="caption"><div class="caption-text"><p>Gardens after rain.</p></div></figcaption>
+        </figure><p>{LAST}</p></div></section><section><p>Was this page helpful?</p></section></main>'''
+        self.assertEqual(narrate('https://www.bgs.ac.uk/news/seed-trials/', html)[1],
+                         f'How the trials went. {FIRST} Gardens after rain. {LAST}')
+
+    def test_smashing_feed_omits_the_exported_course_checkout_and_keeps_its_references(self):
+        course = 'https://ai-design-patterns.com/'
+        payment = 'https://smart-interface-design-patterns.thinkific.com/enroll/'
+        body = f'''<p>{FIRST}</p><p>Meet <a href="{course}">Design Patterns For AI Interfaces</a> and its video lessons.</p>
+        <a href="{course}">Design Patterns For AI Interfaces</a><div><div><ul><li><a href="#">Video only</a></li></ul>
+        <div><h3>Video only</h3><a href="{payment}1">Buy now</a></div>
+        <div><h3>Video + UX Training</h3><a href="{payment}2">Buy with training</a></div></div></div>
+        <p>{LAST}</p><ul><li><a href="/growing">Garden references</a></li></ul>'''
+        self.assertEqual(html_to_text(body, url='https://smashingmagazine.com/2026/11/seed-trials/'),
+                         f'{FIRST}\n{LAST}\nGarden references')
+
     def test_w3c_reads_editorial_images_without_importing_sidebar_captions(self):
         html = f'''<body class="post"><main id="main"><div class="content"><article><h1>Seed trials</h1>
         <div class="sub-head">Part of <a href="/blog/category/gardens/">Gardens</a></div>

@@ -5,7 +5,7 @@ from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, remove_table_of_contents, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
-    remove_bgs_related_news, remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
+    remove_bgs_related_news, remove_bgs_topic_links, remove_loc_subscription, remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
     remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
     wyofile_feature,
 )
@@ -243,6 +243,14 @@ def clean_tree(root, title, author, url=''):
     if identity and identity[1] == 'www.bgs.ac.uk':
         for main in root.select('main'):
             remove_bgs_related_news(main)
+            remove_bgs_topic_links(main, url)
+            bodies = main.select(':scope > section.wp-block-bgs-blocks-content-container.content-section')
+            for hero in main.select(':scope > section.hero-section-article > .hero-info-wrap .hero-info'):
+                heading = hero.find('h1', recursive=False)
+                deck = heading.find_next_sibling() if heading else None
+                if (len(bodies) == 1 and deck and deck.name == 'p' and editorial(deck)
+                        and heading_matches(heading_text(heading), title)):
+                    bodies[0].insert(0, deck.extract())
     if identity and identity[1] == 'www.w3.org' and identity[2].startswith('/blog/'):
         layout = 'body.post main#main > .content > article'
         for section in root.select(layout + ' > section.meta:has(time[datetime])'):
@@ -344,6 +352,14 @@ def clean_tree(root, title, author, url=''):
             if (menu.select_one('[role="navigation"] a.wpml-ls-link[hreflang]')
                     and not menu.find_parent(['blockquote', 'pre', 'code'])):
                 menu.decompose()
+    if identity and identity[1] == 'blog.mozilla.org':
+        for menu in root.select('.ft-c-single-post__body > p.wpml-ls-statics-post_translations.wpml-ls'):
+            links = menu.find_all('a', href=True)
+            if (next(menu.stripped_strings, '') == 'This post is also available in:' and links
+                    and all(link.select_one('.wpml-ls-native[lang]') and
+                            (target := url_identity(link['href'], url)) and target[:2] == identity[:2]
+                            for link in links)):
+                menu.decompose()
     if identity and identity[1] == 'blog.pypi.org':
         for anchor in root.select('.md-content--post :is(h1,h2,h3,h4,h5,h6) > a.headerlink'):
             heading_id = anchor.parent.get('id')
@@ -364,6 +380,8 @@ def clean_tree(root, title, author, url=''):
             date = re.sub(r',\s+\d{1,2}:\d{2}(?:\s+[ap]\.m\.)?$', '', label, flags=re.I)
             if DATE.fullmatch(date):
                 stamp.decompose()
+        for breadcrumbs in root.select('body.news #content > .wrapper > .breadcrumbs:has(a[href])'):
+            breadcrumbs.decompose()
     if identity and identity[1] == 'earthsky.org':
         for widget in root.select('.post-rich-text > .ns-buttons.ns-inline-below'):
             if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
@@ -757,6 +775,8 @@ def clean_tree(root, title, author, url=''):
     caption_selectors = {
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'www.w3.org': 'article > figure.component.component--image > figcaption',
+        'inkscape.org': 'body.news #content > .wrapper figure.plugin_picture > figcaption',
+        'www.bgs.ac.uk': 'main section.wp-block-bgs-blocks-content-container figure.img-wrap > figcaption.caption',
         'diff.wikimedia.org': ('article .entry-content.wrapper-small .wp-block-image figcaption.wp-element-caption, '
                                'article .entry-content.wrapper-small .wp-block-jetpack-slideshow_slide > figure > figcaption'),
         **dict.fromkeys(STRONG_TOWNS_HOSTS, '.thought-leadership_wrap .mast-article-rich-text '
@@ -1103,6 +1123,10 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .jumbotron ~ .content-width'
         elif identity[1] == 'blog.rust-lang.org':
             body_selector = 'section.white[id] > div > div.post'
+        elif identity[1] == 'inkscape.org' and identity[2].startswith('/news/'):
+            body_selector = 'body.news #content > .wrapper'
+        elif identity[1] == 'www.bgs.ac.uk' and scope.name == 'main':
+            body_selector = ':scope > section.wp-block-bgs-blocks-content-container.content-section'
         elif identity[1] in {'jvns.ca', 'www.jvns.ca'} and identity[2].startswith('/blog/') and match('article.hentry', scope):
             body_selector = ':scope > main'
         elif identity[1] == 'www.w3.org' and identity[2].startswith('/blog/') and match('body.post main#main > .content > article', scope):
