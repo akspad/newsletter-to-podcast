@@ -227,7 +227,8 @@ def clean_tree(root, title, author, url=''):
         for node in root.select('#pgContentWrap > .newsdate'):
             node.decompose()
     if identity and identity[1] in {'tbray.org', 'www.tbray.org'} and identity[2].startswith('/ongoing/When/'):
-        for caption in root.select('#centercontent > .main-image:has(img) + div.caption'):
+        for caption in root.select('#centercontent > .main-image:has(img) + div.caption, '
+                                   '#centercontent > .misc:has(img.norm) + div.caption'):
             if editorial(caption):
                 caption['class'].remove('caption')
         footer = root.select_one('#centercontent > #footer')
@@ -975,17 +976,25 @@ def clean_tree(root, title, author, url=''):
                 heading.get_text(' ', strip=True).rstrip(':').casefold() == 'tags'):
             heading.decompose()
         tags.decompose()
+    data_tables = {id(node.find_parent('table')) for node in root.select(
+        'table > caption, table > tr > th, table > :is(thead, tbody, tfoot) > tr > th')}
+
+    def date_is_table_data(node):
+        cell = node.find_parent(['td', 'th', 'caption'])
+        return cell is not None and id(cell.find_parent('table')) in data_tables
+
+    inline_date_context = ['p', 'li', 'blockquote', 'pre', 'code']
     for node in root.select('time'):
-        if not node.find_parent(['p', 'li', 'blockquote', 'pre', 'code']):
+        if not node.find_parent(inline_date_context) and not date_is_table_data(node):
             node.decompose()
     # Older pages often put a standalone date before a <br>. Preserve dates
     # embedded in prose and quotations, including stories that open on a date.
     for node in list(root.find_all(string=True)):
         before_break = (node.previous_sibling is None and
                         getattr(node.next_sibling, 'name', '') == 'br')
-        prose = node.find_parent(['p', 'li', 'blockquote', 'pre', 'code'])
-        quoted = node.find_parent(['blockquote', 'pre', 'code'])
-        if DATE.fullmatch(str(node).strip()) and not quoted and (not prose or before_break):
+        if (DATE.fullmatch(str(node).strip()) and not date_is_table_data(node)
+                and not node.find_parent(['blockquote', 'pre', 'code'])
+                and (before_break or not node.find_parent(inline_date_context))):
             node.extract()
     remove_opening_metadata(root, author)
 

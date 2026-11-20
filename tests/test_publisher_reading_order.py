@@ -446,6 +446,20 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <div id="footer"><p class="footer"><b data-pagefind-meta="date: today">Updated today</b></p></div></div></div>'''
         _, body = narrate('https://www.tbray.org/ongoing/When/202x/2026/08/08/seed-trials', html)
         self.assertEqual(body, f'{FIRST} The narrow tray. {LAST}')
+        alternate = html.replace('class="main-image"', 'class="misc"').replace('<img src="tray">', '<img class="norm" src="tray">')
+        self.assertEqual(narrate('https://www.tbray.org/ongoing/When/202x/2026/08/08/seed-trials', alternate)[1],
+                         f'{FIRST} The narrow tray. {LAST}')
+        no_photo = alternate.replace('<img class="norm" src="tray">', 'Reference')
+        self.assertNotIn('The narrow tray.', narrate('https://www.tbray.org/ongoing/When/202x/2026/08/08/seed-trials', no_photo)[1])
+
+    def test_table_dates_are_narrated_as_data_while_publication_dates_are_skipped(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content">
+        <div><time datetime="2026-11-19">November 19, 2026</time></div><p>{FIRST}</p>
+        <table><caption>2026-10-17</caption><tr><th>2026-10-18</th><td>2026-10-19<br>First treatment</td>
+        <td><time datetime="2026-10-20">2026-10-20</time></td></tr></table><p>{LAST}</p>
+        </div></article>'''
+        _, body = narrate('https://fictional.example/seed-trials', html)
+        self.assertEqual(body, f'{FIRST} 2026-10-17 2026-10-18 2026-10-19 First treatment 2026-10-20 {LAST}')
 
     def test_old_new_thing_uses_the_inline_code_titles_original_punctuation(self):
         html = f'''<article><h1>Can I use <code>seed()</code>?</h1><div class="entry-content">
