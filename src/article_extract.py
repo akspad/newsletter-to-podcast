@@ -5,9 +5,9 @@ from soupsieve import match
 from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, remove_table_of_contents, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
-    remove_bgs_related_news, remove_bgs_topic_links, remove_jstor_recommendations, remove_loc_subscription,
+    remove_bgs_related_news, remove_bgs_topic_links, remove_eff_embed_notice, remove_jstor_recommendations, remove_loc_subscription,
     remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
-    remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
+    remove_press_contacts, remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
     wyofile_feature,
 )
 from tts import speech_text
@@ -88,27 +88,6 @@ def remove_site_endmatter(root):
             continue
         for node in [separator, *separator.next_siblings]:
             node.extract()
-
-
-def remove_press_contacts(root):
-    """Recognize contact-only tails after a press release's explicit end marker."""
-    for marker in list(root.find_all('p')):
-        if (marker.get_text(' ', strip=True).casefold() != '-end-' or
-                marker.find_parent(['blockquote', 'pre', 'code', 'li', 'table'])):
-            continue
-        following = [node for node in marker.next_siblings if str(node).strip()]
-        if not following or len(following) > 8:
-            continue
-        if not all(getattr(node, 'name', '') == 'p' and node.find('br') and
-                   node.select_one('a[href^="mailto:"]') and
-                   len(node.get_text(' ', strip=True)) < 600 and
-                   not readable_prose(node.get_text(' ', strip=True)) for node in following):
-            continue
-        preceding = ' '.join(node.get_text(' ', strip=True) for node in marker.find_previous_siblings())
-        if not readable_prose(preceding):
-            continue
-        for node in [marker, *following]:
-            node.decompose()
 
 
 def remove_article_footer(root, author):
@@ -255,6 +234,7 @@ def clean_tree(root, title, author, url=''):
         if footer and footer.select_one(':scope > p.footer > [data-pagefind-meta^="date:"]'):
             footer.decompose()
     if identity and identity[1] in {'eff.org', 'www.eff.org'} and identity[2].startswith('/deeplinks/'):
+        remove_eff_embed_notice(root, url)
         for figure in root.select('article.node--blog--full .field--name-body .caption:has(img)'):
             caption = figure.select_one('.caption-inner > p.caption-text')
             if caption and editorial(caption):

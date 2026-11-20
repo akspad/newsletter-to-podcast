@@ -100,6 +100,15 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(narrate('https://www.nasa.gov/centers-and-facilities/seed-trials/', html)[1],
                          f'{FIRST} The trial tray at dawn. {LAST}')
 
+    def test_nasa_feed_omits_terminal_press_contacts_and_preserves_an_appendix(self):
+        url = 'https://www.nasa.gov/news-release/seed-trials/'
+        prose = f'<p>{FIRST} {LAST}</p>'
+        contact = '<p>Lee Example<br>Garden Office<br><a href="mailto:press@example.org">press@example.org</a></p>'
+        tail = '<p class="has-text-align-center">-end-</p>' + contact
+        self.assertEqual(html_to_text(prose + tail, url=url), f'{FIRST} {LAST}')
+        self.assertIn('Lee Example', html_to_text(prose + tail + f'<p>{FIRST}</p>', url=url))
+        self.assertIn('Lee Example', html_to_text(prose + f'<blockquote>{tail}</blockquote>', url=url))
+
     def test_wyofile_preserves_column_image_captions_in_reading_order(self):
         html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
         <div class="wp-block-columns"><div class="wp-block-column">
@@ -1821,6 +1830,11 @@ class PublisherReadingOrderTests(unittest.TestCase):
                   'This embed will serve content from <a href="https://player.example">player.example</a></div></div>')
         self.assertEqual(html_to_text(f'<p>{FIRST}</p>{widget}<p>{LAST}</p>', url=url).split(),
                          f'{FIRST} {LAST}'.split())
+        page = f'''<article class="node--blog--full"><h1>Seeds</h1><div class="node__content">
+        <div class="field--name-body"><div class="field__items"><div class="field__item">
+        <p>{FIRST}</p>{widget}<p>{LAST}</p></div></div></div></div></article>'''
+        self.assertEqual(narrate(url, page)[1], f'{FIRST} {LAST}')
+        self.assertIn('Privacy info.', narrate(url, page.replace('mytubetrigger', 'other'))[1])
         for retained in ('<blockquote>' + widget + '</blockquote>', widget.replace('mytubetrigger', 'other'),
                          widget.replace('This embed', 'We reported why this embed')):
             self.assertIn('Privacy info.', html_to_text(retained, url=url))

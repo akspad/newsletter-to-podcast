@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 from tts import speech_text
 
-from article_scope import DATE, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_table_of_contents, url_identity
+from article_scope import DATE, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, readable_prose, remove_table_of_contents, url_identity
 
 
 HARVARD_HOSTS = {'harvardmagazine.com', 'www.harvardmagazine.com'}
@@ -14,6 +14,38 @@ WYOFILE_HOSTS = {'wyofile.com', 'www.wyofile.com'}
 GUARDIAN_HOSTS = {'theguardian.com', 'www.theguardian.com'}
 OPEN_CULTURE_HOSTS = {'openculture.com', 'www.openculture.com'}
 QUILLETTE_HOSTS = {'quillette.com', 'www.quillette.com'}
+
+
+def remove_press_contacts(root):
+    """Recognize contact-only tails after a press release's explicit end marker."""
+    for marker in list(root.find_all('p')):
+        if (marker.get_text(' ', strip=True).casefold() != '-end-' or
+                marker.find_parent(['blockquote', 'pre', 'code', 'li', 'table'])):
+            continue
+        following = [node for node in marker.next_siblings if str(node).strip()]
+        if not following or len(following) > 8:
+            continue
+        if not all(getattr(node, 'name', '') == 'p' and node.find('br') and
+                   node.select_one('a[href^="mailto:"]') and
+                   len(node.get_text(' ', strip=True)) < 600 and
+                   not readable_prose(node.get_text(' ', strip=True)) for node in following):
+            continue
+        preceding = ' '.join(node.get_text(' ', strip=True) for node in marker.find_previous_siblings())
+        if not readable_prose(preceding):
+            continue
+        for node in [marker, *following]:
+            node.decompose()
+
+
+def remove_eff_embed_notice(root, url):
+    for notice in root.select('.mytube > .mytubetext'):
+        if notice.find_parent(['blockquote', 'pre', 'code']) or not notice.parent.select_one(':scope > .mytubetrigger'):
+            continue
+        links = notice.select('a[href]')
+        if (len(links) == 2 and links[0].get_text(strip=True) == 'Privacy info.'
+                and url_identity(links[0]['href'], url) == url_identity('/deeplinks/2008/02/embedded-video-and-your-privacy', url)
+                and notice.get_text(' ', strip=True) == 'Privacy info. This embed will serve content from ' + links[1].get_text(strip=True)):
+            notice.decompose()
 
 
 def guardian_author_label(name):
@@ -562,6 +594,7 @@ def clean_imported_widgets(root, url, title=''):
                         and 'Last Updated' in wrapper.get_text(' ', strip=True)
                         and not wrapper.select('p, .author, .byline, a[rel~="author"]')):
                     wrapper.decompose()
+        remove_press_contacts(root)
     if identity and identity[1] in {'www.experimental-history.com', 'experimental-history.com',
                                     'www.asimov.press', 'asimov.press'}:
         for widget in root.select('.subscription-widget-wrap-editor:has(.subscription-widget.show-subscribe)'):
@@ -640,14 +673,7 @@ def clean_imported_widgets(root, url, title=''):
                             for tag, link in zip(tags, links))):
                 paragraph.decompose()
     if identity and identity[1] in {'eff.org', 'www.eff.org'}:
-        for notice in root.select('.mytube > .mytubetext'):
-            if notice.find_parent(['blockquote', 'pre', 'code']) or not notice.parent.select_one(':scope > .mytubetrigger'):
-                continue
-            links = notice.select('a[href]')
-            if (len(links) == 2 and links[0].get_text(strip=True) == 'Privacy info.'
-                    and url_identity(links[0]['href'], url) == url_identity('/deeplinks/2008/02/embedded-video-and-your-privacy', url)
-                    and notice.get_text(' ', strip=True) == 'Privacy info. This embed will serve content from ' + links[1].get_text(strip=True)):
-                notice.decompose()
+        remove_eff_embed_notice(root, url)
     if identity and identity[1] == 'go.dev' and identity[2].startswith('/blog/'):
         for article in root.select('#blog .Article[data-slug]'):
             if (url_identity(article.get('data-slug'), url) != identity or not editorial(article)
