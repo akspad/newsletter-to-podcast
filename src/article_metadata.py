@@ -439,6 +439,13 @@ def article_details(soup, url):
             'aside.content-sidebar section.content-authors .content-authors-synopsis > '
             'button.content-authors-toggle > span.nobr')
             if not any(explicitly_hidden(parent) for parent in (node, *node.parents))]
+        # The collapsed byline can show just the first author.
+        listed = [clean(node.get_text()) for node in scope.select(
+            'aside.content-sidebar section.content-authors #article-authors-list '
+            'li.vcard[itemprop~="author"] > a[rel~="author"] > .author-name')
+            if not any(explicitly_hidden(parent) for parent in (node, *node.parents))]
+        if listed and set(filter(None, authors)).issubset(listed):
+            authors = listed
         visible_authors = ', '.join(dict.fromkeys(filter(None, authors))) or visible_authors
     if requested and requested[1] == 'projects.propublica.org' and scope.name == 'article':
         credit = scope.select_one(':scope > header.opener .opener__text > .opener__meta > p.opener__byline')

@@ -206,6 +206,15 @@ def clean_tree(root, title, author, url=''):
         if node.parent is not None and explicitly_hidden(node):
             node.decompose()
     identity = url_identity(url)
+    if identity and identity[1] in {'experimental-history.com', 'www.experimental-history.com'}:
+        for card in root.select('.available-content .body.markup > div[class^="digestPostEmbed-"]'):
+            heading = card.select_one('a[href] > h2')
+            if heading is None:
+                continue
+            target = url_identity(heading.parent['href'], url)
+            for link in card.select('a[href]'):
+                if target and url_identity(link['href'], url) == target and heading_text(link) == 'Read full story':
+                    link.decompose()
     if identity and identity[1] in {'universalhub.com', 'www.universalhub.com'}:
         opening, writer = universal_hub_writer(root, url)
         if opening and writer == author:

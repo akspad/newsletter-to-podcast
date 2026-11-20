@@ -75,6 +75,17 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(html_to_text(excerpt, url=url), FIRST)
         self.assertIn('Read more', html_to_text(excerpt, url=url + '-elsewhere'))
 
+    def test_experimental_history_preserves_the_archive_reference_without_its_button(self):
+        url = 'https://www.experimental-history.com/p/seed-trials'
+        html = f'''<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
+        <p>{FIRST}</p><div class="digestPostEmbed-trials"><div><a href="/p/archive"><h2>Previous trial</h2></a>
+        <p>The trays were weighed every morning.</p><a href="/p/archive">Read full story</a></div></div>
+        <p>{LAST} The examiner said “Read full story” before inspecting the notes.</p></div></div></article>'''
+        _, body = narrate(url, html)
+        self.assertIn(f'{FIRST} Previous trial The trays were weighed every morning. {LAST}', body)
+        self.assertEqual(body.count('Read full story'), 1)
+        self.assertIn('Read full story', narrate(url, html.replace('href="/p/archive">Read', 'href="/p/elsewhere">Read'))[1])
+
     def test_damn_interesting_keeps_feed_teaser_without_repeating_its_linked_title(self):
         url = 'https://www.damninteresting.com/seed-trials/'
         label = f'<p><b><a href="{url}">Seed trials</a></b>:</p>'
@@ -365,6 +376,23 @@ class PublisherReadingOrderTests(unittest.TestCase):
         intro, body = narrate('https://theconversation.com/seed-trials-123456', html)
         self.assertTrue(intro.endswith('By Lee Writer, Ash Reporter.'))
         self.assertEqual(body, f'{FIRST} {LAST}')
+
+    def test_conversation_reads_named_profile_list_when_synopsis_shows_one_author(self):
+        html = f'''<article id="article"><h1>Seed trials</h1>
+        <aside class="content-sidebar"><section class="content-authors"><div class="content-authors-synopsis">
+        <button class="content-authors-toggle"><span class="nobr">Lee Writer</span> and two more</button></div>
+        <div id="article-authors-list"><ol>
+        <li class="vcard" itemprop="author"><a rel="author" href="/profiles/lee"><span class="author-name">Lee Writer</span></a></li>
+        <li class="vcard" itemprop="author"><a rel="author" href="/profiles/ash"><span class="author-name">Ash Reporter</span></a></li>
+        <li class="vcard" itemprop="author" hidden><a rel="author" href="/profiles/hidden"><span class="author-name">Hidden Name</span></a></li>
+        </ol></div></section></aside>
+        <div class="entry-content"><p>{FIRST}</p><p>{LAST}</p></div></article>'''
+        url = 'https://theconversation.com/seed-trials-123456'
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('By Lee Writer, Ash Reporter.'))
+        self.assertEqual(body, f'{FIRST} {LAST}')
+        changed = html.replace('class="nobr">Lee Writer', 'class="nobr">Pat Editor')
+        self.assertTrue(narrate(url, changed)[0].endswith('By Pat Editor.'))
 
     def test_creative_commons_keeps_a_body_heading_matching_the_headline_suffix(self):
         html = f'''<body class="blog-post"><main><h1>Seed trials: Results</h1><div class="content">
@@ -1029,14 +1057,17 @@ class PublisherReadingOrderTests(unittest.TestCase):
             control, _ = source.post_text({'rss': True}, {**post, 'body_html': markup})
             self.assertEqual(control['publishedBylines'], [{'name': 'OC'}])
 
-    def test_astronomy_photo_feed_removes_only_its_own_read_more_control(self):
+    def test_astronomy_feed_removes_only_its_own_read_more_control(self):
         title = 'Seed trials'
-        url = 'https://www.astronomy.com/picture-of-the-day/photo/seed-trials/'
-        link = (f'<a class="more-link" href="{url}">Continue reading '
-                '<span class="screen-reader-text">"Seed trials"</span></a>')
-        self.assertEqual(html_to_text(f'<p>{FIRST}{link}</p>', title=title, url=url), FIRST)
-        for keep in (link.replace('seed-trials/', 'another/'), link + ' ' + LAST, link.replace('>"Seed trials"<', '>"Another story"<')):
-            self.assertIn('Continue reading', html_to_text(f'<p>{FIRST}{keep}</p>', title=title, url=url))
+        for path in ('picture-of-the-day/photo', 'observing'):
+            with self.subTest(path=path):
+                url = f'https://www.astronomy.com/{path}/seed-trials/'
+                link = (f'<a class="more-link" href="{url}">Continue reading '
+                        '<span class="screen-reader-text">"Seed trials"</span></a>')
+                self.assertEqual(html_to_text(f'<p>{FIRST}{link}</p>', title=title, url=url), FIRST)
+                for keep in (link.replace('seed-trials/', 'another/'), link + ' ' + LAST,
+                             link.replace('>"Seed trials"<', '>"Another story"<')):
+                    self.assertIn('Continue reading', html_to_text(f'<p>{FIRST}{keep}</p>', title=title, url=url))
 
     def test_raspberry_pi_keeps_the_video_caption_without_the_embed(self):
         html = f"""<article><h1>Seed trials</h1><div class="c-post-content__wysiwyg"><p>{FIRST}</p>

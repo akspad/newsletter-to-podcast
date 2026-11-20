@@ -576,7 +576,7 @@ def clean_imported_widgets(root, url, title=''):
         remove_openculture_endmatter(root, url)
     if identity and identity[1] in QUILLETTE_HOSTS:
         remove_quillette_bookmarks(root, url)
-    if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'} and identity[2].startswith('/picture-of-the-day/'):
+    if identity and identity[1] in {'astronomy.com', 'www.astronomy.com'}:
         for link in root.select('p > a.more-link[href]'):
             teaser = link.select_one(':scope > .screen-reader-text')
             if (link.parent.parent is root and teaser and title and url_identity(link['href'], url) == identity
