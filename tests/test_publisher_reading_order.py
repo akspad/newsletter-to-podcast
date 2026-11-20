@@ -60,6 +60,12 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertIn(f'{title}. By Lee Writer and Ash Editor.', intro)
         self.assertEqual(body, f'Originally posted as TotW #153 on July 17, 2018 {FIRST} '
                                f'A short planting note. The second trial. arrange(tray); {LAST}')
+        fast = (html.replace(title, 'Performance ' + title).replace('as TotW', 'as Fast TotW')
+                .replace('Lee Writer and Ash Editor', '<a href="/lee">Lee Writer</a> , Ash Editor and Jo Reader'))
+        intro, body = narrate('https://abseil.io/fast/153', fast)
+        self.assertIn(f'Performance {title}. By Lee Writer, Ash Editor and Jo Reader.', intro)
+        self.assertEqual(body, f'Originally posted as Fast TotW #153 on July 17, 2018 {FIRST} '
+                               f'A short planting note. The second trial. arrange(tray); {LAST}')
 
     def test_asimov_reads_visible_article_image_caption(self):
         html = f'''<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
@@ -108,6 +114,18 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(html_to_text(prose + tail, url=url), f'{FIRST} {LAST}')
         self.assertIn('Lee Example', html_to_text(prose + tail + f'<p>{FIRST}</p>', url=url))
         self.assertIn('Lee Example', html_to_text(prose + f'<blockquote>{tail}</blockquote>', url=url))
+
+    def test_nasa_image_article_preserves_distinct_carousel_captions_once(self):
+        slide = '''<div class="hds-image-carousel-slide"><div class="hds-media-wrapper">
+        <img src="/photo"><figcaption class="hds-caption"><div>{}</div></figcaption></div></div>'''
+        labels = ('The experiment before sunrise.', 'The experiment at noon.')
+        carousel = '<div class="wp-block-nasa-blocks-image-carousel">' + ''.join(
+            slide.format(label) for label in (labels[0], labels[0], labels[1])) + '</div>'
+        body = f'<p>{FIRST}</p>{carousel}<p>{LAST}</p>'
+        url = 'https://www.nasa.gov/image-article/seed-trials/'
+        _, preview_body = narrate(url, f'<article><h1>Seed trials</h1><div class="entry-content">{body}</div></article>')
+        self.assertEqual(preview_body, f'{FIRST} {" ".join(labels)} {LAST}')
+        self.assertEqual(html_to_text(body, url=url), '\n'.join((FIRST, *labels, LAST)))
 
     def test_wyofile_preserves_column_image_captions_in_reading_order(self):
         html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
@@ -320,6 +338,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <figcaption><span class="caption">The seed tray.</span><span class="attribution">Credit: Lee</span></figcaption>
         </figure><p>{LAST}</p></div></article>'''
         self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', html)[1],
+                         f'{FIRST} The seed tray. Credit: Lee {LAST}')
+        centered = html.replace('class="zoomable"', 'class="align-center"')
+        self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', centered)[1],
                          f'{FIRST} The seed tray. Credit: Lee {LAST}')
 
     def test_conversation_preserves_the_magazine_lead_caption_once(self):
@@ -677,7 +698,7 @@ class PublisherReadingOrderTests(unittest.TestCase):
         unmatched = punctuated.replace('Editor</a> .</p>', 'Editor</a> edited the guide.</p>')
         self.assertIn('edited the guide.', narrate('https://react.dev/blog/2026/11/19/seed-trials', unmatched)[1])
 
-    def test_article_captions_stay_with_four_publisher_templates(self):
+    def test_article_captions_follow_the_publishers_marked_story_layout(self):
         caption = 'An annotated diagram from the second trial.'
         article = '<article><h1>Seed trials</h1><div class="entry-content"><p>{first}</p>{figure}<p>{last}</p></div></article>'
         cases = [
@@ -688,6 +709,14 @@ class PublisherReadingOrderTests(unittest.TestCase):
             ('https://blogs.loc.gov/loc/2026/11/seed-trials/', article,
              '<div class="et_pb_text"><div class="et_pb_image"><figure class="wp-caption">'
              '<img src="/plot"><figcaption class="wp-caption-text">{caption}</figcaption></figure></div></div>'),
+            ('https://blog.mozilla.org/en/mozilla/seed-trials/',
+             '<article class="ft-c-single-post"><h1>Seed trials</h1><div class="ft-c-single-post__body">'
+             '<p>{first}</p>{figure}<p>{last}</p></div></article>',
+             '<figure class="wp-block-image"><img src="/plot"><figcaption class="wp-element-caption">{caption}</figcaption></figure>'),
+            ('https://www.raspberrypi.com/news/seed-trials/',
+             '<article><h1>Seed trials</h1><div class="c-post-content__wysiwyg">'
+             '<p>{first}</p>{figure}<p>{last}</p></div></article>',
+             '<figure class="wp-block-image"><img src="/plot"><figcaption class="wp-element-caption">{caption}</figcaption></figure>'),
             ('https://hyperallergic.com/seed-trials/',
              '<article class="gh-article"><h1>Seed trials</h1><section class="gh-content is-body">'
              '<p>{first}</p>{figure}<p>{last}</p></section></article>',

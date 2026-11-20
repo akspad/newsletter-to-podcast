@@ -48,6 +48,18 @@ def remove_eff_embed_notice(root, url):
             notice.decompose()
 
 
+def clean_nasa_carousel_captions(carousel):
+    captions = {}
+    for caption in carousel.select('.hds-image-carousel-slide .hds-media-wrapper:has(img) > figcaption.hds-caption'):
+        if editorial(caption):
+            text = ' '.join(caption.get_text(' ', strip=True).split())
+            if text and text in captions:
+                caption.decompose()
+            elif text:
+                captions[text] = caption
+    return list(captions.values())
+
+
 def guardian_author_label(name):
     return name.removesuffix(' Health policy editor') if isinstance(name, str) else name
 
@@ -581,6 +593,9 @@ def clean_imported_widgets(root, url, title=''):
                         credit.decompose()
                 ending.decompose()
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
+        if identity[2].startswith('/image-article/'):
+            for carousel in root.select('.wp-block-nasa-blocks-image-carousel'):
+                clean_nasa_carousel_captions(carousel)
         for wrapper in root.find_all('div', recursive=False):
             if 'wp-block-nasa-blocks-article-intro' in wrapper.get('class', []):
                 read_time = wrapper.select('.article-header p.label')

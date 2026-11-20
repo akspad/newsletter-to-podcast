@@ -2,10 +2,11 @@
 import re
 from html import unescape
 from soupsieve import match
-from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, remove_table_of_contents, url_identity
+from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS, abseil_tip_byline, article_labels, article_scope, editorial, explicitly_hidden, heading_matches, heading_text, masthead_body, opening_writer_credits, plover_story_title, react_blog_credit, readable_prose, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, remove_table_of_contents, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
-    remove_bgs_related_news, remove_bgs_topic_links, remove_eff_embed_notice, remove_jstor_recommendations, remove_loc_subscription,
+    clean_nasa_carousel_captions, remove_bgs_related_news, remove_bgs_topic_links, remove_eff_embed_notice,
+    remove_jstor_recommendations, remove_loc_subscription,
     remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
     remove_press_contacts, remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
     wyofile_feature,
@@ -215,13 +216,10 @@ def clean_tree(root, title, author, url=''):
         for body in root.select('article > .entry-content'):
             clean_jstor_pull_quotes(body)
             remove_jstor_recommendations(body)
-    if identity and identity[1] == 'abseil.io' and re.fullmatch(r'/tips/\d+', identity[2]):
+    if identity and identity[1] == 'abseil.io' and re.fullmatch(r'/(?:tips|fast)/\d+', identity[2]):
         for heading in root.select('div.col-sm-8.markdown > h1'):
-            published = heading.find_next_sibling()
-            byline = published.find_next_sibling() if published else None
-            if (heading_text(heading) == title and published and published.name == 'p'
-                    and published.get_text(strip=True).startswith('Originally posted as TotW ')
-                    and byline and byline.name == 'p' and byline.get_text(strip=True) == f'By {author}'):
+            byline, credited = abseil_tip_byline(heading)
+            if byline and credited == author and heading_text(heading) == title:
                 byline.decompose()
     if identity and identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
         for node in root.select('#pgContentWrap > .newsdate'):
@@ -278,7 +276,8 @@ def clean_tree(root, title, author, url=''):
                 caption.name = 'p'
                 caption.string = ' '.join(caption.stripped_strings)
                 bodies[0].insert(0, caption.extract())
-        for caption in root.select('article#article .entry-content > figure.zoomable:has(img) > figcaption:has(> .caption)'):
+        for caption in root.select('article#article .entry-content > '
+                                   'figure:is(.zoomable, .align-center):has(img) > figcaption:has(> .caption)'):
             if editorial(caption):
                 figure = caption.parent
                 caption.name = 'p'
@@ -598,6 +597,11 @@ def clean_tree(root, title, author, url=''):
         for body in root.select('article > .entry-content'):
             remove_pluralistic_footer(body)
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
+        if identity[2].startswith('/image-article/'):
+            for carousel in root.select('.entry-content > .wp-block-nasa-blocks-image-carousel'):
+                for caption in clean_nasa_carousel_captions(carousel):
+                    caption.name = 'div' if caption.find(['p', 'div']) else 'p'
+                    carousel.insert_before(caption.extract())
         for image in root.select('.entry-content > .hds-media.wp-block-image, '
                                  '.entry-content > p.wp-block-paragraph > .hds-media.wp-block-image'):
             wrapper = image.select_one('.hds-media-wrapper:has(img)')
@@ -794,6 +798,8 @@ def clean_tree(root, title, author, url=''):
     caption_selectors = {
         **dict.fromkeys(QUILLETTE_HOSTS, 'article.post > section.prose.prose-brand > figure.kg-image-card > figcaption'),
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
+        'blog.mozilla.org': 'article.ft-c-single-post > .ft-c-single-post__body '
+                            '> figure.wp-block-image > figcaption.wp-element-caption',
         'www.w3.org': 'article > figure.component.component--image > figcaption',
         'inkscape.org': 'body.news #content > .wrapper figure.plugin_picture > figcaption',
         'www.bgs.ac.uk': 'main section.wp-block-bgs-blocks-content-container figure.img-wrap > figcaption.caption',
@@ -859,7 +865,7 @@ def clean_tree(root, title, author, url=''):
         'www.futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'blogs.loc.gov': ('.entry-content > figure.wp-caption > figcaption.wp-caption-text, '
-                          '.entry-content > .et_pb_text > .et_pb_image > figure.wp-caption > figcaption.wp-caption-text'),
+                          '.entry-content :is(.et_pb_text_inner, .et_pb_image) > figure.wp-caption > figcaption.wp-caption-text'),
         'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
                          '.entry-content > div.wp-caption > p.wp-caption-text'),
         'webkit.org': 'article .bodycopy > figure > figcaption',
@@ -867,7 +873,8 @@ def clean_tree(root, title, author, url=''):
         'www.smithsonianmag.com': '.articleWrap > figure.article-image > figcaption.caption',
         'www.nist.gov': '.text-with-summary figure.nist-image > figcaption.nist-image__caption',
         'blog.cloudflare.com': '.article-content figure.emdash-image > figcaption',
-        'www.raspberrypi.com': '.c-post-content__wysiwyg .wp-block-image > figure > figcaption.wp-element-caption',
+        'www.raspberrypi.com': ('.c-post-content__wysiwyg .wp-block-image > figure > figcaption.wp-element-caption, '
+                                '.c-post-content__wysiwyg > figure.wp-block-image > figcaption.wp-element-caption'),
     }
     if identity and identity[1] in caption_selectors:
         for caption in root.select(caption_selectors[identity[1]]):
@@ -1129,10 +1136,12 @@ def extract_text(soup, title='', author='', url=''):
         candidates = [scope]
     body_selector = None
     if identity:
-        if identity[1] == 'abseil.io' and re.fullmatch(r'/tips/\d+', identity[2]):
+        if identity[1] == 'abseil.io' and re.fullmatch(r'/(?:tips|fast)/\d+', identity[2]):
             body_selector = 'div.col-sm-8.markdown'
         elif identity[1] == 'news.opensuse.org' and match('main.page-content', scope):
             body_selector = ':scope > .container.article > div.col-md-7.text-justify:first-of-type'
+        elif identity[1] == 'blog.mozilla.org' and match('article.ft-c-single-post', scope):
+            body_selector = ':scope > .ft-c-single-post__body'
         elif identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
         elif identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'} and scope.name == 'article':
