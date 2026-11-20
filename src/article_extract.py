@@ -345,6 +345,9 @@ def clean_tree(root, title, author, url=''):
                 box.decompose()
     if identity and identity[1] == 'news.mit.edu':
         for body in root.select('article .news-article--content--body--inner'):
+            for control in body.select('.news-article--inline-video--cover-image > a.news-article--inline-video--play-button'):
+                if control.get_text(strip=True) == 'Play video':
+                    control.decompose()
             prose = [' '.join(node.get_text().split()) for node in
                      body.select('.paragraph--type--content-block-text p') if editorial(node)]
             for caption in body.select('.news-article--inline-image--descr > .news-article--inline-image--caption'):
@@ -362,6 +365,11 @@ def clean_tree(root, title, author, url=''):
             label = stamp.get_text(' ', strip=True)
             if label.startswith('Posted ') and DATE.fullmatch(label.removeprefix('Posted ')):
                 stamp.decompose()
+    if (identity and identity[1] in {'publicdomainreview.org', 'www.publicdomainreview.org'}
+            and identity[2].startswith('/essay/')):
+        for heading in root.select('.essay-view > .essay-header > h1:has(.subtitle)'):
+            if heading_text(heading) == title.replace(': ', ' ', 1):
+                heading.decompose()
     if identity and identity[1] == 'blog.openstreetmap.org':
         for menu in root.select('p.icl_post_in_other_langs.wpml-ls-statics-post_translations'):
             if (menu.select_one('[role="navigation"] a.wpml-ls-link[hreflang]')
@@ -1121,6 +1129,8 @@ def extract_text(soup, title='', author='', url=''):
     if identity:
         if identity[1] == 'abseil.io' and re.fullmatch(r'/tips/\d+', identity[2]):
             body_selector = 'div.col-sm-8.markdown'
+        elif identity[1] == 'news.opensuse.org' and match('main.page-content', scope):
+            body_selector = ':scope > .container.article > div.col-md-7.text-justify:first-of-type'
         elif identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
         elif identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'} and scope.name == 'article':

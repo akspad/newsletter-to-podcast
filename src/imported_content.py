@@ -562,7 +562,8 @@ def clean_imported_widgets(root, url, title=''):
                         and 'Last Updated' in wrapper.get_text(' ', strip=True)
                         and not wrapper.select('p, .author, .byline, a[rel~="author"]')):
                     wrapper.decompose()
-    if identity and identity[1] in {'www.experimental-history.com', 'experimental-history.com'}:
+    if identity and identity[1] in {'www.experimental-history.com', 'experimental-history.com',
+                                    'www.asimov.press', 'asimov.press'}:
         for widget in root.select('.subscription-widget-wrap-editor:has(.subscription-widget.show-subscribe)'):
             if widget.select_one('p.cta-caption') and not widget.find_parent(['blockquote', 'pre', 'code']):
                 widget.decompose()

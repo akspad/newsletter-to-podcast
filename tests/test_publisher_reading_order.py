@@ -19,6 +19,35 @@ def narrate(url, html):
 
 
 class PublisherReadingOrderTests(unittest.TestCase):
+    def test_opensuse_roundup_reads_linked_headings_inside_the_article_column(self):
+        html = f'''<main class="page-content"><div class="container article"><header class="article-header"><h1>Seed trials</h1></header>
+        <div class="col-md-7 text-justify"><p>{FIRST}</p><h2><a href="/results">Notes from the small plot</a></h2>
+        <p>{LAST}</p></div><div class="col-md-7 text-justify"><p>Categories: Gardens.</p></div></div></main>'''
+        self.assertEqual(narrate('https://news.opensuse.org/2026/11/19/seed-trials/', html)[1],
+                         f'{FIRST} Notes from the small plot {LAST}')
+
+    def test_mit_video_control_is_removed_without_losing_the_adjacent_caption(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content news-article--content--body--inner">
+        <p>{FIRST}</p><div class="news-article--inline-video--cover-image">
+        <a class="news-article--inline-video--play-button">Play video</a></div>
+        <p>The tray at the beginning of the trial.</p><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://news.mit.edu/2026/seed-trials-1119', html)[1],
+                         f'{FIRST} The tray at the beginning of the trial. {LAST}')
+
+    def test_public_domain_review_keeps_essay_intro_when_subtitle_was_spoken_in_the_headline(self):
+        html = f'''<title>Seed trials: A short guide</title><div class="essay-view">
+        <div class="essay-header"><h1>Seed trials <span class="subtitle">A short guide</span></h1></div>
+        <div class="essay-intro"><p>{FIRST}</p></div><div class="essay-body"><p>{LAST}</p></div></div>'''
+        self.assertEqual(narrate('https://publicdomainreview.org/essay/seed-trials', html)[1], f'{FIRST} {LAST}')
+
+    def test_asimov_feed_skips_only_the_marked_subscription_widget(self):
+        widget = '''<div class="subscription-widget-wrap-editor"><div class="subscription-widget show-subscribe">
+        <p class="cta-caption">Subscribe for article updates.</p></div></div>'''
+        body = f'<p>{FIRST}</p>{widget}<p>{LAST}</p>'
+        url = 'https://www.asimov.press/p/seed-trials'
+        self.assertEqual(html_to_text(body, url=url), f'{FIRST}\n{LAST}')
+        self.assertIn('Subscribe for article updates.', html_to_text(body.replace('cta-caption', 'other'), url=url))
+
     def test_abseil_uses_the_tip_heading_byline_and_full_markdown_body(self):
         title = "Tip of the Week #153: Seed trials"
         html = f'''<title>abseil / {title}</title><div class="container">
