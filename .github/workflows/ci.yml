@@ -32,7 +32,7 @@ jobs:
             if ! install_ffmpeg; then
               echo 'Retrying FFmpeg installation using the official Ubuntu archive.'
               ubuntu_sources="$RUNNER_TEMP/ffmpeg-ubuntu.sources"
-              sed -E 's|https?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+              sed -E '/^URIs:/ s@(mirror\+file:/etc/apt/apt-mirrors\.txt|https?://azure\.archive\.ubuntu\.com/ubuntu)/?@https://archive.ubuntu.com/ubuntu@g' \
                 /etc/apt/sources.list.d/ubuntu.sources > "$ubuntu_sources"
               install_ffmpeg -o "Dir::Etc::sourcelist=$ubuntu_sources" -o Dir::Etc::sourceparts=-
             fi
