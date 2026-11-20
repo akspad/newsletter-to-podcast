@@ -683,6 +683,18 @@ def html_to_text(html: str, *, title='', url='') -> str:
                           '.captioned-button-wrap, .share-dialog, ' + FOOTNOTE_NAV):
         if el.parent is not None:
             el.decompose()
+    # Substack's feed can leave a person mention empty until the browser hydrates it.
+    for mention in soup.select('span.mention-wrap[data-component-name="MentionToDOM"][data-attrs]'):
+        if mention.contents or mention.find_parent(['pre', 'code']):
+            continue
+        try:
+            attributes = json.loads(mention['data-attrs'])
+        except (ValueError, RecursionError):
+            continue
+        if isinstance(attributes, dict) and attributes.get('type') == 'user':
+            name = attributes.get('name')
+            if isinstance(name, str) and 0 < len(name.strip()) <= 120:
+                mention.replace_with(name.strip())
     # WordPress syndication credits aren't article prose. Require the known
     # two-link footer, this entry's title/permalink, its publisher's homepage,
     # and a terminal paragraph. Never infer a footer from words alone.

@@ -656,6 +656,48 @@ class PublisherReadingOrderTests(unittest.TestCase):
         multiple = html.replace('Lee Writer</a></p>', 'Lee Writer</a> and <a href="/ash">Ash Editor</a></p>')
         self.assertEqual(narrate('https://react.dev/blog/2026/11/19/seed-trials', multiple),
                          ['React. Seed trials. By Lee Writer and Ash Editor.', f'{FIRST} {LAST}'])
+        punctuated = multiple.replace('Lee Writer</a> and ', 'Lee Writer</a> , <a href="/jo">Jo Reader</a>, and ')
+        punctuated = punctuated.replace('Ash Editor</a></p>', 'Ash Editor</a> .</p>')
+        self.assertEqual(narrate('https://react.dev/blog/2026/11/19/seed-trials', punctuated),
+                         ['React. Seed trials. By Lee Writer, Jo Reader, and Ash Editor.', f'{FIRST} {LAST}'])
+        unmatched = punctuated.replace('Editor</a> .</p>', 'Editor</a> edited the guide.</p>')
+        self.assertIn('edited the guide.', narrate('https://react.dev/blog/2026/11/19/seed-trials', unmatched)[1])
+
+    def test_article_captions_stay_with_four_publisher_templates(self):
+        caption = 'An annotated diagram from the second trial.'
+        article = '<article><h1>Seed trials</h1><div class="entry-content"><p>{first}</p>{figure}<p>{last}</p></div></article>'
+        cases = [
+            ('https://daily.jstor.org/seed-trials/', article,
+             '<figure class="wp-caption"><img src="/plot"><figcaption class="wp-caption-text">{caption}</figcaption></figure>'),
+            ('https://www.rogerebert.com/reviews/seed-trials', article,
+             '<figure class="wp-block-image"><img src="/plot"><figcaption class="wp-element-caption">{caption}</figcaption></figure>'),
+            ('https://blogs.loc.gov/loc/2026/11/seed-trials/', article,
+             '<div class="et_pb_text"><div class="et_pb_image"><figure class="wp-caption">'
+             '<img src="/plot"><figcaption class="wp-caption-text">{caption}</figcaption></figure></div></div>'),
+            ('https://hyperallergic.com/seed-trials/',
+             '<article class="gh-article"><h1>Seed trials</h1><section class="gh-content is-body">'
+             '<p>{first}</p>{figure}<p>{last}</p></section></article>',
+             '<figure class="kg-gallery-card kg-card-hascaption"><div><img src="/plot"></div>'
+             '<figcaption><p>{caption}</p></figcaption></figure>'),
+        ]
+        for url, layout, figure in cases:
+            with self.subTest(url=url):
+                shown = figure.format(caption=caption)
+                hidden = figure.replace('<figure ', '<figure hidden ').format(caption='Hidden content.')
+                html = layout.format(first=FIRST, figure=shown + hidden, last=LAST)
+                self.assertEqual(narrate(url, html)[1], f'{FIRST} {caption} {LAST}')
+
+    def test_substack_imports_only_the_label_from_an_empty_person_mention(self):
+        mention = """<span class="mention-wrap" data-component-name="MentionToDOM"
+            data-attrs='{"name":"Lee Writer","id":345,"type":"user","photo_url":"https://example.org/image"}'></span>"""
+        prose = f"<p>We asked {mention}'s colleague about the trial.</p>"
+        self.assertEqual(html_to_text(prose), "We asked Lee Writer's colleague about the trial.")
+        filled = mention.replace('</span>', 'Existing name</span>')
+        self.assertEqual(html_to_text(f'<p>{filled} spoke.</p>'), 'Existing name spoke.')
+        for unrelated in (mention.replace('"user"', '"unknown"'), mention.replace('MentionToDOM', 'Demo'),
+                          mention.replace('{"name":', '{"name";'), f'<code>{mention}</code>',
+                          mention.replace('<span ', '<span hidden ')):
+            self.assertNotIn('Lee Writer', html_to_text(f'<p>{FIRST}{unrelated}</p>'))
 
     def test_eff_keeps_a_nested_caption_inside_the_full_deeplinks_article(self):
         caption = ('<div class="caption caption-center"><div class="caption-inner">'

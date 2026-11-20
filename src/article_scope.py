@@ -268,8 +268,12 @@ def react_blog_credit(root, title):
             if len(names) > 2:
                 listed.add(', '.join(names[:-1]) + ', and ' + names[-1])
             date, marker, author = ' '.join(paragraph.get_text().split()).partition(' by ')
-            if marker and DATE.fullmatch(date) and all(names) and author in listed:
-                return paragraph, author
+            author = re.sub(r'\s+([,.])', r'\1', author)
+            if marker and DATE.fullmatch(date) and all(names):
+                if author in listed:
+                    return paragraph, author
+                if author.endswith('.') and author[:-1] in listed:
+                    return paragraph, author[:-1]
     return None, ''
 
 

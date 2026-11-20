@@ -801,7 +801,10 @@ def clean_tree(root, title, author, url=''):
         **dict.fromkeys(STRONG_TOWNS_HOSTS, '.thought-leadership_wrap .mast-article-rich-text '
                         '> figure.w-richtext-figure-type-image > figcaption'),
         **dict.fromkeys({'hyperallergic.com', 'www.hyperallergic.com'}, 'article.gh-article > section.gh-content.is-body '
-                        '> figure.kg-image-card > figcaption'),
+                        '> figure:is(.kg-image-card, .kg-gallery-card.kg-card-hascaption) > figcaption'),
+        'daily.jstor.org': 'article > .entry-content > figure.wp-caption > figcaption.wp-caption-text',
+        **dict.fromkeys({'rogerebert.com', 'www.rogerebert.com'}, 'article > .entry-content '
+                        '> figure.wp-block-image > figcaption.wp-element-caption'),
         **dict.fromkeys(OUTSIDE_HOSTS, '.article-template .js-body-content > .content-wrap.fp-contentTarget '
                         '> figure.pom-image-wrap > figcaption.pom-caption'),
         **dict.fromkeys({'niemanlab.org', 'www.niemanlab.org'}, '.roscoe-body .rsc-quiz '
@@ -854,7 +857,8 @@ def clean_tree(root, title, author, url=''):
                          '.post-rich-text > div.wp-block-image > figure > figcaption.wp-element-caption'),
         'www.futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
         'futilitycloset.com': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
-        'blogs.loc.gov': '.entry-content > figure.wp-caption > figcaption.wp-caption-text',
+        'blogs.loc.gov': ('.entry-content > figure.wp-caption > figcaption.wp-caption-text, '
+                          '.entry-content > .et_pb_text > .et_pb_image > figure.wp-caption > figcaption.wp-caption-text'),
         'blogs.egu.eu': ('.entry-content > figure.post-thumbnail.wp-caption > figcaption.featured_caption, '
                          '.entry-content > div.wp-caption > p.wp-caption-text'),
         'webkit.org': 'article .bodycopy > figure > figcaption',
