@@ -257,9 +257,12 @@ def abseil_tip_byline(heading):
     published = heading.find_next_sibling()
     byline = published.find_next_sibling() if published else None
     if (published and published.name == 'p'
-            and re.match(r'Originally posted as (?:Fast )?TotW #\d+ on ', published.get_text(strip=True))
+            and re.match(r'Originally (?:posted as (?:Fast )?TotW #\d+|published as totw/\d+) on ',
+                         published.get_text(strip=True))
             and byline and byline.name == 'p' and editorial(byline)):
-        visible = ''.join(str(text) for text in byline.strings if editorial(text.parent))
+        protected_links = {id(link) for link in byline.select('a[href^="/cdn-cgi/l/email-protection#"]:has(.__cf_email__)')}
+        visible = ''.join(str(text) for text in byline.strings if editorial(text.parent)
+                          and not any(id(parent) in protected_links for parent in text.parents))
         label = re.sub(r'\s+,', ',', ' '.join(visible.split()))
         if label.startswith('By '):
             return byline, label.removeprefix('By ')

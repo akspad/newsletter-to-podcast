@@ -276,10 +276,11 @@ def clean_tree(root, title, author, url=''):
                 caption.name = 'p'
                 caption.string = ' '.join(caption.stripped_strings)
                 bodies[0].insert(0, caption.extract())
-        for caption in root.select('article#article .entry-content > '
-                                   'figure:is(.zoomable, .align-center):has(img) > figcaption:has(> .caption)'):
-            if editorial(caption):
-                figure = caption.parent
+        for caption in root.select('article#article .entry-content > figure > figcaption:has(> .caption)'):
+            figure = caption.parent
+            image = match('.zoomable, .align-center', figure) and figure.find('img')
+            video = figure.select_one(':scope > .placeholder-container > [data-react-class="YouTubeEmbed"]')
+            if (image or video) and editorial(caption):
                 caption.name = 'p'
                 caption.string = ' '.join(caption.stripped_strings)
                 figure.insert_before(caption.extract())
@@ -810,6 +811,7 @@ def clean_tree(root, title, author, url=''):
         **dict.fromkeys({'hyperallergic.com', 'www.hyperallergic.com'}, 'article.gh-article > section.gh-content.is-body '
                         '> figure:is(.kg-image-card, .kg-gallery-card.kg-card-hascaption) > figcaption'),
         'daily.jstor.org': 'article > .entry-content > figure.wp-caption > figcaption.wp-caption-text',
+        'creativecommons.org': 'body.blog-post main > .content > figure.align-center > figcaption.attribution',
         **dict.fromkeys({'rogerebert.com', 'www.rogerebert.com'}, 'article > .entry-content '
                         '> figure.wp-block-image > figcaption.wp-element-caption'),
         **dict.fromkeys(OUTSIDE_HOSTS, '.article-template .js-body-content > .content-wrap.fp-contentTarget '

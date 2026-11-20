@@ -67,6 +67,16 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(body, f'Originally posted as Fast TotW #153 on July 17, 2018 {FIRST} '
                                f'A short planting note. The second trial. arrange(tray); {LAST}')
 
+    def test_abseil_legacy_byline_keeps_the_visible_writer_and_skips_contact_control(self):
+        url = 'https://abseil.io/tips/77'
+        html = f'''<div class="col-sm-8 markdown"><h1>Tip of the Week #77: Seed trials</h1>
+        <p>Originally published as totw/77 on 2014-07-09</p><p><em>By Lee Writer
+        <a href="/cdn-cgi/l/email-protection#sample">(<span class="__cf_email__">[email protected]</span>)</a></em></p>
+        <p>{FIRST}</p><p>{LAST}</p></div>'''
+        intro, body = narrate(url, html)
+        self.assertTrue(intro.endswith('By Lee Writer.'))
+        self.assertEqual(body, f'Originally published as totw/77 on 2014-07-09 {FIRST} {LAST}')
+
     def test_asimov_reads_visible_article_image_caption(self):
         html = f'''<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
         <p>{FIRST}</p><div class="captioned-image-container"><figure><img src="/tray">
@@ -342,6 +352,12 @@ class PublisherReadingOrderTests(unittest.TestCase):
         centered = html.replace('class="zoomable"', 'class="align-center"')
         self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', centered)[1],
                          f'{FIRST} The seed tray. Credit: Lee {LAST}')
+        video = html.replace('<figure class="zoomable"><img src="/seed">',
+                             '<figure><div class="placeholder-container"><div data-react-class="YouTubeEmbed"></div></div>')
+        self.assertEqual(narrate('https://theconversation.com/seed-trials-123456', video)[1],
+                         f'{FIRST} The seed tray. Credit: Lee {LAST}')
+        self.assertNotIn('The seed tray.', narrate('https://theconversation.com/seed-trials-123456',
+                                                  video.replace('YouTubeEmbed', 'Other'))[1])
 
     def test_conversation_preserves_the_magazine_lead_caption_once(self):
         html = f'''<article id="article"><figure class="magazine"><div><img src="/tray"></div>
@@ -704,6 +720,10 @@ class PublisherReadingOrderTests(unittest.TestCase):
         cases = [
             ('https://daily.jstor.org/seed-trials/', article,
              '<figure class="wp-caption"><img src="/plot"><figcaption class="wp-caption-text">{caption}</figcaption></figure>'),
+            ('https://creativecommons.org/2026/11/20/seed-trials/',
+             '<body class="blog-post"><main><h1>Seed trials</h1><div class="content">'
+             '<p>{first}</p>{figure}<p>{last}</p></div></main></body>',
+             '<figure class="align-center"><img src="/plot"><figcaption class="attribution">{caption}</figcaption></figure>'),
             ('https://www.rogerebert.com/reviews/seed-trials', article,
              '<figure class="wp-block-image"><img src="/plot"><figcaption class="wp-element-caption">{caption}</figcaption></figure>'),
             ('https://blogs.loc.gov/loc/2026/11/seed-trials/', article,
