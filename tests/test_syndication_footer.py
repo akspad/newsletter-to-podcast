@@ -47,9 +47,12 @@ class SyndicationFooterTests(unittest.TestCase):
         self.assertEqual(html_to_text(BODY + footer, title=TITLE, url=url), 'A brief but legitimate quotation.')
         with_code = footer.replace('discovery', '&lt;CODE&gt;discovery&lt;/CODE&gt;')
         self.assertEqual(html_to_text(BODY + with_code, title=TITLE, url=url), 'A brief but legitimate quotation.')
+        with_tt = with_code.replace('CODE', 'TT')
+        self.assertEqual(html_to_text(BODY + with_tt, title=TITLE, url=url), 'A brief but legitimate quotation.')
         for changed in (footer.replace('?p=123/', '?p=456/'),
                         footer.replace('com/oldnewthing"', 'com/otherblog"'),
                         with_code.replace('CODE', 'B'),
+                        with_tt.replace('/TT', '/CODE'),
                         footer + '<p>The rest of the story.</p>'):
             self.assertIn('appeared first on', html_to_text(BODY + changed, title=TITLE, url=url))
 

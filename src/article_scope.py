@@ -253,8 +253,7 @@ def heading_matches(value, title):
            title.endswith(': ' + value))
 
 
-def abseil_tip_byline(heading):
-    published = heading.find_next_sibling()
+def abseil_tip_byline(published):
     byline = published.find_next_sibling() if published else None
     if (published and published.name == 'p'
             and re.match(r'Originally (?:posted as (?:Fast )?TotW #\d+|published as totw/\d+) on ',

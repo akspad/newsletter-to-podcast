@@ -77,6 +77,22 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertTrue(intro.endswith('By Lee Writer.'))
         self.assertEqual(body, f'Originally published as totw/77 on 2014-07-09 {FIRST} {LAST}')
 
+    def test_abseil_feed_uses_the_explicit_opening_credit_when_the_author_is_missing(self):
+        url = 'https://abseil.io/fast/77'
+        published = 'Originally posted as Fast TotW #77 on July 9, 2024'
+        credit = 'By <a href="mailto:writer@example.org">Lee Writer</a> and Ash Editor'
+        post = {'canonical_url': url, 'title': 'Seed trials',
+                'body_html': f'<p>{published}</p><p><em>{credit}</em></p><p>{FIRST}</p><p>{LAST}</p>'}
+        pub = {'rss': True}
+        source = Substack('')
+        full, body = source.post_text(pub, post)
+        self.assertEqual(full['publishedBylines'], [{'name': 'Lee Writer and Ash Editor'}])
+        self.assertEqual(body, '\n'.join((published, FIRST, LAST)))
+        supplied = {'name': 'Jo Reader'}
+        existing, body = source.post_text(pub, dict(post, publishedBylines=[supplied]))
+        self.assertEqual(existing['publishedBylines'], [supplied])
+        self.assertIn('By Lee Writer and Ash Editor', body)
+
     def test_asimov_reads_visible_article_image_caption(self):
         html = f'''<article><h1>Seed trials</h1><div class="available-content"><div class="body markup">
         <p>{FIRST}</p><div class="captioned-image-container"><figure><img src="/tray">
@@ -132,10 +148,21 @@ class PublisherReadingOrderTests(unittest.TestCase):
         carousel = '<div class="wp-block-nasa-blocks-image-carousel">' + ''.join(
             slide.format(label) for label in (labels[0], labels[0], labels[1])) + '</div>'
         body = f'<p>{FIRST}</p>{carousel}<p>{LAST}</p>'
-        url = 'https://www.nasa.gov/image-article/seed-trials/'
-        _, preview_body = narrate(url, f'<article><h1>Seed trials</h1><div class="entry-content">{body}</div></article>')
-        self.assertEqual(preview_body, f'{FIRST} {" ".join(labels)} {LAST}')
-        self.assertEqual(html_to_text(body, url=url), '\n'.join((FIRST, *labels, LAST)))
+        for path in ('image-article', 'centers-and-facilities/example'):
+            with self.subTest(path=path):
+                url = f'https://www.nasa.gov/{path}/seed-trials/'
+                _, preview_body = narrate(url, f'<article><h1>Seed trials</h1><div class="entry-content">{body}</div></article>')
+                self.assertEqual(preview_body, f'{FIRST} {" ".join(labels)} {LAST}')
+                self.assertEqual(html_to_text(body, url=url), '\n'.join((FIRST, *labels, LAST)))
+
+    def test_quanta_inline_shortcode_caption_keeps_the_photo_credit(self):
+        html = f'''<main><div class="post"><h1>Seed trials</h1><div class="acf-content">
+        <div class="post__content"><p>{FIRST}</p><figure class="image--shortcode"><img src="/tray">
+        <figcaption class="image__meta"><div class="caption post__aside__caption--shortcode"><p>Tray two at dawn.</p></div>
+        <div class="attribution post__aside__attribution"><p>Photo by Lee.</p></div></figcaption>
+        </figure><p>{LAST}</p></div></div></div></main>'''
+        _, body = narrate('https://www.quantamagazine.org/seed-trials-20261121/', html)
+        self.assertEqual(body, f'{FIRST} Tray two at dawn. Photo by Lee. {LAST}')
 
     def test_wyofile_preserves_column_image_captions_in_reading_order(self):
         html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
@@ -444,6 +471,29 @@ class PublisherReadingOrderTests(unittest.TestCase):
         html = f'''<body class="blog-post"><main><h1>Seed trials: Results</h1><div class="content">
         <p>{FIRST}</p><h2>Results</h2><p>{LAST}</p></div></main></body>'''
         self.assertEqual(narrate('https://creativecommons.org/2026/11/19/seed-trials/', html)[1], f'{FIRST} Results {LAST}')
+
+    def test_creative_commons_keeps_article_continuation_before_the_post_date(self):
+        url = 'https://creativecommons.org/2026/11/19/seed-trials/'
+        opening = f'{FIRST} The team planted two rows to make the comparison easier to follow.'
+        html = f'''<body class="blog-post"><main><header><div><h1>Seed trials</h1></div></header>
+        <div class="content"><p>{opening}</p></div><br><h2>Results</h2><p>{LAST} We recorded our results for the second trial as well.</p>
+        <span class="pub-date">Posted 19 November 2026</span>
+        <article class="posts related"><h2>Other articles</h2><p>Unrelated archive entry.</p></article></main></body>'''
+        self.assertEqual(narrate(url, html)[1], f'{opening} Results {LAST} We recorded our results for the second trial as well.')
+        unrelated = html.replace('<br><h2>Results</h2>', '<aside><h2>Another feature</h2></aside><h2>Results</h2>')
+        self.assertEqual(narrate(url, unrelated)[1], opening)
+
+    def test_earthsky_feed_omits_only_the_opening_title_and_calendar_promotion(self):
+        url = 'https://earthsky.org/space/seed-trials/'
+        calendar = ('<p class="wp-block-paragraph"><a href="https://earthskystore.org/collections/frontpage/products/'
+                    'earthsky-lunar-calendar">Discover the beauty of the moon all year long! The 2027 EarthSky Lunar '
+                    'Calendar is here. <strong>Get yours now!</strong></a></p>')
+        headline = '<h3 class="wp-block-heading">Seed trials</h3>'
+        caption = '<figure><figcaption>The trays at sunset.</figcaption></figure>'
+        self.assertEqual(html_to_text(caption + calendar + headline + f'<p>{FIRST}</p>{headline}<p>{LAST}</p>',
+                                      title='Seed trials', url=url),
+                         f'The trays at sunset.\n{FIRST}\nSeed trials\n{LAST}')
+        self.assertIn('Get yours now!', html_to_text(calendar.replace('products/', 'other/'), title='Seed trials', url=url))
 
     def test_lit_hub_omits_only_the_advertisement_widget(self):
         html = f'''<title>Seed trials</title><div class="story-content"><div class="story-body">

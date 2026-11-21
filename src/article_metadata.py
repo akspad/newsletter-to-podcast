@@ -474,7 +474,7 @@ def article_details(soup, url):
             break
     author = diary_author or visible_authors or byline_authors or names(article.get('author')) or meta('author', 'parsely-author', 'citation_author') or byline_name
     if abseil_tip and heading is not None:
-        _, credited = abseil_tip_byline(heading)
+        _, credited = abseil_tip_byline(heading.find_next_sibling())
         author = clean(credited) or author
     if react_post:
         _, react_author = react_blog_credit(soup, title)

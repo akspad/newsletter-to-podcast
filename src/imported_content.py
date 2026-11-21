@@ -48,6 +48,17 @@ def remove_eff_embed_notice(root, url):
             notice.decompose()
 
 
+def remove_earthsky_calendar_promo(root):
+    calendar = url_identity('https://earthskystore.org/collections/frontpage/products/earthsky-lunar-calendar')
+    for paragraph in root.find_all('p', class_='wp-block-paragraph', recursive=False):
+        links = paragraph.find_all('a', recursive=False, href=True)
+        if (len(links) == 1 and url_identity(links[0]['href']) == calendar
+                and heading_text(paragraph) == heading_text(links[0])
+                and re.fullmatch(r'Discover the beauty of the moon all year long! The \d{4} EarthSky Lunar Calendar is here\. Get yours now!',
+                                 heading_text(paragraph))):
+            paragraph.decompose()
+
+
 def clean_nasa_carousel_captions(carousel):
     captions = {}
     for caption in carousel.select('.hds-image-carousel-slide .hds-media-wrapper:has(img) > figcaption.hds-caption'):
@@ -593,9 +604,8 @@ def clean_imported_widgets(root, url, title=''):
                         credit.decompose()
                 ending.decompose()
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
-        if identity[2].startswith('/image-article/'):
-            for carousel in root.select('.wp-block-nasa-blocks-image-carousel'):
-                clean_nasa_carousel_captions(carousel)
+        for carousel in root.select('.wp-block-nasa-blocks-image-carousel'):
+            clean_nasa_carousel_captions(carousel)
         for wrapper in root.find_all('div', recursive=False):
             if 'wp-block-nasa-blocks-article-intro' in wrapper.get('class', []):
                 read_time = wrapper.select('.article-header p.label')
@@ -689,6 +699,13 @@ def clean_imported_widgets(root, url, title=''):
                 paragraph.decompose()
     if identity and identity[1] in {'eff.org', 'www.eff.org'}:
         remove_eff_embed_notice(root, url)
+    if identity and identity[1] == 'earthsky.org':
+        remove_earthsky_calendar_promo(root)
+        first = root.find(['h2', 'h3', 'h4'], class_='wp-block-heading', recursive=False)
+        if (first and title and heading_text(first) == ' '.join(title.split())
+                and all((getattr(node, 'name', None) in {'figure', 'br'} or not str(node).strip())
+                        for node in first.previous_siblings)):
+            first.decompose()
     if identity and identity[1] == 'go.dev' and identity[2].startswith('/blog/'):
         for article in root.select('#blog .Article[data-slug]'):
             if (url_identity(article.get('data-slug'), url) != identity or not editorial(article)

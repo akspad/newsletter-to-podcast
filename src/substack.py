@@ -16,7 +16,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 from pathlib import Path
 import security
 from monitoring import ExtractionError, set_extraction_step
-from article_scope import FOOTNOTE_NAV, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
+from article_scope import FOOTNOTE_NAV, abseil_tip_byline, article_scope, belongs_to_scope, editorial, explicitly_hidden, heading_matches, heading_text, remove_nieman_footnote_controls, remove_resolved_footnote_backlinks, remove_substack_footnote_controls, url_identity
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, WYOFILE_HOSTS, clean_imported_widgets, earth_observatory_writer,
     freebsd_report_writer, guardian_author_label, harvard_account_name, harvard_feed_writer, mit_news_author_label,
@@ -618,6 +618,7 @@ class Substack:
                 raise ExtractionError('invalid_article_body')
             set_extraction_step('convert_html')
             url, title = post.get('canonical_url', ''), post.get('title', '')
+            body_html = post['body_html']
             writer = harvard_feed_writer(post['body_html'], url, title) if pub.get('rss') else ''
             if pub.get('rss') and not writer:
                 _, writer = universal_hub_writer(post['body_html'], url)
@@ -629,6 +630,16 @@ class Substack:
                 writer = open_culture_writer(post['body_html'], url)
             if not writer and not post.get('publishedBylines'):
                 writer = earth_observatory_writer(post['body_html'], url)
+            if not writer and pub.get('rss') and not post.get('publishedBylines'):
+                identity = url_identity(url)
+                if identity and identity[1] == 'abseil.io' and re.fullmatch(r'/(?:tips|fast)/\d+', identity[2]):
+                    from bs4 import BeautifulSoup
+                    body = BeautifulSoup(body_html, 'html.parser')
+                    first = body.find(True, recursive=False)
+                    credit, writer = abseil_tip_byline(first)
+                    if credit and writer and credit.find_next_sibling():
+                        credit.decompose()
+                        body_html = str(body)
             if writer:
                 post = {**post, 'publishedBylines': [{'name': writer}]}
             elif pub.get('rss') and post.get('publishedBylines'):
@@ -653,7 +664,7 @@ class Substack:
                                if isinstance(byline.get('name'), str) else byline for byline in bylines]
                 if bylines != original_bylines:
                     post = {**post, 'publishedBylines': bylines}
-            return post, html_to_text(post["body_html"], title=title, url=url)
+            return post, html_to_text(body_html, title=title, url=url)
         full = self.get(f"{pub['base']}/api/v1/posts/{post['slug']}")
         set_extraction_step('validate_response')
         if not isinstance(full, dict):
@@ -727,10 +738,10 @@ def html_to_text(html: str, *, title='', url='') -> str:
                             and identity[2].startswith('/oldnewthing/'))
             if home[2] and not (localized_home or devblog_home):
                 continue
-            # The Old New Thing sometimes escapes inline code tags in the
+            # The Old New Thing sometimes escapes inline code and teletype tags in the
             # footer while the feed title already omits those tags.
             if label != entry_title and not (
-                    devblog_home and re.sub(r'<code>([^<>]*)</code>', r'\1', label, flags=re.I) == entry_title):
+                    devblog_home and re.sub(r'<(code|tt)>([^<>]*)</\1>', r'\2', label, flags=re.I) == entry_title):
                 continue
             quanta_credit = (identity[1] in {'quantamagazine.org', 'www.quantamagazine.org'}
                              and publisher == 'Quanta Magazine' and value == f'The post {label} first appeared on {publisher}')

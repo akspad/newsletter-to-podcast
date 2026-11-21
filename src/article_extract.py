@@ -6,7 +6,7 @@ from article_scope import BODY_SELECTORS, DATE, FOOTNOTE_NAV, STRONG_TOWNS_HOSTS
 from imported_content import (
     COLOSSAL_HOSTS, GUARDIAN_HOSTS, HARVARD_HOSTS, OUTSIDE_HOSTS, QUILLETTE_HOSTS, WYOFILE_HOSTS, clean_jstor_pull_quotes,
     clean_nasa_carousel_captions, remove_bgs_related_news, remove_bgs_topic_links, remove_eff_embed_notice,
-    remove_jstor_recommendations, remove_loc_subscription,
+    remove_earthsky_calendar_promo, remove_jstor_recommendations, remove_loc_subscription,
     remove_openculture_endmatter, remove_outside_newsletter, remove_pluralistic_footer,
     remove_press_contacts, remove_quillette_bookmarks, remove_webb_download_intro, universal_hub_writer,
     wyofile_feature,
@@ -218,7 +218,7 @@ def clean_tree(root, title, author, url=''):
             remove_jstor_recommendations(body)
     if identity and identity[1] == 'abseil.io' and re.fullmatch(r'/(?:tips|fast)/\d+', identity[2]):
         for heading in root.select('div.col-sm-8.markdown > h1'):
-            byline, credited = abseil_tip_byline(heading)
+            byline, credited = abseil_tip_byline(heading.find_next_sibling())
             if byline and credited == author and heading_text(heading) == title:
                 byline.decompose()
     if identity and identity[1] in {'postgresql.org', 'www.postgresql.org'} and identity[2].startswith('/about/news/'):
@@ -396,6 +396,8 @@ def clean_tree(root, title, author, url=''):
         for breadcrumbs in root.select('body.news #content > .wrapper > .breadcrumbs:has(a[href])'):
             breadcrumbs.decompose()
     if identity and identity[1] == 'earthsky.org':
+        for body in root.select('.post-rich-text'):
+            remove_earthsky_calendar_promo(body)
         for widget in root.select('.post-rich-text > .ns-buttons.ns-inline-below'):
             if widget.select_one('.ns-buttons-wrapper a[aria-label^="Share on "]'):
                 widget.decompose()
@@ -558,6 +560,24 @@ def clean_tree(root, title, author, url=''):
                 caption.unwrap()
     if identity and identity[1] == 'creativecommons.org':
         for body in root.select('body.blog-post main > .content'):
+            headline = body.parent.select_one(':scope > header h1')
+            if headline and editorial(headline) and heading_matches(heading_text(headline), title):
+                continuation = []
+                for sibling in body.find_next_siblings():
+                    if match('span.pub-date', sibling):
+                        stamp = sibling.get_text(' ', strip=True)
+                        first = next((node for node in continuation if node.name != 'br'), None)
+                        if (first and first.name in {'h2', 'h3', 'h4'} and stamp.startswith('Posted ')
+                                and DATE.fullmatch(stamp.removeprefix('Posted '))
+                                and any(node.name == 'p' and readable_prose(node.get_text(' ', strip=True))
+                                        for node in continuation)):
+                            for node in continuation:
+                                body.append(node.extract())
+                        break
+                    if (sibling.name not in {'br', 'p', 'h2', 'h3', 'h4', 'figure', 'ul', 'ol', 'blockquote'}
+                            or not editorial(sibling)):
+                        break
+                    continuation.append(sibling)
             cover = body.parent.select_one(':scope > header > figure:has(img) > figcaption')
             if cover and editorial(cover) and editorial(body):
                 cover.name = 'div' if cover.find('p') else 'p'
@@ -570,6 +590,11 @@ def clean_tree(root, title, author, url=''):
                     if editorial(line):
                         image.parent.insert_before(line.extract())
     if identity and identity[1] in {'quantamagazine.org', 'www.quantamagazine.org'}:
+        for figure in root.select('.post__content > figure.image--shortcode:has(img)'):
+            for line in figure.select(':scope > figcaption.image__meta > '
+                                      ':is(.post__aside__caption--shortcode, .post__aside__attribution) > p'):
+                if editorial(line):
+                    figure.insert_before(line.extract())
         for figure in root.select('main .post > .has-tombstone > figure:has(img)'):
             caption = figure.find('figcaption', recursive=False)
             following = figure.find_next_sibling()
@@ -598,11 +623,10 @@ def clean_tree(root, title, author, url=''):
         for body in root.select('article > .entry-content'):
             remove_pluralistic_footer(body)
     if identity and identity[1] in {'www.nasa.gov', 'nasa.gov', 'science.nasa.gov'}:
-        if identity[2].startswith('/image-article/'):
-            for carousel in root.select('.entry-content > .wp-block-nasa-blocks-image-carousel'):
-                for caption in clean_nasa_carousel_captions(carousel):
-                    caption.name = 'div' if caption.find(['p', 'div']) else 'p'
-                    carousel.insert_before(caption.extract())
+        for carousel in root.select('.entry-content > .wp-block-nasa-blocks-image-carousel'):
+            for caption in clean_nasa_carousel_captions(carousel):
+                caption.name = 'div' if caption.find(['p', 'div']) else 'p'
+                carousel.insert_before(caption.extract())
         for image in root.select('.entry-content > .hds-media.wp-block-image, '
                                  '.entry-content > p.wp-block-paragraph > .hds-media.wp-block-image'):
             wrapper = image.select_one('.hds-media-wrapper:has(img)')
