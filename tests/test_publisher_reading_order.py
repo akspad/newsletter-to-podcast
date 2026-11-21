@@ -173,6 +173,18 @@ class PublisherReadingOrderTests(unittest.TestCase):
         <p>{LAST}</p></div></article>'''
         self.assertEqual(narrate('https://wyofile.com/seed-trials/', html)[1], f'{FIRST} Tray one. Tray two. {LAST}')
 
+    def test_wyofile_recovers_the_article_beneath_an_external_feature_headline(self):
+        url = 'https://wyofile.com/seed-trials/'
+        deck = 'The layout can display separate feature text above the story. ' * 8
+        html = f'''<main class="site-main"><div class="featured-image-above">
+        <header class="entry-header"><h1 class="entry-title">Seed trials</h1><p>{deck}</p></header>
+        <figure class="post-thumbnail"><img src="/tray"><figcaption>The trays at dawn.</figcaption></figure></div>
+        <div class="main-content"><article><div class="entry-content">
+        <aside>Listen to the story in the player.</aside><p>{FIRST}</p><p>{LAST}</p>
+        </div></article><aside><article><h2>Another story</h2><p>Unrelated copy.</p></article></aside>
+        </div></main>'''
+        self.assertEqual(narrate(url, html)[1], f'The trays at dawn. {FIRST} {LAST}')
+
     def test_reason_omits_its_email_widget_without_removing_newsletter_prose(self):
         html = f'''<article class="rcom-standard-article"><h1>Seed trials</h1><div class="entry-content">
         <p>{FIRST}</p><div class="gform_wrapper incontent-email-signup_wrapper">

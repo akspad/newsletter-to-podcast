@@ -1085,6 +1085,13 @@ def preserve_reference_lists(scope, url):
 
 def extract_text(soup, title='', author='', url=''):
     scope = article_scope(soup, title, url)
+    identity = url_identity(url)
+    if identity and identity[1] in WYOFILE_HOSTS and scope.name == 'main':
+        feature = wyofile_feature(scope, title)
+        if feature:
+            bodies = feature.parent.select(':scope > .main-content > article > .entry-content')
+            if len(bodies) == 1 and editorial(bodies[0]):
+                scope = bodies[0].parent
     plover_title = plover_story_title(soup, url)
     plover_body = None
     if plover_title:
@@ -1128,7 +1135,6 @@ def extract_text(soup, title='', author='', url=''):
             # distinct sections and intentional repetition later in the story.
             if not deferred or text != deferred[-1]:
                 deferred.append(text)
-    identity = url_identity(url)
     trusted_short_body = False
     if identity and identity[1] in {'filfre.net', 'www.filfre.net'}:
         canonical = soup.select_one('link[rel~="canonical"][href]')
