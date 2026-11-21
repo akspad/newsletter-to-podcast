@@ -825,6 +825,8 @@ def clean_tree(root, title, author, url=''):
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'blog.mozilla.org': 'article.ft-c-single-post > .ft-c-single-post__body '
                             '> figure.wp-block-image > figcaption.wp-element-caption',
+        **dict.fromkeys({'ubuntu.com', 'www.ubuntu.com'}, 'main.inner-wrapper article .p-post__content '
+                        '> figure.wp-block-image > figcaption.wp-element-caption'),
         'www.w3.org': 'article > figure.component.component--image > figcaption',
         'inkscape.org': 'body.news #content > .wrapper figure.plugin_picture > figcaption',
         'www.bgs.ac.uk': 'main section.wp-block-bgs-blocks-content-container figure.img-wrap > figcaption.caption',
@@ -1168,6 +1170,9 @@ def extract_text(soup, title='', author='', url=''):
             body_selector = ':scope > .container.article > div.col-md-7.text-justify:first-of-type'
         elif identity[1] == 'blog.mozilla.org' and match('article.ft-c-single-post', scope):
             body_selector = ':scope > .ft-c-single-post__body'
+        elif (identity[1] in {'ubuntu.com', 'www.ubuntu.com'} and identity[2].lstrip('/').startswith('blog/')
+              and match('main.inner-wrapper article', scope)):
+            body_selector = '.p-post__content'
         elif identity[1] in {'theguardian.com', 'www.theguardian.com'}:
             body_selector = '[data-gu-name="body"] .article-body-viewer-selector'
         elif identity[1] in {'hakaimagazine.com', 'www.hakaimagazine.com'} and scope.name == 'article':

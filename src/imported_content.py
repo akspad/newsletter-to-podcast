@@ -1,5 +1,6 @@
 """Recognize publisher credits and feed widgets using only supplied content."""
 import re
+from html import unescape
 from urllib.parse import urlsplit
 
 from tts import speech_text
@@ -165,6 +166,7 @@ def wyofile_feature(root, title):
 
 def wyofile_feed_authors(names):
     """Prefer the signed group credit over repeated individual creator tags."""
+    names = [unescape(name) if isinstance(name, str) else name for name in names]
     if len(names) > 1 and all(isinstance(name, str) for name in names) and names[0].lower().startswith('by '):
         group = names[0][3:].strip()
         members = re.split(r',\s+(?:and\s+)?|\s+and\s+', group)
@@ -701,6 +703,7 @@ def clean_imported_widgets(root, url, title=''):
         remove_eff_embed_notice(root, url)
     if identity and identity[1] == 'earthsky.org':
         remove_earthsky_calendar_promo(root)
+    if identity and identity[1] in {'earthsky.org', 'ubuntu.com', 'www.ubuntu.com'}:
         first = root.find(['h2', 'h3', 'h4'], class_='wp-block-heading', recursive=False)
         if (first and title and heading_text(first) == ' '.join(title.split())
                 and all((getattr(node, 'name', None) in {'figure', 'br'} or not str(node).strip())

@@ -495,6 +495,19 @@ class PublisherReadingOrderTests(unittest.TestCase):
                          f'The trays at sunset.\n{FIRST}\nSeed trials\n{LAST}')
         self.assertIn('Get yours now!', html_to_text(calendar.replace('products/', 'other/'), title='Seed trials', url=url))
 
+    def test_ubuntu_keeps_the_inline_caption_and_skips_an_echoed_feed_headline(self):
+        url = 'https://ubuntu.com//blog/seed-trials'
+        headline = '<h3 class="wp-block-heading">Seed trials</h3>'
+        figure = ('<figure class="wp-block-image"><img src="/tray">'
+                  '<figcaption class="wp-element-caption">A diagram of the second plot.</figcaption></figure>')
+        body = f'{headline}<p>{FIRST}</p>{figure}<p>{LAST}</p>'
+        html = f'<main class="inner-wrapper"><article><h1>Seed trials</h1><div class="p-post__content">{body}</div></article></main>'
+        expected = (FIRST, 'A diagram of the second plot.', LAST)
+        self.assertEqual(narrate(url, html)[1], ' '.join(expected))
+        self.assertEqual(html_to_text(body, title='Seed trials', url=url), '\n'.join(expected))
+        later = f'<p>{FIRST}</p>{headline}<p>{LAST}</p>'
+        self.assertIn('Seed trials', html_to_text(later, title='Seed trials', url=url))
+
     def test_lit_hub_omits_only_the_advertisement_widget(self):
         html = f'''<title>Seed trials</title><div class="story-content"><div class="story-body">
         <p>{FIRST}</p><div class="insert-post-ads"><span>Article continues after advertisement</span>
@@ -1442,6 +1455,14 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(body, FIRST)
         cached['publishedBylines'][-1] = {'name': 'Another Contributor'}
         self.assertEqual(sub.post_text(pub, cached)[0]['publishedBylines'], cached['publishedBylines'])
+        escaped = {'name': 'Lee Writer, Research &#38; Science'}
+        with patch.object(sub, 'get', return_value=xml.replace(
+                ''.join(f'<dc:creator>{name}</dc:creator>' for name in authors),
+                '<dc:creator>Lee Writer, Research &amp;#38; Science</dc:creator>')):
+            fresh, = sub.recent_posts(pub)
+        clean = [{'name': 'Lee Writer, Research & Science'}]
+        self.assertEqual(fresh['publishedBylines'], clean)
+        self.assertEqual(sub.post_text(pub, dict(fresh, publishedBylines=[escaped]))[0]['publishedBylines'], clean)
 
     def test_buttondown_keeps_the_subject_deck_and_inner_heading_but_skips_web_footer(self):
         html = f"""<article class="email-body"><h1 class="subject">Seed trials</h1>
