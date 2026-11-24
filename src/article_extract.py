@@ -216,6 +216,17 @@ def clean_tree(root, title, author, url=''):
         for body in root.select('article > .entry-content'):
             clean_jstor_pull_quotes(body)
             remove_jstor_recommendations(body)
+    if identity and identity[1] in {'longreads.com', 'www.longreads.com'}:
+        for body in root.select('article > .entry-content'):
+            for gate in body.select(':scope > .newspack-content-gate__gate.newspack-content-gate__inline-gate'):
+                if not gate.select_one('a[href="#signin_modal"]') or not gate.select_one('a[href="/join/"]'):
+                    continue
+                panel = gate.find_previous_sibling()
+                if panel and match('.wp-block-group.alignfull.has-background', panel):
+                    heading = panel.select_one('h2.wp-block-heading')
+                    if heading and heading_text(heading) == 'Thoughtful stories for thoughtless times.':
+                        panel.decompose()
+                gate.decompose()
     if identity and identity[1] == 'abseil.io' and re.fullmatch(r'/(?:tips|fast)/\d+', identity[2]):
         for heading in root.select('div.col-sm-8.markdown > h1'):
             byline, credited = abseil_tip_byline(heading.find_next_sibling())
@@ -823,6 +834,7 @@ def clean_tree(root, title, author, url=''):
     caption_selectors = {
         **dict.fromkeys(QUILLETTE_HOSTS, 'article.post > section.prose.prose-brand > figure.kg-image-card > figcaption'),
         'blog.archive.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
+        'blog.openstreetmap.org': 'article > .entry-content > figure.wp-block-image > figcaption.wp-element-caption',
         'blog.mozilla.org': 'article.ft-c-single-post > .ft-c-single-post__body '
                             '> figure.wp-block-image > figcaption.wp-element-caption',
         **dict.fromkeys({'ubuntu.com', 'www.ubuntu.com'}, 'main.inner-wrapper article .p-post__content '
@@ -913,7 +925,8 @@ def clean_tree(root, title, author, url=''):
                     caption['class'].remove('caption')
                 container = figure.parent if 'wp-block-image' in figure.parent.get('class', []) else figure
                 container.insert_before(caption.extract())
-    video_bodies = {'www.raspberrypi.com': '.c-post-content__wysiwyg', 'earthsky.org': '.post-rich-text'}
+    video_bodies = {'www.raspberrypi.com': '.c-post-content__wysiwyg', 'earthsky.org': '.post-rich-text',
+                    **dict.fromkeys({'nasa.gov', 'www.nasa.gov', 'science.nasa.gov'}, 'article .entry-content')}
     if (identity and identity[1] in video_bodies
             and (identity[1] != 'www.raspberrypi.com' or identity[2].startswith('/news/'))):
         for caption in root.select(video_bodies[identity[1]] + ' > figure.wp-block-embed-youtube > figcaption.wp-element-caption'):

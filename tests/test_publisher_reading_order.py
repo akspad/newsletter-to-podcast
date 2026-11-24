@@ -132,6 +132,26 @@ class PublisherReadingOrderTests(unittest.TestCase):
         self.assertEqual(narrate('https://www.nasa.gov/centers-and-facilities/seed-trials/', html)[1],
                          f'{FIRST} The trial tray at dawn. {LAST}')
 
+    def test_nasa_keeps_the_caption_of_an_inline_documentary(self):
+        html = f'''<article><h1>Seed trials</h1><div class="entry-content"><p>{FIRST}</p>
+        <figure class="wp-block-embed-youtube"><div class="wp-block-embed__wrapper">
+        <iframe src="/player"></iframe></div><figcaption class="wp-element-caption">A film from the field trial.</figcaption>
+        </figure><p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate('https://www.nasa.gov/missions/seed-trials/', html)[1],
+                         f'{FIRST} A film from the field trial. {LAST}')
+
+    def test_longreads_rejects_a_membership_panel_in_place_of_an_article(self):
+        url = 'https://longreads.com/2026/11/24/seed-trials/'
+        panel = ('<div class="wp-block-group alignfull has-background"><h2 class="wp-block-heading">'
+                 'Thoughtful stories for thoughtless times.</h2>'
+                 '<p>Become a member for access to archive stories and the editor’s weekly picks.</p></div>')
+        gate = ('<div class="newspack-content-gate__gate newspack-content-gate__inline-gate">'
+                '<a href="/join/">Join</a><p>Already a member? <a href="#signin_modal">Sign in</a>.</p></div>')
+        page = '<article><h1>Seed trials</h1><div class="entry-content">{}</div></article>'
+        with self.assertRaisesRegex(ValueError, "couldn't find an article"):
+            narrate(url, page.format(panel + gate))
+        self.assertEqual(narrate(url, page.format(f'<p>{FIRST} {LAST}</p>' + panel + gate))[1], f'{FIRST} {LAST}')
+
     def test_nasa_feed_omits_terminal_press_contacts_and_preserves_an_appendix(self):
         url = 'https://www.nasa.gov/news-release/seed-trials/'
         prose = f'<p>{FIRST} {LAST}</p>'
@@ -795,6 +815,8 @@ class PublisherReadingOrderTests(unittest.TestCase):
         cases = [
             ('https://daily.jstor.org/seed-trials/', article,
              '<figure class="wp-caption"><img src="/plot"><figcaption class="wp-caption-text">{caption}</figcaption></figure>'),
+            ('https://blog.openstreetmap.org/2026/11/24/seed-trials/', article,
+             '<figure class="wp-block-image"><img src="/plot"><figcaption class="wp-element-caption">{caption}</figcaption></figure>'),
             ('https://creativecommons.org/2026/11/20/seed-trials/',
              '<body class="blog-post"><main><h1>Seed trials</h1><div class="content">'
              '<p>{first}</p>{figure}<p>{last}</p></div></main></body>',
