@@ -200,6 +200,10 @@ def clean_tree(root, title, author, url=''):
         if opening and writer == author:
             opening.decompose()
         for story in root.select('article.node-story.view-mode-full > .content'):
+            for credit in story.select(':scope > span.submitted-by:has(> a.username[href^="/users/"])'):
+                link = credit.select_one(':scope > a.username')
+                if heading_text(credit).startswith(f'By {heading_text(link)} on '):
+                    credit.decompose()
             photo = story.select_one(':scope > .field-name-field-top-photo:has(img)')
             caption = photo.find_next_sibling() if photo else None
             body = story.select_one(':scope > .field-name-body > .field-items > .field-item')
@@ -262,6 +266,10 @@ def clean_tree(root, title, author, url=''):
                     bodies[0].insert(0, deck.extract())
     if identity and identity[1] == 'www.w3.org' and identity[2].startswith('/blog/'):
         layout = 'body.post main#main > .content > article'
+        for figure in root.select(layout + ' > figure.component.component--video:has(iframe[src])'):
+            for line in figure.select(':scope > figcaption > p'):
+                if editorial(line):
+                    figure.insert_before(line.extract())
         for section in root.select(layout + ' > section.meta:has(time[datetime])'):
             labels = [item.get_text(strip=True) for item in section.select(':scope > dl > dt')]
             if labels and all(label in {'By:', 'Published:', 'Updated:'} for label in labels):
@@ -855,7 +863,8 @@ def clean_tree(root, title, author, url=''):
         **dict.fromkeys(OUTSIDE_HOSTS, '.article-template .js-body-content > .content-wrap.fp-contentTarget '
                         '> figure.pom-image-wrap > figcaption.pom-caption'),
         **dict.fromkeys({'niemanlab.org', 'www.niemanlab.org'}, '.roscoe-body .rsc-quiz '
-                        'figure.rsc-quiz-fig > figcaption.rsc-quiz-credit'),
+                        'figure.rsc-quiz-fig > figcaption.rsc-quiz-credit, '
+                        '.roscoe-body > figure.rsc-fig > figcaption.rsc-cap'),
         **dict.fromkeys({'theparisreview.org', 'www.theparisreview.org'}, 'section#content > .article-body-wrap '
                         '> main.article-body.blog-body > div.wp-caption > p.wp-caption-text'),
         'nautil.us': '.entry-content > [class^="PostContent_content__"] > figure.wp-block-image > figcaption.wp-element-caption',
@@ -1101,8 +1110,9 @@ def extract_text(soup, title='', author='', url=''):
     identity = url_identity(url)
     if identity and identity[1] in WYOFILE_HOSTS and scope.name == 'main':
         feature = wyofile_feature(scope, title)
-        if feature:
-            bodies = feature.parent.select(':scope > .main-content > article > .entry-content')
+        headline = scope.select_one(':scope > header.entry-header > h1.entry-title')
+        if feature or (headline and editorial(headline) and heading_matches(heading_text(headline), title)):
+            bodies = scope.select(':scope > .main-content > article > .entry-content')
             if len(bodies) == 1 and editorial(bodies[0]):
                 scope = bodies[0].parent
     plover_title = plover_story_title(soup, url)

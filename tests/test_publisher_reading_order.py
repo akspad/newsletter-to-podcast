@@ -204,6 +204,9 @@ class PublisherReadingOrderTests(unittest.TestCase):
         </div></article><aside><article><h2>Another story</h2><p>Unrelated copy.</p></article></aside>
         </div></main>'''
         self.assertEqual(narrate(url, html)[1], f'The trays at dawn. {FIRST} {LAST}')
+        headline_only = html.replace('<div class="featured-image-above">', '').replace(
+            '<figure class="post-thumbnail"><img src="/tray"><figcaption>The trays at dawn.</figcaption></figure></div>', '')
+        self.assertEqual(narrate(url, headline_only)[1], f'{FIRST} {LAST}')
 
     def test_reason_omits_its_email_widget_without_removing_newsletter_prose(self):
         html = f'''<article class="rcom-standard-article"><h1>Seed trials</h1><div class="entry-content">
@@ -357,6 +360,30 @@ class PublisherReadingOrderTests(unittest.TestCase):
         intro, body = narrate('https://www.universalhub.com/2026/seed-trials', html)
         self.assertTrue(intro.endswith('By Lee.'), intro)
         self.assertEqual(body, f'Two varieties of seed. {FIRST} The published report. {LAST}')
+        short = html.replace('<div class="field-name-field-caption"><p>Two varieties of seed.</p></div>', '')
+        short = short.replace(f'<p>{FIRST}</p><p><a href="/report">The published report.</a></p><p>{LAST}</p>',
+                              '<p>The only photo was taken at dawn.</p>')
+        with self.assertRaisesRegex(ValueError, 'too little readable text'):
+            narrate('https://www.universalhub.com/2026/seed-trials', short)
+
+    def test_nieman_caption_is_read_once_without_rss_image_markers(self):
+        url = 'https://www.niemanlab.org/2026/11/seed-trials/'
+        caption = 'The second tray after <em>sunrise</em>.'
+        source = f'<p>{FIRST}</p><p>[img wide] <img class="inpost" src="/tray"> {caption}[/img]</p><p>{LAST}</p>'
+        self.assertEqual(html_to_text(source, url=url), f'{FIRST}\nThe second tray after sunrise.\n{LAST}')
+        self.assertIn('[img wide]', html_to_text(source.replace('class="inpost"', ''), url=url))
+        html = f'''<article><h1>Seed trials</h1><div class="roscoe-body"><p>{FIRST}</p>
+        <figure class="rsc-fig"><img src="/tray"><figcaption class="rsc-cap">{caption}</figcaption></figure>
+        <p>{LAST}</p></div></article>'''
+        self.assertEqual(narrate(url, html)[1], f'{FIRST} The second tray after sunrise. {LAST}')
+
+    def test_w3c_keeps_the_caption_attached_to_the_inline_video(self):
+        url = 'https://www.w3.org/blog/2026/seed-trials/'
+        html = f'''<body class="post"><main id="main"><div class="content"><article><h1>Seed trials</h1>
+        <p>{FIRST}</p><figure class="component component--video"><div><iframe src="/demo"></iframe></div>
+        <figcaption><p>Results from the second tray.</p></figcaption></figure><p>{LAST}</p>
+        </article></div></main></body>'''
+        self.assertEqual(narrate(url, html)[1], f'{FIRST} Results from the second tray. {LAST}')
 
     def test_sapiens_reads_the_caption_of_an_image_in_prose(self):
         html = f'''<title>Seed trials</title><div class="c-article-content" data-article-content><div class="c-modules">

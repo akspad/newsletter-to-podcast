@@ -651,6 +651,13 @@ def clean_imported_widgets(root, url, title=''):
             if (images and markers == '[img][/img]' * len(images)
                     and all(child.name in {'img', 'br'} for child in paragraph.find_all(recursive=False))):
                 paragraph.decompose()
+            elif len(images) == 1 and paragraph.contents:
+                opening, closing = paragraph.contents[0], paragraph.contents[-1]
+                if (isinstance(opening, str) and isinstance(closing, str)
+                        and re.fullmatch(r'\s*\[img(?: wide)?\]\s*', opening)
+                        and closing.rstrip().endswith('[/img]') and paragraph.contents[1] is images[0]):
+                    opening.extract()
+                    closing.replace_with(closing.rstrip().removesuffix('[/img]'))
     if identity and identity[1] == 'blog.jim-nielsen.com':
         paragraph = next((node for node in reversed(root.contents) if str(node).strip()), None)
         if getattr(paragraph, 'name', None) == 'p':
