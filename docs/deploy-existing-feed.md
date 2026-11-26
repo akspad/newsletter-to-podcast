@@ -13,7 +13,7 @@ The source tree contains generic code. Your source list and per-source options a
    Save the result as the `STATE_ENCRYPTION_KEY` secret and back it up privately. Do not store it in source, issues, logs or repository variables.
 
 4. Add **variables** `PUBLISH_TO_PAGES=true` and `KEEP_EPISODES=0`. Set the desired `EPISODE_MODE` and `MAX_EPISODE_MINUTES`, or let per-source options in the secret override the global mode. Leave `FEED_TITLE` unset to preserve the old feed name.
-5. Put the cleaned source on `main`. Keep the existing `gh-pages` branch and the existing Pages source configuration. Do not push a mirror or delete that branch.
+5. Put the cleaned source on `main`. Keep the existing `gh-pages` branch. In Settings → Pages, select **GitHub Actions** as the source and allow `main` to deploy to the `github-pages` environment. Do not push a mirror or delete the branch.
 6. Manually run **Newsletter podcast**. The workflow first downloads the existing site, imports old processing state, preserves episode GUIDs/audio links/notes/dates and completed-post IDs, then creates new episodes. The plaintext old `state.json` is removed from current Pages output; the new processing state is encrypted.
 7. Verify the same RSS URL and an old audio enclosure in your podcast app. Set `ENABLE_AUTOMATION=true` and re-enable the workflow for daily runs.
 

@@ -55,8 +55,9 @@ class GenerationMonitoringTests(unittest.TestCase):
         counts = dict(line.split('=', 1) for line in (root / 'outputs').read_text().splitlines())
         return result, counts, json.loads((root / 'state/state.json').read_text())
 
-    def health(self, root, counts, build='success', publish='success', public='true'):
+    def health(self, root, counts, build='success', publish='success', public='true', pages='success'):
         env = {'BUILD_RESULT': build, 'PUBLISH_RESULT': publish, 'PUBLISH_TO_PAGES': public,
+               'PAGES_RESULT': pages,
                'GITHUB_STEP_SUMMARY': str(root / 'health-summary')}
         env.update({key.upper(): value for key, value in counts.items()})
         return subprocess.run([sys.executable, '-I', '-c', health_script()], env=env,
@@ -120,7 +121,10 @@ class GenerationMonitoringTests(unittest.TestCase):
             self.assertEqual(self.health(root, counts, build='failure').returncode, 1)
             self.assertEqual(self.health(root, counts, build='cancelled').returncode, 1)
             self.assertEqual(self.health(root, counts, publish='failure').returncode, 1)
-            self.assertEqual(self.health(root, counts, publish='skipped', public='false').returncode, 0)
+            deployment = self.health(root, counts, pages='failure')
+            self.assertEqual(deployment.returncode, 1)
+            self.assertIn('GitHub Pages deployment did not complete', deployment.stdout)
+            self.assertEqual(self.health(root, counts, publish='skipped', public='false', pages='skipped').returncode, 0)
 
     def test_report_rejects_noninteger_counts_and_appends_only_numeric_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -135,7 +139,7 @@ class GenerationMonitoringTests(unittest.TestCase):
 
     def test_workflow_checks_health_after_publication_without_secret_or_write_access(self):
         jobs = workflow(ROOT / '.github/workflows/daily.yml')['jobs']
-        self.assertEqual(jobs['health']['needs'], ['build', 'publish'])
+        self.assertEqual(jobs['health']['needs'], ['build', 'publish', 'publish_pages'])
         self.assertIn('always()', jobs['health']['if'])
         self.assertIn("due == 'true'", jobs['health']['if'])
         self.assertIn("!= 'skipped'", jobs['health']['if'])

@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/daily.yml
       - src/tts.py
   schedule:
     # Hourly checks; RUNS_PER_DAY controls podcast generation without editing cron.
@@ -12,6 +11,14 @@ on:
     - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
+      publish_existing_only:
+        description: "Deploy the saved gh-pages snapshot without generating episodes"
+        type: boolean
+        default: false
+      published_revision:
+        description: "Expected gh-pages commit for a deploy-only run"
+        type: string
+        required: false
       lookback_hours:
         description: "Optional: process articles from this many past hours"
         required: false
@@ -26,7 +33,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_AUTOMATION == 'true'
+    if: "!inputs.publish_existing_only && (github.event_name == 'workflow_dispatch' || vars.ENABLE_AUTOMATION == 'true')"
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -189,6 +196,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    outputs:
+      revision: ${{ steps.save_public.outputs.revision }}
     steps:
       - name: Download this run's immutable public bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -230,6 +239,7 @@ jobs:
           print('Verified public bundle; only approved site assets and encrypted state accepted.')
           PYVERIFY
       - name: Publish explicitly public feed to gh-pages
+        id: save_public
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -242,9 +252,68 @@ jobs:
           git add --all .
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -qm "Publish podcast"
           git push "--force-with-lease=refs/heads/gh-pages:${published_head}" "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" gh-pages
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  publish_pages:
+    needs: publish
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' && vars.PUBLISH_TO_PAGES == 'true' &&
+      (needs.publish.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.publish_existing_only))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out the saved public feed
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/heads/gh-pages
+          path: published
+          persist-credentials: false
+      - name: Verify and export the saved public tree
+        env:
+          EXPECTED_REVISION: ${{ inputs.publish_existing_only && inputs.published_revision || needs.publish.outputs.revision }}
+        run: |
+          set -euo pipefail
+          revision=$(git -C published rev-parse HEAD)
+          if [[ ! "$EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ || "$revision" != "$EXPECTED_REVISION" ]]; then
+            echo "::error::Saved publication revision does not match the requested revision."
+            exit 1
+          fi
+          python3 -I - <<'PYVERIFY'
+          import re, subprocess
+          required = {'feed.xml', 'index.html', 'favicon.svg', 'preview.js', 'podcast-state.enc', 'demo/sample.mp3'}
+          entries = subprocess.check_output(['git', '-C', 'published', 'ls-tree', '-rz', 'HEAD'])
+          seen = set()
+          for entry in entries.decode().split('\0')[:-1]:
+              fields, path = entry.split('\t', 1)
+              mode, kind, _ = fields.split()
+              allowed = path in required or path == '.nojekyll' or re.fullmatch(
+                  r'episodes/[A-Za-z0-9][A-Za-z0-9._-]{0,250}\.mp3', path)
+              if mode != '100644' or kind != 'blob' or not allowed:
+                  raise ValueError('Unexpected file in the saved public tree')
+              seen.add(path)
+          if not required <= seen:
+              raise ValueError('Saved public tree is incomplete')
+          PYVERIFY
+          mkdir pages-site
+          git -C published archive "$revision" | tar -x -C pages-site
+          echo "Verified saved public revision $revision"
+      - name: Upload site to GitHub Pages
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: pages-site
+      - name: Deploy the verified site
+        id: deploy
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
 
   health:
-    needs: [build, publish]
+    needs: [build, publish, publish_pages]
     if: always() && needs.build.result != 'skipped' && (needs.build.result != 'success' || needs.build.outputs.due == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -255,6 +324,7 @@ jobs:
         env:
           BUILD_RESULT: ${{ needs.build.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
+          PAGES_RESULT: ${{ needs.publish_pages.result }}
           PUBLISH_TO_PAGES: ${{ vars.PUBLISH_TO_PAGES }}
           ATTEMPTED_ARTICLES: ${{ needs.build.outputs.attempted_articles }}
           CREATED_ARTICLES: ${{ needs.build.outputs.created_articles }}
@@ -292,6 +362,8 @@ jobs:
                       target.write(f"| {name.replace('_', ' ').capitalize()} | {count} |\n")
           if os.environ['PUBLISH_TO_PAGES'] == 'true' and os.environ['PUBLISH_RESULT'] != 'success':
               fail('Public podcast publication did not complete successfully; review the publisher job.')
+          if os.environ['PUBLISH_TO_PAGES'] == 'true' and os.environ['PAGES_RESULT'] != 'success':
+              fail('GitHub Pages deployment did not complete successfully; review the Pages job.')
           if counts['FAILED_ARTICLES']:
               fail(f"Episode generation failed for {counts['FAILED_ARTICLES']} article(s); "
                    f"{counts['CREATED_AUDIO_FILES']} new audio file(s) saved/published and "

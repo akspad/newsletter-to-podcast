@@ -68,7 +68,8 @@ class LogSafetyTests(unittest.TestCase):
 class WorkflowPolicyTests(unittest.TestCase):
     def test_actions_are_immutable_and_checkouts_never_persist_credentials(self):
         approved = {"actions/checkout", "actions/setup-python", "actions/cache/restore", "actions/cache/save",
-                    "actions/upload-artifact", "actions/download-artifact"}
+                    "actions/upload-artifact", "actions/download-artifact", "actions/upload-pages-artifact",
+                    "actions/deploy-pages"}
         for path in (ROOT / ".github/workflows").glob("*.yml"):
             definition = workflow(path)
             self.assertEqual(definition["permissions"], {"contents": "read"})
@@ -98,6 +99,58 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertNotIn("GH_TOKEN", publisher["steps"][1].get("env", {}))
         self.assertIn("--force-with-lease", publisher["steps"][2]["run"])
         self.assertIn("due == 'true'", publisher["if"])
+
+    def test_pages_deployment_is_isolated_and_manual_recovery_cannot_generate(self):
+        definition = workflow(ROOT / ".github/workflows/daily.yml")
+        triggers = definition[True] if True in definition else definition["on"]
+        self.assertNotIn(".github/workflows/daily.yml", triggers["push"]["paths"])
+        self.assertIs(triggers["workflow_dispatch"]["inputs"]["publish_existing_only"]["default"], False)
+        self.assertIs(definition["concurrency"]["cancel-in-progress"], False)
+        jobs = definition["jobs"]
+        self.assertIn("!inputs.publish_existing_only", jobs["build"]["if"])
+        deploy = jobs["publish_pages"]
+        self.assertEqual(deploy["permissions"], {"contents": "read", "pages": "write", "id-token": "write"})
+        self.assertEqual(deploy["needs"], "publish")
+        for gate in ("refs/heads/main", "PUBLISH_TO_PAGES == 'true'", "needs.publish.result == 'success'",
+                     "github.event_name == 'workflow_dispatch' && inputs.publish_existing_only"):
+            self.assertIn(gate, deploy["if"])
+        self.assertIn("publish_pages", jobs["health"]["needs"])
+        self.assertEqual(deploy["steps"][0]["with"]["ref"], "refs/heads/gh-pages")
+        self.assertEqual(deploy["steps"][2]["with"]["path"], "pages-site")
+        self.assertNotIn("secrets.", json.dumps(deploy))
+
+    def test_pages_export_requires_exact_revision_and_rejects_unapproved_files(self):
+        jobs = workflow(ROOT / ".github/workflows/daily.yml")["jobs"]
+        script = jobs["publish_pages"]["steps"][1]["run"]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            published = root / "published"
+            published.mkdir()
+            subprocess.run(["git", "init", "-q", str(published)], check=True)
+            for name in (*publish_bundle.ROOT_FILES, "episodes/saved.mp3", ".nojekyll"):
+                path = published / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(name.encode())
+
+            def commit():
+                subprocess.run(["git", "add", "."], cwd=published, check=True)
+                subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.org",
+                                "commit", "-qm", "Test public tree"], cwd=published, check=True)
+                return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=published, text=True).strip()
+
+            def export(revision):
+                return subprocess.run(["bash", "-c", script], cwd=root, capture_output=True, text=True,
+                                      env={**os.environ, "EXPECTED_REVISION": revision})
+
+            revision = commit()
+            self.assertNotEqual(export("0" * 40).returncode, 0)
+            self.assertFalse((root / "pages-site").exists())
+            result = export(revision)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "pages-site/episodes/saved.mp3").read_bytes(), b"episodes/saved.mp3")
+            self.assertFalse((root / "pages-site/.git").exists())
+            (published / "state.json").write_bytes(b"Private state")
+            self.assertIn("Unexpected file in the saved public tree", export(commit()).stderr)
 
     def test_application_secrets_are_only_in_necessary_step_environments(self):
         for path in (ROOT / ".github/workflows").glob("*.yml"):

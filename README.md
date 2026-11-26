@@ -292,7 +292,9 @@ Private hosting limits distribution; it does not grant rights to access or conve
 
 Keep the default `EPISODE_MODE=summary` for public feeds and remove per-source `full` overrides unless you have redistribution rights. Summaries should use original wording, avoid extensive quotations, and retain source links; review them before sharing. Summary mode reduces copying but does not guarantee that publication is permitted. Changing modes affects new episodes only: existing full audio and article-text descriptions remain published until you remove them from the host and feed. Copies already downloaded may persist.
 
-Set `PUBLISH_TO_PAGES=true` only for content you deliberately want everyone to see. Then run the workflow and configure Settings → Pages to deploy the `gh-pages` branch, folder `/`. The default feed address is `https://<owner>.github.io/<repo>/feed.xml`. The root address opens the project demo page. It does not list your episodes, display your feed title or link to your personal RSS feed. Your existing RSS and MP3 URLs remain available directly through Pages.
+Set `PUBLISH_TO_PAGES=true` only for content you deliberately want everyone to see. In Settings → Pages, select **GitHub Actions** as the source and allow the default branch to deploy to the `github-pages` environment. Run the **Newsletter podcast** workflow to generate and publish the feed. The default feed address is `https://<owner>.github.io/<repo>/feed.xml`. The root address opens the project demo page. It does not list your episodes, display your feed title or link to your personal RSS feed. Your existing RSS and MP3 URLs remain available directly through Pages.
+
+To redeploy the saved feed without running generation, run **Newsletter podcast** on `main` with **Deploy the saved gh-pages snapshot without generating episodes** checked and set **Expected gh-pages commit** to the current full `gh-pages` SHA.
 
 A public repository can use a `PUBLICATIONS` **secret**, including personal per-source filters and modes. Generated RSS and audio are public. Processing state and the retry queue are encrypted into `podcast-state.enc` with your secret state key and restored on the next run. Plaintext runtime state is never published or cached by the public workflow. Keep that key stable and back it up privately: losing or changing it prevents the next run from decrypting the queue. Restrict repository write access to people you trust with your Actions secrets.
 
@@ -302,7 +304,7 @@ Add your reachable RSS URL to a podcast app that supports custom RSS feeds, such
 
 ### Upgrading an existing public podcast
 
-Keep the existing `gh-pages` branch and Pages settings. Upload the cleaned source to `main` only. Set the secrets and variables above before enabling daily runs, then run the workflow manually once.
+Keep the existing `gh-pages` branch and feed URL. Upload the cleaned source to `main` only, then select **GitHub Actions** as the Pages source. Set the secrets and variables above before enabling daily runs, then run the workflow manually once.
 
 The first run moves legacy `state.json` out of the served directory, imports completed-post history and retries, and preserves existing GUIDs, enclosure URLs, dates and show notes. Existing MP3s stay in place. New articles are appended, and the new processing state is published only in encrypted form. The feed title is preserved unless you explicitly set `FEED_TITLE`.
 
@@ -408,6 +410,7 @@ for public publication. It downloads this run's immutable public artifact by ID,
 checks its SHA-256 digest and file allowlist, and preserves the existing publication
 lease before updating `gh-pages`. The artifact contains public RSS, audio, landing-page
 assets and encrypted processing state; plaintext state and configuration are excluded.
+The Pages job verifies the saved commit and its file allowlist before deploying it.
 Private installations continue to use their private cache and downloadable output.
 
 When verbose local logging is enabled, publication names and titles are bounded,
