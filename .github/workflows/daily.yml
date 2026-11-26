@@ -262,6 +262,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
       pages: write
       id-token: write
@@ -305,9 +306,40 @@ jobs:
           git -C published archive "$revision" | tar -x -C pages-site
           echo "Verified saved public revision $revision"
       - name: Upload site to GitHub Pages
+        id: upload_site
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: pages-site
+      - name: Wait for the uploaded Pages artifact
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_ARTIFACT_ID: ${{ steps.upload_site.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          for attempt in 1 2 3 4 5 6; do
+            response=$(timeout 6s gh api --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" -f name=github-pages)
+            status=$(jq -er --arg id "$EXPECTED_ARTIFACT_ID" --arg run "$GITHUB_RUN_ID" '
+              if (.artifacts | type) != "array" then error("Invalid artifact list")
+              elif (.artifacts | length) == 0 then "waiting"
+              elif (.artifacts | length) == 1 and (.artifacts[0] |
+                  (.id | tostring) == $id and (.workflow_run.id | tostring) == $run
+                  and .name == "github-pages" and .expired == false)
+              then "ready"
+              else error("Unexpected Pages artifact in this workflow run")
+              end' <<< "$response")
+            if [[ "$status" == ready ]]; then
+              echo "Pages artifact $EXPECTED_ARTIFACT_ID is visible in this run."
+              # The deploy action reads the artifact service rather than this REST listing.
+              sleep 3
+              exit 0
+            fi
+            if (( attempt < 6 )); then sleep 3; fi
+          done
+          echo "::error::The uploaded Pages artifact did not become visible in this workflow run."
+          exit 1
       - name: Deploy the verified site
         id: deploy
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

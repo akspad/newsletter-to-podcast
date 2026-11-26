@@ -109,7 +109,8 @@ class WorkflowPolicyTests(unittest.TestCase):
         jobs = definition["jobs"]
         self.assertIn("!inputs.publish_existing_only", jobs["build"]["if"])
         deploy = jobs["publish_pages"]
-        self.assertEqual(deploy["permissions"], {"contents": "read", "pages": "write", "id-token": "write"})
+        self.assertEqual(deploy["permissions"], {
+            "actions": "read", "contents": "read", "pages": "write", "id-token": "write"})
         self.assertEqual(deploy["needs"], "publish")
         for gate in ("refs/heads/main", "PUBLISH_TO_PAGES == 'true'", "needs.publish.result == 'success'",
                      "github.event_name == 'workflow_dispatch' && inputs.publish_existing_only"):
@@ -118,6 +119,51 @@ class WorkflowPolicyTests(unittest.TestCase):
         self.assertEqual(deploy["steps"][0]["with"]["ref"], "refs/heads/gh-pages")
         self.assertEqual(deploy["steps"][2]["with"]["path"], "pages-site")
         self.assertNotIn("secrets.", json.dumps(deploy))
+
+    def test_pages_deploy_waits_for_the_exact_uploaded_artifact_and_only_retries_absence(self):
+        steps = workflow(ROOT / ".github/workflows/daily.yml")["jobs"]["publish_pages"]["steps"]
+        upload, wait, deploy = steps[-3:]
+        self.assertEqual(wait["env"]["EXPECTED_ARTIFACT_ID"], "${{ steps." + upload["id"] + ".outputs.artifact_id }}")
+        self.assertEqual(wait["timeout-minutes"], 1)
+        self.assertEqual(deploy["id"], "deploy")
+        self.assertNotIn("continue-on-error", wait)
+        expected = {"id": 123, "name": "github-pages", "expired": False, "workflow_run": {"id": 456}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gh = root / "gh"
+            gh.write_text(f"#!{sys.executable}\n" + """
+import json, os, sys
+from pathlib import Path
+assert sys.argv[1:] == ["api", "--method", "GET",
+    "repos/example/project/actions/runs/456/artifacts", "-f", "name=github-pages"]
+path = Path("mock-calls")
+calls = int(path.read_text()) if path.exists() else 0
+path.write_text(str(calls + 1))
+response = json.loads(os.environ["MOCK_RESPONSES"])[calls]
+if response is None:
+    sys.exit(1)
+print(json.dumps({"artifacts": response}))
+""")
+            gh.chmod(0o755)
+            sleep = root / "sleep"
+            sleep.write_text("#!/bin/sh\ntest \"$1\" = 3\n")
+            sleep.chmod(0o755)
+            for responses, attempts, succeeds in (
+                ([[], [expected]], 2, True), ([[]] * 6, 6, False),
+                ([[dict(expected, id=124)]], 1, False),
+                ([[dict(expected, expired=True)]], 1, False),
+                ([[dict(expected, workflow_run={"id": 999})]], 1, False),
+                ([[expected, expected]], 1, False), ([None], 1, False),
+            ):
+                with self.subTest(responses=responses):
+                    calls = root / "mock-calls"
+                    calls.unlink(missing_ok=True)
+                    result = subprocess.run(["bash", "-c", wait["run"]], cwd=root, capture_output=True, text=True,
+                        env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}",
+                             "GITHUB_REPOSITORY": "example/project", "GITHUB_RUN_ID": "456",
+                             "EXPECTED_ARTIFACT_ID": "123", "MOCK_RESPONSES": json.dumps(responses)})
+                    self.assertEqual(result.returncode == 0, succeeds, result.stderr)
+                    self.assertEqual(calls.read_text(), str(attempts))
 
     def test_pages_export_requires_exact_revision_and_rejects_unapproved_files(self):
         jobs = workflow(ROOT / ".github/workflows/daily.yml")["jobs"]
