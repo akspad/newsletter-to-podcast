@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" sizes="any" href="favicon.svg">
+<title>Newsletter to Podcast · Hear your next read</title>
+<meta name="description" content="Paste a public newsletter or blog article and hear an audio preview of up to one minute with Edge TTS. No login or API key needed.">
+
+<style>
+:root { color-scheme: light; --ink: #172a25; --muted: #596962; --green: #18583c; --line: #dce3da; --paper: #f7f8f2; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+a { color: var(--green); text-underline-offset: .22em; }
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid #477e58; outline-offset: 4px; }
+.wrap { max-width: 1080px; margin: auto; padding: 0 28px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 28px 0; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 750; letter-spacing: -.03em; text-decoration: none; color: var(--ink); }
+.brand img { width: 28px; height: 28px; vertical-align: middle; margin-right: 7px; }
+.code { font-size: .86rem; }
+.hero { padding: 28px 0 20px; }
+.eyebrow { font-size: .72rem; letter-spacing: .16em; font-weight: 750; color: var(--green); margin: 0 0 12px; }
+h1 { font-size: clamp(2.4rem, 6vw, 4.5rem); line-height: 1.1; letter-spacing: -.055em; margin: 0 0 22px; overflow-wrap: anywhere; }
+.intro { font-size: 1.1rem; color: var(--muted); margin-bottom: 0; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+.button { display: inline-block; padding: 11px 19px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: white; font: inherit; font-weight: 650; text-decoration: none; cursor: pointer; }
+.secondary { background: transparent; color: var(--green); }
+.sample { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 28px; border: 1px solid var(--line); border-radius: 14px; padding: 20px 28px; background: #eef2e7; margin-bottom: 24px; }
+.sample h2 { margin: 0; font-size: 1.4rem; letter-spacing: -.03em; }
+.sample p:last-child { color: var(--muted); font-size: .9rem; margin-bottom: 0; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; margin-bottom: 24px; }
+audio { display: block; width: 100%; }
+footer { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 24px; margin-top: 32px; border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); font-size: .85rem; }
+footer p { margin: 6px 0; }
+.footer-credit { margin-left: auto; white-space: nowrap; text-align: right; }
+[hidden] { display: none !important; }
+.preview { border: 1px solid var(--line); border-radius: 16px; background: white; padding: 22px 30px; margin-bottom: 24px; box-shadow: 0 12px 32px #172a2506; }
+.preview h2 { margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -.03em; }
+.preview label { display: block; font-weight: 650; margin-bottom: 8px; }
+.preview input, .preview textarea, .preview select { width: 100%; border: 1px solid #b7c4b9; border-radius: 8px; padding: 13px; background: var(--paper); color: var(--ink); font: inherit; min-width: 0; }
+.preview select { height: 40px; padding: 6px 13px; }
+.preview textarea { resize: vertical; min-height: 150px; }
+.preview input[type="radio"] { width: auto; margin: 0; padding: 0; accent-color: var(--green); }
+.article-options { display: grid; grid-template-columns: max-content minmax(0, 16rem); justify-content: start; align-items: start; gap: 16px 32px; margin: 16px 0; }
+.input-modes { display: flex; flex-wrap: wrap; gap: 20px; border: 0; min-width: 0; margin: 0; padding: 0; }
+.input-modes legend { font-weight: 650; margin-bottom: 8px; }
+.input-modes label { display: flex; align-items: center; gap: 7px; min-height: 40px; font-weight: 400; margin: 0; cursor: pointer; }
+.preview-options { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }
+.preview-options .button { flex-shrink: 0; }
+.preview-options .hint { flex: 1 1 16rem; margin: 0; }
+.preview .button { min-height: 53px; }
+.button:disabled { opacity: .55; cursor: not-allowed; }
+.hint, .notice, #preview-error { font-size: .9rem; color: var(--muted); }
+.preview-privacy { margin-bottom: 0; }
+.notice { padding: 12px 16px; background: #eef2e7; border-radius: 8px; }
+#preview-error { color: #a12a20; }
+.preview-timing { margin: 14px 0 0; padding: 14px 16px; background: #eef2e7; border-radius: 8px; }
+.timing-values { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; font-variant-numeric: tabular-nums; }
+#preview-eta { font-weight: 650; }
+#preview-elapsed { color: var(--muted); }
+.preview-result { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 24px; }
+.preview-result h3 { margin-top: 0; }
+.preview-result .actions { margin-top: 16px; }
+@media(max-width: 640px) { .preview { padding: 18px 22px; } .article-options { grid-template-columns: 1fr; } .preview-options .button { width: 100%; } header .code { white-space: nowrap; } }
+@media(max-width: 640px) { .wrap { padding: 0 18px; } header { padding: 20px 0; } .hero { padding-top: 24px; } .sample, .grid { grid-template-columns: 1fr; } .sample { padding: 18px 22px; gap: 16px; } .section-head { align-items: stretch; } input { width: 100%; } }
+</style>
+<style>.feature { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 18px 24px; } .feature h2 { margin: 0 0 8px; font-size: 1.15rem; } .feature p { color: var(--muted); margin: 0; font-size: .95rem; } .quick-start { margin-top: 24px; } code { display: inline-block; padding: 10px 14px; background: #eef2e7; border-radius: 8px; overflow-wrap: anywhere; } @media(max-width:640px) { .grid { grid-template-columns:1fr; } }</style>
+</head>
+<body><div class="wrap">
+<header><a class="brand" href="./"><img src="favicon.svg" alt="" width="28" height="28">Newsletter to Podcast</a><a class="code" href="https://github.com/akspad/newsletter-to-podcast">Get the code ↗</a></header>
+<main>
+<section class="hero"><p class="eyebrow">YOUR READING, READY TO LISTEN</p><h1>Hear your next read.</h1><p class="intro">Turn newsletters and blogs into free audio previews with Edge TTS up to one minute, no login or API key.</p></section>
+<section class="sample"><div><p class="eyebrow">HEAR AN ORIGINAL SAMPLE</p><h2>A little room for curiosity</h2><p>An original article narrated with Edge TTS. <a href="https://github.com/akspad/newsletter-to-podcast/blob/main/samples/transcript.txt">Read the transcript</a>.<br>MIT licensed and free to share.</p></div><audio controls preload="none" aria-label="Listen to the original demo sample" src="demo/sample.mp3"></audio></section>
+<section class="grid" aria-label="What the tool does">
+<article class="feature"><h2>Full reads or summaries</h2><p>Full article narration is free with Edge TTS. Spoken summaries can use Gemini's free tier, subject to eligible models and quotas.</p></article>
+<article class="feature"><h2>Your preferred length</h2><p>Set a maximum episode duration. Longer full readings split into parts.</p></article>
+<article class="feature"><h2>Your own installation</h2><p>Run locally or in your own GitHub repository. Choose your sources and where to host your audio.</p></article>
+</section>
+<section class="preview" aria-labelledby="preview-heading">
+<h2 id="preview-heading">Try it with your own article</h2><p class="hint" id="article-help">Use a direct article link. If a site blocks access or needs a login, try pasting text you can access.</p>
+
+<form id="preview-form" data-endpoint="https://newsletter-audio-preview.onrender.com/api/preview">
+<div class="article-options"><fieldset class="input-modes"><legend>Bring your article</legend><label><input type="radio" name="input-mode" value="url" checked> Article link</label><label><input type="radio" name="input-mode" value="text"> Paste text</label></fieldset><div><label for="preview-voice">Narrator</label><select id="preview-voice" name="voice"><option value="en-US-AndrewNeural">Andrew · English (US)</option><option value="en-US-AriaNeural">Aria · English (US)</option><option value="en-GB-SoniaNeural">Sonia · English (UK)</option></select></div></div>
+<div id="url-input"><label for="article-url">Public article URL</label><input id="article-url" name="url" type="url" placeholder="https://your-favorite-blog.com/an-article" maxlength="8192" aria-describedby="article-help" required></div>
+<div id="text-input" hidden><label for="article-text">Article text</label><textarea id="article-text" name="text" placeholder="Paste the article or an excerpt here…" maxlength="100000" disabled></textarea></div>
+<div class="preview-options"><button class="button" id="generate-preview" type="submit">Generate audio preview</button><p class="hint">Up to 1 minute · Opening excerpt · Usually ready within two minutes</p></div>
+<p id="preview-error" role="alert" hidden></p>
+<p class="hint preview-privacy">Your link or text goes to the preview service; narration text goes to Microsoft’s Edge TTS service. Previews aren’t added to a public feed.</p>
+</form>
+<div id="preview-timing" class="preview-timing" aria-label="Preview time estimate" hidden><div class="timing-values" aria-live="off"><span id="preview-eta"></span><span id="preview-elapsed" role="timer" aria-live="off"></span></div></div>
+<div id="preview-result" class="preview-result" hidden><h3>Your article, ready to listen</h3><audio id="preview-audio" controls preload="metadata" aria-label="Listen to your article preview"></audio><div class="actions"><a id="preview-download" download="article-preview.mp3">Download MP3</a><a id="preview-source" target="_blank" rel="noopener noreferrer" hidden>Read the original article ↗</a></div></div>
+<noscript><p>Enable JavaScript to generate a preview. You can still play the original sample above.</p></noscript>
+</section>
+<section class="quick-start"><h2>Make it part of your listening routine</h2><p>Liked the preview? Turn your newsletters into a personal podcast feed. Narrate full articles or make spoken summaries, and listen in your usual podcast app.</p><div class="actions"><a class="button secondary" href="https://github.com/akspad/newsletter-to-podcast#generate-full-articles-from-your-own-sources">Set up your own podcast ↗</a></div></section>
+</main>
+<footer><p><a href="https://github.com/akspad/newsletter-to-podcast">Newsletter to Podcast</a> · MIT-licensed Python tool &amp; demo · Convert and share only with permission.</p><p class="footer-credit">Built by <a href="https://x.com/akspad">@akspad</a></p></footer>
+</div><script src="preview.js?v=f3ad5713ca38" defer></script></body></html>
